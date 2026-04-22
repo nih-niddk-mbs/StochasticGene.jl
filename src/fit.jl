@@ -67,7 +67,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `warmupsteps=0`: number of MCMC warmup steps to adapt proposal distribution covariance. Warmup runs beore sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
 - `writesamples=false`: write out MH samples if true, default is false
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
-- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
+- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key="33il"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
 
 # Returns
 - `fits`: MCMC fit results (posterior samples, log-likelihoods, etc.)
@@ -128,7 +128,7 @@ const _FIT_DEFAULTS = (
     gene="MYC",
     cell="HCT116",
     datacond="MOCK",
-    traceinfo=(1.0, 1, -1, 1.0),
+    traceinfo=(1.0, 1., -1, 1.),
     infolder="HCT116_test",
     resultfolder="HCT116_test",
     inlabel="",
@@ -171,6 +171,10 @@ const _FIT_DEFAULTS = (
     yieldfactor=1.0,
     trace_specs=[],
     dwell_specs=[],
+    device=:cpu,
+    parallel=:none,
+    gradient=:ForwardDiff,
+    inference_method=:mh
 )
 
 """
@@ -192,7 +196,7 @@ end
     fit_coupled_default_spec() -> Dict{Symbol,Any}
 
 Like [`fit_default_spec`](@ref), but baseline keywords for **coupled** / trace-joint batch jobs
-(`makeswarmfiles` with CSV keys, `base_keys`, or H3 grids): `datatype=\"tracejoint\"`,
+(`makeswarmfiles` with CSV keys, `base_keys`, or H3 grids): `datatype="tracejoint"`,
 `datacond=[\"gene\", \"enhancer\"]` (joint trace filename tags), more chains,
 fewer MCMC steps than the single-gene RNA default, etc. Shared **two-unit** structure matches the
 `coupled_G` / `coupled_R` / … defaults on [`makeswarmfiles`](@ref) (not the single-unit RNA `G=2`, `R=0`
@@ -295,6 +299,10 @@ function fit(; key=nothing, kwargs...)
     yieldfactor = merged[:yieldfactor]
     trace_specs = merged[:trace_specs]
     dwell_specs = merged[:dwell_specs]
+    device = merged[:device]
+    parallel = merged[:parallel]
+    gradient = merged[:gradient]
+    inference_method = merged[:inference_method]
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, merged[:TransitionType])
     run_spec[:label] = label
     run_spec[:inlabel] = inlabel
@@ -309,9 +317,9 @@ function fit(; key=nothing, kwargs...)
     _current_name_override[] = name_override
     try
         if rinit === nothing
-                fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+                fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs, device, parallel, gradient, inference_method)
         else
-            fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+            fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs, device, parallel, gradient, inference_method)
         end
     finally
         _current_run_spec[] = nothing
@@ -320,25 +328,18 @@ function fit(; key=nothing, kwargs...)
 end
 
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
-
-
-"""
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
-        fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+        fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs, device, parallel, gradient, inference_method)
 end
 
 """
-    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
-
-"""
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
-    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs, device, parallel, gradient, inference_method)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
@@ -805,64 +806,7 @@ end
 
 
 """
-    make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, ...; trace_specs=[], dwell_specs=[])
-
-Create and configure data, model, and options structures for fitting.
-
-# Arguments
-- `rinit`: Initial rate parameters
-- `datatype::String`: Type of data being analyzed
-- `dttype::Vector`: Dwell time types
-- `datapath`: Path to data files
-- `gene`: Gene name
-- `cell`: Cell type
-- `datacond`: Data condition
-- `traceinfo`: Trace information tuple
-- `infolder::String`: Input folder path
-- `label::String`: Label for the analysis
-- `fittedparam`: Parameters to fit
-- `fixedeffects`: Fixed effects structure
-- `transitions`: Model transitions
-- `G, R, S, insertstep`: Model structure parameters
-- `coupling::Tuple`: Coupling structure (default: empty tuple)
-- `grid`: Grid parameter (default: nothing)
-- `root`: Root directory (default: ".")
-- `maxtime`: Maximum runtime in minutes (default: 60)
-- `elongationtime`: RNA elongation time (default: 6.0)
-- `priormean`: Prior means for parameters (default: empty array)
-- `priorcv`: Prior coefficient of variation (default: 10.0)
-- `nalleles`: Number of alleles (default: 1)
-- `onstates`: ON states for the model (default: empty array)
-- `decayrate`: Decay rate (default: -1.0)
-- `splicetype`: Splicing type (default: "")
-- `probfn`: Probability function (default: prob_Gaussian)
-- `noisepriors`: Noise priors (default: empty array)
-- `hierarchical`: Hierarchical structure (default: empty tuple)
-- `ratetype`: Rate type (default: "median")
-- `propcv`: Proposal coefficient of variation (default: 0.01)
-- `samplesteps`: Number of sampling steps (default: 1000000)
-- `warmupsteps`: Number of warmup steps (default: 0)
-- `temp`: Temperature (default: 1.0)
-- `temprna`: RNA temperature (default: 1.0)
-- `method`: Numerical method (default: Tsit5())
-- `zeromedian`: Whether to zero median (default: true)
-- `datacol`: Data column (default: 3)
-- `ejectnumber`: Ejection number (default: 1)
-- `trace_specs`: Per-unit observation windows for `tracejoint` (default: empty). For **coupled** `tracejoint`, if left empty and `dwell_specs` is empty, defaults are built from `traceinfo` and `zeromedian` (see `default_trace_specs_for_coupled`) so observed units are set on `TraceData`.
-- `dwell_specs`: Container of dwell-time specs per unit (default: empty); used for multi-unit or observation-mapped dwell data when non-empty. Legacy single-unit when empty.
-
-# Returns
-- `Tuple`: (data, model, options) structures
-
-# Notes
-- Validates and adjusts model parameters
-- Loads and processes data according to datatype
-- Sets up priors and initial conditions
-- Creates appropriate model structure based on parameters
-- Handles hierarchical, coupled, and grid models
-- Loads proposal covariance via [`get_propcv`](@ref) after fittedparam is determined, enabling validation against actual model parameters
-"""
-function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+    make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], device=:cpu, parallel=:none, gradient=:ForwardDiff, inference_method=:mh)
     gene = check_genename(gene, "[")
     insertstep = normalize_insertstep(R, insertstep)
     S = reset_S(S, R, insertstep)
@@ -1825,40 +1769,17 @@ function full_onstates_dttype_from_dwell_specs(dwell_specs, n_units)
 end
 
 """
-    make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing)
+    make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing, dwell_specs=[], coupled_stack::Symbol=:full)
+    S = reset_S(S, R, insertstep)
+    nalleles = alleles(gene, cell, root, nalleles=nalleles)
+        fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
+end
 
-Create reporter components for dwell time data analysis.
-
-# Arguments
-- `data::DwellTimeData`: Dwell time data structure
-- `transitions`: Model transitions
-- `G, R, S, insertstep`: Model structure parameters
-- `splicetype`: Splicing type
-- `onstates`: ON states for the model
-- `decayrate`: Decay rate
-- `probfn`: Probability function
-- `noisepriors`: Noise priors
-- `coupling`: Coupling structure
-- `ejectnumber`: Number of mRNAs per burst (default: 1)
-- `dttype_full`: Optional full-length dwell type vector for all units (used when some units are hidden).
-
-# Returns
-- `Tuple`: (reporter, components)
-
-# Notes
-- Delegates to make_reporter_components_DT for dwell time analysis
-- Uses dwell time types from data structure (or dttype_full when provided)
-- Creates appropriate components for dwell time distribution modeling
-- Used for analyzing time spent in different model states
 """
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing, dwell_specs=[], coupled_stack::Symbol=:full)
-    # `coupled_stack` is accepted for API compatibility with `load_model`, but dwell-only reporter assembly does not branch on it.
-    if !isempty(dwell_specs)
-        make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, dwell_specs, coupling)
-    else
-        dtype = (dttype_full !== nothing) ? dttype_full : data.DTtypes
-        make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates, dtype, coupling)
-    end
+    make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing, dwell_specs=[], coupled_stack::Symbol=:full)
+    S = reset_S(S, R, insertstep)
+    nalleles = alleles(gene, cell, root, nalleles=nalleles)
+        fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
 end
 
 """
@@ -1898,1663 +1819,1738 @@ function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, 
 end
 
 """
-    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
-
-Create reporter components for trace data analysis.
-
-# Arguments
-- `data::AbstractTraceData`: Trace data structure
-- `transitions`: Model transitions
-- `G, R, S, insertstep`: Model structure parameters
-- `splicetype`: Splicing type
-- `onstates`: ON states for the model
-- `decayrate`: Decay rate
-- `probfn`: Probability function
-- `noisepriors`: Noise priors
-- `coupling`: Coupling structure
-- `ejectnumber`: Number of mRNAs per burst (default: 1)
-
-# Returns
-- `Tuple`: (reporter, components)
-
-# Notes
-- Delegates to make_reporter_components for trace analysis
-- Creates appropriate components for fluorescence trace modeling
-- Handles HMM-based analysis of time series data
-- Used for live-cell imaging data analysis
-"""
-function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
-    make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling; coupled_stack=coupled_stack)
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
-
-Create reporter components for combined trace and histogram data analysis.
-
-# Arguments
-- `data::AbstractTraceHistogramData`: Combined trace and histogram data structure
-- `transitions`: Model transitions
-- `G, R, S, insertstep`: Model structure parameters
-- `splicetype`: Splicing type
-- `onstates`: ON states for the model
-- `decayrate`: Decay rate
-- `probfn`: Probability function
-- `noisepriors`: Noise priors
-- `coupling`: Coupling structure
-- `ejectnumber`: Number of mRNAs per burst (default: 1)
-
-# Returns
-- `Tuple`: (reporter, components)
-
-# Notes
-- Creates MTComponents combining trace and RNA abundance analysis
-- Handles both time series and steady-state data
-- Combines fluorescence traces with RNA histograms
-- Used for comprehensive transcription analysis with multiple data types
-"""
-function make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
-    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling; coupled_stack=coupled_stack)
-    # Use nRNA_true if available (from yield tuple), otherwise use observed nRNA
-    nRNA_size = get_nRNA_true(data.yield, data.nRNA)
-    mcomponents = MComponents(transitions, G, R, nRNA_size, decayrate, splicetype, ejectnumber)
-    return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    make_grid(transitions, R::Int, S, insertstep, noisepriors, grid)
-
-Create parameter ranges for grid-based analysis.
-
-# Arguments
-- `transitions`: Model transitions
-- `R::Int`: Number of RNA steps
-- `S`: Number of splice states
-- `insertstep`: Insertion step
-- `noisepriors`: Noise priors
-- `grid`: Grid parameter
-
-# Returns
-- `Tuple`: (raterange, noiserange, gridrange)
-
-# Notes
-- Calculates parameter indices for different parameter types
-- raterange: indices for rate parameters
-- noiserange: indices for noise parameters
-- gridrange: indices for grid parameters
-- Used for grid-based parameter search and optimization
-"""
-function make_grid(transitions, R::Int, S, insertstep, noisepriors, grid)
-    n = num_rates(transitions, R, S, insertstep)
-    raterange = 1:n
-    noiserange = n+1:n+length(noisepriors)
-    gridrange = n+length(noisepriors)+1:n+length(noisepriors)+Int(!isnothing(grid))
-    raterange, noiserange, gridrange
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    grid_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-
-Calculate grid parameter indices.
-
-# Arguments
-- `transitions`: Model transitions
-- `R, S, insertstep`: Model structure parameters
-- `reporter`: Reporter structure
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-
-# Returns
-- `Vector`: Grid parameter indices
-
-# Notes
-- Calculates indices for grid parameters in the full parameter vector
-- Used for grid-based model fitting
-- Returns single-element array with grid parameter index
-"""
-function grid_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-    [num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-
-Calculate coupling parameter indices.
-
-# Arguments
-- `transitions`: Model transitions
-- `R, S, insertstep`: Model structure parameters
-- `reporter`: Reporter structure
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-
-# Returns
-- `Vector`: Coupling parameter indices
-
-# Notes
-- Calculates indices for coupling parameters in the full parameter vector
-- Accounts for grid parameters if present
-- Returns range of indices for coupling parameters
-- Used for coupled model parameter identification
-"""
-function coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-    n = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
-    g = isnothing(grid) ? 0 : 1
-    c = ncoupling(coupling)
-    collect(n-g-c+1:n-g)
-end
-
-function coupling_indices_full(transitions, R, S, insertstep, reporter, coupling, grid)
-    indices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-    targets = Vector{Tuple{Int,Int}}(undef, length(coupling[2]))
-    for (i, c) in enumerate(coupling[2])
-        targets[i] = (coupling[1][c[3]], c[4])
-    end
-    indices, targets
-end
-
-
-
-"""
-    make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nallparams, nindividuals)
-
-Create fitted parameter vectors for hierarchical models.
-
-# Arguments
-- `fittedshared`: Indices of shared parameters to fit
-- `nhypersets`: Number of hyperparameter sets
-- `fittedindividual`: Indices of individual parameters to fit
-- `nallparams`: Total number of parameters per individual
-- `nindividuals`: Number of individuals
-
-# Returns
-- `Tuple`: (f, fhyper, fpriors)
-
-# Notes
-- Creates comprehensive parameter indexing for hierarchical models
-- f: all fitted parameters (shared + hyper + individual)
-- fhyper: fitted hyper parameters for each hyperparameter set
-- fpriors: fitted parameters that have priors (shared + hyper)
-- Used for hierarchical model parameter organization
-"""
-function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nallparams, nindividuals)
-    f = union(fittedshared, fittedindividual) # shared parameters come first followed by hyper parameters and individual parameters
-    f = sort(f)
-    fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
-    for i in 1:nhypersets-1
-        append!(f, fittedindividual .+ i * nallparams)
-        push!(fhyper, fittedindividual .+ i * nallparams)
-    end
-    fpriors = sort(union(fittedshared, fhyper...)) # priors only apply to shared and hyper parameters
-    for i in 1:nindividuals
-        append!(f, fittedindividual .+ (i + nhypersets - 1) * nallparams)
-    end
-    # fhyper =[findall(x -> x in sub_target, f) for sub_target in fhyper]
-    f, fhyper, fpriors
-end
-
-
-"""
-    make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=true)
-
-Construct hierarchical model traits and priors.
-
-# Arguments
-- `data`: Data structure
-- `rmean`: Prior means
-- `fittedparam`: Fitted parameter indices
-- `fixedeffects`: Fixed effects structure
-- `transitions, R, S, insertstep`: Model structure parameters
-- `priorcv`: Prior coefficient of variation
-- `noisepriors`: Noise priors
-- `hierarchical::Tuple`: Hierarchical structure tuple
-- `reporter`: Reporter structure
-- `coupling`: Coupling structure (default: empty tuple)
-- `couplingindices`: Coupling parameter indices (default: nothing)
-- `grid`: Grid parameter (default: nothing)
-- `factor`: Prior scaling factor (default: 10)
-- `ratetransforms`: Rate transformations (default: nothing)
-- `zeromedian`: Whether to zero median (default: true)
-
-# Returns
-- `Tuple`: (hierarchical trait, fittedparam, fixedeffects, priord, ratetransforms)
-
-# Notes
-- Creates HierarchicalTrait for multi-level models
-- Organizes parameters into shared, hyper, and individual components
-- Sets up appropriate prior distributions
-- Handles parameter indexing for hierarchical structure
-"""
-function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=true)
-    fittedindividual = hierarchical[2]
-    fittedshared = setdiff(fittedparam, fittedindividual)
-    nhypersets = hierarchical[1]
-    n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
-    nindividualparams = length(fittedindividual) # number of fitted params per individual
-    nindividuals = length(data.trace[1])
-    ratestart = nhypersets * n_all_params + 1
-    paramstart = length(fittedshared) + nhypersets * nindividualparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
-    hierarchy = HierarchicalTrait(nhypersets, n_all_params, nindividualparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared, fittedpriors)
-    fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
-    # rprior = rmean[1:nhypersets*n_all_params]
-    # priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, couplingindices, factor, ratetransforms)
-    priord = prior_distribution(rmean, priorcv, ratetransforms, fittedpriors)
-    return hierarchy, fittedparam, fixedeffects, priord, ratetransforms
-end
-
-
-"""
-    rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Int, reporter, zeromedian)
-
-Populate transformation functions for rates and noise parameters.
-
-# Arguments
-- `ftransforms`: Array to populate with forward transformations
-- `invtransforms`: Array to populate with inverse transformations
-- `sigmatransforms`: Array to populate with sigma transformations
-- `nrates::Int`: Number of rate parameters
-- `reporter`: Reporter structure
-- `zeromedian`: Whether to zero-center traces
-
-# Returns
-- Nothing (modifies arrays in place)
-
-# Notes
-- Adds log/exp transformations for rate parameters
-- Handles noise parameters for HMMReporter
-- Applies identity transformation for zero-median noise parameters
-- Used for parameter transformation in MCMC sampling
-"""
-function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Int, reporter, zeromedian)
-    for i in 1:nrates
-        push!(ftransforms, log)
-        push!(invtransforms, exp)
-        push!(sigmatransforms, sigmalognormal)
-    end
-    if typeof(reporter) <: HMMReporter
-        for i in eachindex(reporter.noiseparams)
-            # Handle both Bool and Vector{Bool} for zeromedian
-            should_zero = zeromedian isa Bool ? zeromedian :
-                          (zeromedian isa Vector{Bool} && length(zeromedian) > 0 ? zeromedian[2] : false)
-            if isodd(i) && should_zero
-                push!(ftransforms, identity)
-                push!(invtransforms, identity)
-                push!(sigmatransforms, sigmanormal)
-            else
-                push!(ftransforms, log)
-                push!(invtransforms, exp)
-                push!(sigmatransforms, sigmalognormal)
-            end
-        end
-    end
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Vector, reporter, zeromedian)
-
-Populate transformation functions for multi-unit models.
-
-# Arguments
-- `ftransforms`: Array to populate with forward transformations
-- `invtransforms`: Array to populate with inverse transformations
-- `sigmatransforms`: Array to populate with sigma transformations
-- `nrates::Vector`: Vector of rate counts for each unit
-- `reporter`: Reporter structure for each unit
-- `zeromedian`: Whether to zero-center traces
-
-# Returns
-- Nothing (modifies arrays in place)
-
-# Notes
-- Processes each unit in coupled models separately
-- Delegates to single-unit rate_transforms! for each unit
-- Used for multi-unit model parameter transformations
-"""
-function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Vector, reporter, zeromedian)
-    for n in eachindex(nrates)
-        rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates[n], reporter[n], zeromedian)
-    end
-end
-
-
-"""
-    make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
-
-Create transformation functions for all model parameters.
-
-# Arguments
-- `data`: Data structure
-- `nrates`: Number of rate parameters
-- `transitions, G, R, S, insertstep`: Model structure parameters
-- `reporter`: Reporter structure
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-- `hierarchical`: Hierarchical structure
-- `zeromedian`: Whether to zero-center traces
-
-# Returns
-- `Transformation`: Struct with forward/inverse/sigma transforms
-
-# Notes
-- Creates comprehensive transformation functions for all parameters
-- Handles rate parameters, noise parameters, coupling parameters, and grid parameters
-- Extends transformations for hierarchical models
-- Used for parameter transformation in MCMC sampling
-"""
-function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
-    ftransforms = Function[]
-    invtransforms = Function[]
-    sigmatransforms = Function[]
-
-    if isa(G, Int) && !isempty(coupling)
-        # for forced model, assume that forced data is zero median
-        rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, true)
-    else
-        rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
-    end
-
-    # rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
-
-    if !isempty(coupling)
-        couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-        modes = coupling_ranges(coupling)
-        for i in eachindex(couplingindices)
-            mode = i <= length(modes) ? modes[i] : :free
-            if mode === :activate
-                # γ ∈ (0, ∞)
-                push!(ftransforms, log)
-                push!(invtransforms, exp)
-                push!(sigmatransforms, sigmalognormal)
-            elseif mode === :inhibit
-                # γ ∈ (-1, 0)
-                push!(ftransforms, coupling_inhibitory_fwd)
-                push!(invtransforms, coupling_inhibitory_inv)
-                push!(sigmatransforms, sigmanormal)
-            else
-                # :free — γ ∈ (-1, ∞)
-                push!(ftransforms, log_shift1)
-                push!(invtransforms, invlog_shift1)
-                push!(sigmatransforms, sigmalognormal)
-            end
-        end
-    end
-    if !isnothing(grid)
-        gridindices = grid_indices(transitions, R, S, insertstep, noisepriors, coupling, grid)
-        for i in eachindex(gridindices)
-            push!(ftransforms, log)
-            push!(invtransforms, exp)
-            push!(sigmatransforms, sigmalognormal)
-        end
-    end
-    if !isempty(hierarchical)
-        fset = copy(ftransforms)
-        iset = copy(invtransforms)
-        sset = copy(sigmatransforms)
-        nindividuals = length(data.trace[1])
-        for i in 1:hierarchical[1]-1
-            ftransforms = vcat(ftransforms, fset)
-            invtransforms = vcat(invtransforms, iset)
-            sigmatransforms = vcat(sigmatransforms, sset)
-        end
-        ftransforms = vcat(ftransforms, repeat(fset, nindividuals))
-        invtransforms = vcat(invtransforms, repeat(iset, nindividuals))
-        sigmatransforms = vcat(sigmatransforms, repeat(sset, nindividuals))
-    end
-    Transformation(ftransforms, invtransforms, sigmatransforms)
-end
-
-
-"""
-    load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
-
-Construct and return the appropriate model struct for the given data and options.
-When `dwell_dttype_full` is provided and data is DwellTimeData, it is used (full-length dttype for all units) so that coupled TD matrices are built correctly when some units are hidden.
-
-For **coupled trace** / `AbstractTraceData`, keyword **`coupled_stack`** selects the transition-matrix assembly:
-`:full` (default, `TCoupledFullComponents`) or `:legacy` (`TCoupledComponents`). Dwell-time and RNA paths ignore this keyword.
-
-# Arguments
-- `data`: Data structure
-- `r`: Initial rate parameters
-- `rmean`: Prior means
-- `fittedparam`: Fitted parameter indices
-- `fixedeffects`: Fixed effects structure
-- `transitions, G, R, S, insertstep`: Model structure parameters
-- `splicetype`: Splicing type
-- `nalleles`: Number of alleles
-- `priorcv`: Prior coefficient of variation
-- `onstates`: ON states for the model
-- `decayrate`: Decay rate
-- `propcv`: Proposal coefficient of variation
-- `probfn`: Probability function
-- `noisepriors`: Noise priors
-- `method`: Numerical method
-- `hierarchical`: Hierarchical structure
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-- `zeromedian`: Whether to zero-center traces (default: true)
-- `ejectnumber`: Number of mRNAs per burst (default: 1)
-- `factor`: Prior scaling factor (default: 10)
-
-# Returns
-- Model struct (e.g., `GMmodel`, `GRSMmodel`)
-
-# Notes
-- Creates appropriate model based on parameter combinations
-- Handles hierarchical, coupled, and grid models
-- Sets up traits and prior distributions
-- Returns concrete model type based on model complexity
-"""
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full)
-    dwell_specs = (dwell_specs === nothing) ? [] : dwell_specs
-    # For coupled dwell models, extract full onstates from dwell_specs here.
-    if !isempty(dwell_specs) && !isempty(coupling) && G isa Tuple
-        n_units = length(coupling[1])
-        full_onstates, _ = full_onstates_dttype_from_dwell_specs(dwell_specs, n_units)
-        onstates = full_onstates
-    end
-    insertstep = normalize_insertstep(R, insertstep)
-    reporter, components = if data isa DwellTimeData
-        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dwell_specs=dwell_specs, coupled_stack=coupled_stack)
-    elseif data isa AbstractTraceData
-        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
-    else
-        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
-    end
-
-    nrates = num_rates(transitions, R, S, insertstep)
-    ratetransforms = make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
-
-    if !isempty(coupling)
-        couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-        ncp = ncoupling(coupling)
-        couplingtrait = CouplingTrait(ncp, couplingindices)
-    else
-        couplingindices = nothing
-    end
-    if !isnothing(grid)
-        gridindices = grid_indices(transitions, R, S, insertstep, noisepriors, coupling, grid)
-        gridtrait = GridTrait(grid, gridindices)
-    else
-        gridindices = nothing
-    end
-    if !isempty(hierarchical)
-        hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor, ratetransforms, zeromedian)
-    else
-        # priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor, ratetransforms)
-        priord = prior_distribution(rmean, priorcv, ratetransforms, fittedparam)
-    end
-
-    CBool = isempty(coupling)
-    GBool = isnothing(grid)
-    HBool = isempty(hierarchical)
-
-    if CBool && GBool && HBool
-        if R == 0
-            if typeof(data) <: AbstractTraceData
-                # For trace data with R=0, still use GRSMmodel but with simplified components
-                return GRSMmodel{Nothing,typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(nothing, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-            else
-                # For non-trace data with R=0, use GMmodel
-                return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-            end
-        else
-            return GRSMmodel{Nothing,typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(nothing, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-        end
-    elseif CBool && GBool && !HBool
-        trait = (hierarchical=hierarchicaltrait,)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-    elseif CBool && !GBool && HBool
-        trait = (grid=gridtrait,)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-    elseif CBool && !GBool && !HBool
-        trait = (hierarchical=hierarchicaltrait, grid=gridtrait)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-    elseif !CBool && GBool && HBool
-        trait = (coupling=couplingtrait,)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-    elseif !CBool && GBool && !HBool
-        trait = (coupling=couplingtrait, hierarchical=hierarchicaltrait)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-    elseif !CBool && !GBool && HBool
-        trait = (coupling=couplingtrait, grid=gridtrait)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-        # return GRSMcoupledgridmodel()
-    elseif !CBool && !GBool && !HBool
-        trait = (coupling=couplingtrait, hierarchical=hierarchicaltrait, grid=gridtrait)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-        # return GRSMcoupledgridhierarchicalmodel()
-    end
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    checklength(r, transitions, R, S, insertstep, reporter)
-
-Check if parameter vector has correct length for the model.
-
-# Arguments
-- `r`: Parameter vector
-- `transitions`: Model transitions
-- `R, S, insertstep`: Model structure parameters
-- `reporter`: Reporter structure
-
-# Returns
-- Nothing
-
-# Notes
-- Validates parameter vector length against expected model parameters
-- Includes rate parameters and noise parameters if HMMReporter
-- Throws error if parameter vector has wrong length
-- Used for parameter validation before model fitting
-"""
-function checklength(r, transitions, R, S, insertstep, reporter)
-    n = num_rates(transitions, R, S, insertstep)
-    if typeof(reporter) <: HMMReporter
-        (length(r) != n + reporter.n) && throw("r has wrong length")
-    else
-        (length(r) != n) && throw("r has wrong length")
-    end
-    nothing
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
-
-Generate default hyperparameter coefficient of variation values.
-
-# Arguments
-- `transitions`: Model transitions
-- `R::Int`: Number of RNA steps
-- `S`: Number of splice states
-- `insertstep`: Insertion step
-- `noisepriors`: Noise priors
-
-# Returns
-- `Vector{Float64}`: Coefficient of variation values for hyperparameters
-
-# Notes
-- Creates default CV values for hierarchical model hyperparameters
-- Uses 1.0 for most parameters, 0.1 for RNA shifts and noise parameters
-- Provides reasonable starting values for hyperparameter priors
-- Used for hierarchical model setup
-"""
-function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
-    [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.1, length(noisepriors))]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors, coupling)
-
-Generate default hyperparameter CV values for coupled models.
-
-# Arguments
-- `transitions`: Model transitions for each unit
-- `R::Tuple`: Number of RNA steps for each unit
-- `S`: Number of splice states for each unit
-- `insertstep`: Insertion steps for each unit
-- `noisepriors`: Noise priors for each unit
-- `coupling`: Coupling structure
-
-# Returns
-- `Vector{Float64}`: Coefficient of variation values for hyperparameters
-
-# Notes
-- Processes each unit in coupled model separately
-- Appends coupling parameter CV values
-- Used for hierarchical coupled model setup
-"""
-function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors, coupling)
-    rm = Float64[]
-    for i in eachindex(R)
-        append!(rm, prior_hypercv(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
-    end
-    [rm; fill(1.0, ncoupling(coupling))]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, grid)
-
-Generate default hyperparameter CV values with grid support.
-
-# Arguments
-- `transitions`: Model transitions
-- `R, S, insertstep`: Model structure parameters
-- `noisepriors`: Noise priors
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-
-# Returns
-- `Vector{Float64}`: Coefficient of variation values for hyperparameters
-
-# Notes
-- Delegates to appropriate prior_hypercv function based on coupling
-- Appends grid parameter CV if grid is not nothing
-- Used for hierarchical models with optional grid and coupling
-"""
-function prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, grid)
-    if isempty(coupling)
-        pcv = prior_hypercv(transitions, R, S, insertstep, noisepriors)
-    else
-        pcv = prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling)
-    end
-    if !isnothing(grid)
-        append!(pcv, 1.0)
-    end
-    pcv
-end
-
-# function prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets, coupling=tuple(), cv::Float64=1.0)
-#     r = isempty(coupling) ? prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime) : prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
-#     hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling)
-#     # hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
-#     append!(r, hypercv)
-#     for i in 3:nhypersets
-#         append!(r, fill(cv, length(rm)))
-#     end
-#     r
-# end
-
-"""
-    prior_ratemean_hierarchical(priormean, hypercv, nhypersets, cv::Float64=1.0)
-
-Create prior means for hierarchical models.
-
-# Arguments
-- `priormean`: Base prior means
-- `hypercv`: Hyperparameter coefficient of variation values
-- `nhypersets`: Number of hyperparameter sets
-- `cv::Float64`: Coefficient of variation for additional hyperparameter sets (default: 1.0)
-
-# Returns
-- `Vector{Float64}`: Extended prior means for hierarchical model
-
-# Notes
-- Extends base prior means with hyperparameter values
-- Adds additional hyperparameter sets with specified CV
-- Used for hierarchical model prior setup
-- Arranges parameters as: shared + hyper + individual
-"""
-function prior_ratemean_hierarchical(priormean, hypercv, nhypersets, cv::Float64=1.0)
-    r = copy(priormean)
-    append!(r, hypercv)
-    for i in 3:nhypersets
-        append!(r, fill(cv, length(priormean)))
-    end
-    r
-end
-
-
-# function prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
-#     [prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime); 0.5]
-#     # [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors; 0.5]
-# end
-
-"""
-    prior_ratemean_grid(priormean)
-
-Add grid parameter to prior means.
-
-# Arguments
-- `priormean`: Base prior means
-
-# Returns
-- `Vector{Float64}`: Prior means with grid parameter
-
-# Notes
-- Appends grid probability parameter (0.5) to prior means
-- Used for grid-based model fitting
-- Grid parameter represents probability of grid state
-"""
-function prior_ratemean_grid(priormean)
-    [priormean; 0.5]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    AbstractPriorContext
-
-Supertype for which **default prior mean recipe** applies given data (`datatype`) and model layout
-(`coupling`, `R` scalar vs tuple, `grid`, `hierarchical`, `transitions`). Used by [`prior_context`](@ref)
-and [`set_priormean_empty`](@ref). You may add subtypes and methods to `set_priormean_empty` for custom
-workflows.
-"""
-abstract type AbstractPriorContext end
-
-"""Coupled multi-unit model: use `prior_ratemean(..., coupling)`."""
-struct PriorContextCoupled <: AbstractPriorContext end
-
-"""Trace-like single-unit GRSM (`datatype` contains `\"trace\"`), no grid/hierarchical, ≥2 transition pairs: use `prior_ratemean_trace`."""
-struct PriorContextTraceSingleUnit <: AbstractPriorContext end
-
-"""Default single-unit GRSM prior (`prior_ratemean`): RNA, hierarchical trace, grid, short transition list, etc."""
-struct PriorContextGenericSingle <: AbstractPriorContext end
-
-"""
-    prior_context(datatype, coupling, R, grid, hierarchical, transitions) -> AbstractPriorContext
-
-Classify data + model for default **base** prior means (before grid append and hierarchical hyper
-rows). **Order:** (1) coupled; (2) trace single-unit recipe; (3) generic single-unit.
-
-See also: [`set_priormean`](@ref), [`set_priormean_empty`](@ref).
-"""
-function prior_context(datatype::String, coupling, R, grid, hierarchical, transitions)
-    if !isempty(coupling)
-        return PriorContextCoupled()
-    end
-    if occursin("trace", datatype) && R isa Int && isnothing(grid) && isempty(hierarchical) && length(transitions) >= 2
-        return PriorContextTraceSingleUnit()
-    end
-    return PriorContextGenericSingle()
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    set_priormean_empty(ctx, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
-
-Build the **base** prior mean vector for empty `priormean`; `set_priormean` then appends grid and
-hierarchical blocks. Extend by adding methods on new `AbstractPriorContext` subtypes.
-"""
-function set_priormean_empty(::PriorContextTraceSingleUnit, transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
-    prior_ratemean_trace(transitions, R, S, insertstep, Float64(decayrate), noisepriors, Float64(elongationtime))
-end
-
-function set_priormean_empty(::PriorContextCoupled, transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors, elongationtime, coupling, grid)
-    prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
-end
-
-function set_priormean_empty(::PriorContextGenericSingle, transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
-    prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
-
-Generate default prior means for rate parameters.
-
-# Arguments
-- `transitions`: Model transitions
-- `R::Int`: Number of RNA steps
-- `S::Int`: Number of splice states
-- `insertstep`: Insertion step
-- `decayrate`: Decay rate
-- `noisepriors::Vector`: Noise priors
-- `elongationtime::Float64`: RNA elongation time
-- `initprior::Float64`: Initial prior value (default: 0.1)
-
-# Returns
-- `Vector{Float64}`: Prior means for all parameters
-
-# Notes
-- Creates default prior means for all model parameters
-- Uses 0.01 for gene transitions, initprior for initiation
-- Calculates RNA processing rates from elongation time
-- Uses 0.1 for splicing, provided decay rate, and noise priors
-- Used for model initialization when no prior means provided
-- For **trace** single-unit fits with empty `priormean`, `set_priormean` uses
-  `prior_ratemean_trace` instead (see `datatype` in `make_structures`).
-"""
-function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
-    [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_ratemean_trace(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime, initprior=0.1)
-
-Default **prior means** for single-unit **trace** GRSM fits (MS2-style live traces): first two G
-transition edges at `0.001`, remaining edges at `0.01`, then initiation, elongation, splicing, decay,
-and noise blocks matching the legacy `set_variables` / `trace_prior_variables` recipe.
-
-This is used automatically by `set_priormean` when `priormean` is empty, `datatype` contains
-`"trace"`, and the model is a non-coupled, non-hierarchical, non-grid single unit with at least two
-transition pairs. Otherwise `prior_ratemean` (generic GRSM) is used.
-
-Coupled (`tracejoint`), hierarchical trace, or grid models keep the previous generic `prior_ratemean`
-path unless you pass explicit `priormean`.
-"""
-function prior_ratemean_trace(transitions, R::Int, S::Int, insertstep, decayrate::Float64, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
-    n_t = length(transitions)
-    if n_t < 2
-        return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, initprior)
-    end
-    [fill(0.001, 2); fill(0.01, n_t - 2); initprior; fill(R / elongationtime, R); fill(0.05, max(0, S - insertstep + 1)); decayrate; noisepriors]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    priorcv_trace_grsm(transitions, R, S, insertstep, noisepriors)
-
-Structured **prior CV** vector matching `prior_ratemean_trace` (same block layout). Applied inside
-[`set_priormean`](@ref) when `priorcv` is still a scalar and `priormean` was auto-filled for a trace
-single-unit fit (`priorcv` keyword passed).
-"""
-function priorcv_trace_grsm(transitions, R::Int, S::Int, insertstep, noisepriors::Vector)
-    nn = length(noisepriors)
-    noise_cv = nn == 4 ? [0.2, 0.2, 0.1, 0.1] : fill(0.2, nn)
-    [fill(1.0, length(transitions)); 0.2; fill(0.2, R); fill(0.2, max(0, S - insertstep + 1)); 0.1; noise_cv]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    trace_prior_variables(transitions, R, S, insertstep, hierarchical, fixed, noisepriors, elongationtime, propcv;
-        initprior=0.1, ejectprior=0.05, nfitted=[1, 3], coupling=false, fitcoupling=false)
-
-Construct prior means, prior CVs, fitted-parameter indices, fixed-effects tuple, hierarchical spec, ODE
-`method` (`Tsit5()` or `(Tsit5(), true)`), and proposal CV for **trace-oriented GRSM** single-unit models (common for live-cell
-traces and single-gene batches). For **non-hierarchical, non-coupling** cases, `priormean` and `priorcv`
-match the same `prior_ratemean_trace` / `priorcv_trace_grsm` construction used automatically by
-`fit(...)` when `priormean` is empty (see `set_priormean`). For hierarchical or fixed-rates recipes,
-this helper still fills `fittedparam`, `fixedeffects`, and hyperparameter blocks.
-
-**Prefer** calling `fit` with empty `priormean` for standard trace fits so defaults stay in one place.
-
-# Returns
-`(priormean, priorcv, fittedparam, fixedeffects, hierarchical, method, propcv)` where `hierarchical` is
-`tuple()` or a 3-tuple compatible with the `fit` keyword `hierarchical`.
-
-# Notes
-- `ejectprior` is reserved for compatibility with older scripts; the current prior vector uses the
-  fixed decay constant `0.03165055618995184` in the same position as generic `prior_ratemean` trace priors.
-- Does not set `samplesteps`; choose `samplesteps` in your run spec (e.g. `1_000_000` non-hierarchical,
-  `100_000` hierarchical) to match your cluster budget.
-"""
-function trace_prior_variables(transitions, R::Int, S::Int, insertstep, hierarchical::Bool, fixed::Bool, noisepriors, elongationtime, propcv, initprior=0.1, ejectprior=0.05, nfitted=[1, 3], coupling=false, fitcoupling=false)
-    n = num_rates(transitions, R, S, insertstep)
-    if hierarchical
-        method = (Tsit5(), true)
-        propcv == 0.0 && (propcv = 0.001)
-    else
-        method = Tsit5()
-        propcv == 0.0 && (propcv = 0.005)
-    end
-    if fixed
-        if hierarchical
-            fitted = [collect(1:length(transitions) + 2); collect(length(transitions) + R + 1:n - 1 - max(0, S - 1))]
-        else
-            fitted = [collect(1:length(transitions) + 2); collect(length(transitions) + R + 1:n - 1 - max(0, S - 1)); n .+ nfitted]
-        end
-        f = R > 2 ? (collect(length(transitions) + 2:length(transitions) + R),) : tuple()
-    else
-        if hierarchical
-            fitted = collect(1:n - 1 - max(0, S - 1))
-        else
-            fitted = [collect(1:n - 1 - max(0, S - 1)); n .+ nfitted]
-        end
-        f = tuple()
-    end
-    if fitcoupling
-        fitted = vcat(fitted, [n + 5])
-    end
-    priormean = prior_ratemean_trace(transitions, R, S, insertstep, 0.03165055618995184, noisepriors, elongationtime, initprior)
-    priorcv = priorcv_trace_grsm(transitions, R, S, insertstep, noisepriors)
-    if coupling
-        priormean = vcat(priormean, [0.0])
-        priorcv = vcat(priorcv, [2.0])
-    end
-    if hierarchical
-        hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.25, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.25, 4)]
-        coupling && (hypercv = vcat(hypercv, [1.0]))
-        priormean = [priormean; hypercv]
-        priorcv = [priorcv; fill(2.0, length(priorcv))]
-        h = (2, n .+ nfitted, tuple())
-    else
-        h = tuple()
-    end
-    return priormean, priorcv, fitted, f, h, method, propcv
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
-
-Generate default prior means for coupled models.
-
-# Arguments
-- `transitions`: Model transitions for each unit
-- `R::Tuple`: Number of RNA steps for each unit
-- `S::Tuple`: Number of splice states for each unit
-- `insertstep::Tuple`: Insertion steps for each unit
-- `decayrate`: Decay rates for each unit
-- `noisepriors::Union{Vector,Tuple}`: Noise priors for each unit
-- `elongationtime::Union{Vector,Tuple}`: RNA elongation times for each unit
-- `coupling`: Coupling structure
-- `initprior`: Initial prior values for each unit (default: [0.1, 0.1])
-
-# Returns
-- `Vector{Float64}`: Prior means for all parameters including coupling
-
-# Notes
-- Processes each unit in coupled model separately
-- Appends coupling parameter prior means using coupling sign modes:
-  * `:free`     ⇒ 0.0
-  * `:activate` ⇒ +0.5
-  * `:inhibit`  ⇒ -0.5
-- Used for coupled model initialization
-"""
-function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
-    length(initprior) < length(R) && (initprior = vcat(initprior, fill(0.1, length(R) - length(initprior))))
-    rm = Float64[]
-    for i in eachindex(R)
-        append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
-    end
-    ranges = coupling_ranges(coupling)
-    coupling_means = Float64[
-        mode === :activate ? 0.5 :
-        mode === :inhibit  ? -0.5 :
-        0.0
-        for mode in ranges
-    ]
-    [rm; coupling_means]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype=""; ctx=nothing, priorcv=nothing)
-
-Set default prior means (and optionally prior CVs) when the user left them at defaults.
-
-# Arguments
-- `priormean`: Prior means (if empty, filled via [`prior_context`](@ref) and [`set_priormean_empty`](@ref))
-- `transitions, R, S, insertstep`, `decayrate`, `noisepriors`, `elongationtime`, `hierarchical`, `coupling`, `grid`, `datatype`: Same role as in [`make_structures`](@ref).
-- `ctx`: Optional [`AbstractPriorContext`](@ref); when `nothing`, `prior_context(datatype, coupling, R, grid, hierarchical, transitions)` is used.
-- `priorcv`: When `nothing` (default), only prior means are considered and the return value is just `priormean`.
-  When passed (e.g. scalar default from `make_structures`), returns `(priormean, priorcv)`; if `priormean` was
-  empty and `priorcv` is still a scalar and the context is [`PriorContextTraceSingleUnit`](@ref), `priorcv`
-  is replaced by [`priorcv_trace_grsm`](@ref) to match the filled `priormean`.
-
-# Returns
-- If `priorcv === nothing`: `Vector{Float64}` prior means only.
-- Otherwise: `(priormean, priorcv)` with the same conventions as above.
-
-# Notes
-- All branching on empty `priormean`, model/data context, and trace structured CV lives here, not in callers.
-"""
-function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype::String=""; ctx=nothing, priorcv=nothing)
-    adjust_priorcv = priorcv !== nothing
-    priormean_was_empty = isempty(priormean)
-    ctx = ctx === nothing ? prior_context(datatype, coupling, R, grid, hierarchical, transitions) : ctx
-    if !priormean_was_empty
-        return adjust_priorcv ? (priormean, priorcv) : priormean
-    end
-    priormean = set_priormean_empty(ctx, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
-    if !isnothing(grid)
-        priormean = prior_ratemean_grid(priormean)
-    end
-    if !isempty(hierarchical)
-        priormean = prior_ratemean_hierarchical(priormean, prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, grid), hierarchical[1])
-    end
-    if adjust_priorcv && !(priorcv isa AbstractVector) && ctx isa PriorContextTraceSingleUnit
-        priorcv = priorcv_trace_grsm(transitions, R, S, insertstep, noisepriors)
-    end
-    return adjust_priorcv ? (priormean, priorcv) : priormean
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_distribution(rprior, priorcv, ratetransforms, fittedparam)
-
-Create prior distribution for fitted parameters.
-
-# Arguments
-- `rprior`: Prior means
-- `priorcv`: Prior coefficient of variation
-- `ratetransforms`: Rate transformations
-- `fittedparam`: Indices of fitted parameters
-
-# Returns
-- Prior distribution array
-
-# Notes
-- Creates prior distributions for fitted parameters only
-- Handles scalar and vector priorcv values
-- Validates that priorcv length matches rprior length
-- Delegates to prior_distribution_array for actual distribution creation
-"""
-function prior_distribution(rprior, priorcv, ratetransforms, fittedparam)
-    if priorcv isa Number
-        priorcv = fill(priorcv, length(rprior))
-    end
-    if length(priorcv) == length(rprior)
-        return prior_distribution_array(rprior, priorcv, ratetransforms, fittedparam)
-    else
-        throw(ArgumentError("priorcv not the same length as prior mean"))
-    end
-end
-
-
-
-# function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor, ratetransforms)
-#     if isempty(rm)
-#         throw(ArgumentError("No prior mean"))
-#         # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
-#     end
-#     if priorcv isa Number
-#         rcv = fill(priorcv, length(rm))
-#         s = 0
-#         for i in eachindex(R)
-#             lnp = isempty(noisepriors) ? 0 : length(noisepriors[i])
-#             n = num_rates(transitions[i], R[i], S[i], insertstep[i])
-#             rcv[s+n] = 0.1
-#             rcv[couplingindices] ./= factor
-#             s += n + lnp
-#         end
-#     else
-#         rcv = priorcv
-#     end
-#     if length(rcv) == length(rm)
-#         # return distribution_array(apply_transform(rm[fittedparam], ratetransforms.f[fittedparam]), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam]), Normal)
-#         return prior_distribution_array(rm, rcv, ratetransforms, fittedparam)
-#     else
-#         throw(ArgumentError("priorcv not the same length as prior mean"))
-#     end
-# end
-
-# """
-#     prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv, noisepriors, factor=10)
-#     prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, factor=10)
-
-
-# """
-# function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv, noisepriors, factor, ratetransforms)
-#     if isempty(rm)
-#         throw(ArgumentError("No prior mean"))
-#         # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
-#     end
-#     if priorcv isa Number
-#         n = num_rates(transitions, R, S, insertstep)
-#         rcv = fill(priorcv, length(rm))
-#         rcv[n] = 0.1
-#         rcv[n+1:n+length(noisepriors)] /= factor
-#     else
-#         rcv = priorcv
-#     end
-#     if length(rcv) == length(rm)
-#         # return distribution_array(apply_transform(rm[fittedparam], ratetransforms.f[fittedparam]), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam]), Normal)
-#         return prior_distribution_array(rm, rcv, ratetransforms, fittedparam)
-#     else
-#         throw(ArgumentError("priorcv not the same length as prior mean"))
-#     end
-# end
-
-# # prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor=10) = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
-
-# function prior_distribution(rm, transitions, R, S, insertstep, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor, ratetransforms)
-#     if isnothing(couplingindices)
-#         prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, factor, ratetransforms)
-#     else
-#         prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor, ratetransforms)
-#     end
-# end
-
-"""
-    prior_sigma(r, cv, sigmatransforms)
-
-Calculate prior standard deviations using transformation functions.
-
-# Arguments
-- `r`: Parameter values
-- `cv`: Coefficient of variation values
-- `sigmatransforms`: Sigma transformation functions
-
-# Returns
-- `Vector{Float64}`: Prior standard deviations
-
-# Notes
-- Applies sigma transformation functions to calculate standard deviations
-- Handles both normal and log-normal parameter transformations
-- Used for prior distribution setup in MCMC sampling
-"""
-function prior_sigma(r, cv, sigmatransforms)
-    sigma = Vector{Float64}(undef, length(sigmatransforms))
-    for i in eachindex(sigmatransforms)
-        f = sigmatransforms[i]
-        if f === sigmanormal
-            sigma[i] = f(r[i], cv[i])
-        else
-            sigma[i] = f(cv[i])
-        end
-    end
-    return sigma
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_distribution_array(rm, rcv, ratetransforms, fittedparam)
-
-Create prior distribution array for fitted parameters.
-
-# Arguments
-- `rm`: Prior means
-- `rcv`: Prior coefficient of variation values
-- `ratetransforms`: Rate transformations
-- `fittedparam`: Indices of fitted parameters
-
-# Returns
-- Prior distribution array
-
-# Notes
-- Applies transformations to prior means and calculates standard deviations
-- Creates distribution array for fitted parameters only
-- Delegates to prior_distribution_array with transformed parameters
-"""
-function prior_distribution_array(rm, rcv, ratetransforms, fittedparam)
-    means = apply_transform(rm[fittedparam], ratetransforms.f[fittedparam])
-    sigmas = prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam])
-    transforms = ratetransforms.f[fittedparam]
-    prior_distribution_array(means, sigmas, transforms)
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    prior_distribution_array(position::Vector, scale::Vector, transforms::Vector{Function}, k=10)
-
-Create array of prior distributions for parameters.
-
-# Arguments
-- `position::Vector`: Transformed parameter means
-- `scale::Vector`: Parameter standard deviations
-- `transforms::Vector{Function}`: Transformation functions
-- `k`: Truncation factor for log-normal distributions (default: 10)
-
-# Returns
-- `Vector`: Array of prior distributions
-
-# Notes
-- Creates appropriate distribution type based on transformation function
-- Uses truncated normal for log and log_shift1 transformations
-- Uses normal distribution for identity transformations
-- Used for MCMC prior setup
-"""
-function prior_distribution_array(position::Vector, scale::Vector, transforms::Vector{Function}, k=10)
-    d = []
-    for i in eachindex(transforms)
-        if transforms[i] == log || transforms[i] == log_shift1
-            push!(d, truncated_normal(position[i], scale[i], k))
-        else
-            push!(d, Normal(position[i], scale[i]))
-        end
-    end
-    return d
-end
-
-# function set_rinit(infolder, inlabel,  gene, priormean, transitions,G, R, S, insertstep, nalleles, ratetype, hierarchical)
-
-"""
-    set_rinit(r, priormean, minval=1e-10, maxval=1e10)
-
-Set initial rate parameters to prior if empty or invalid.
-
-# Arguments
-- `r`: Initial rate parameters
-- `priormean`: Prior means
-- `minval`: Minimum valid value (default: 1e-10)
-- `maxval`: Maximum valid value (default: 1e10)
-
-# Returns
-- `Vector{Float64}`: Valid initial rate parameters
-
-# Notes
-- Uses prior means if r is empty
-- Checks for NaN and Inf values
-- Prints warning messages for invalid parameters
-- Used for model initialization
-"""
-function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
-    if isempty(r)
-        println("No rate file, set rate to prior")
-        r = priormean
-    elseif any(isnan.(r)) || any(isinf.(r))
-        println("r out of bounds: ", r)
-        r = priormean
-    end
-    println("initial: ", r)
-    Vector{Float64}(r)
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing; nhypersets=1, ...)
-
-Set initial parameters for hierarchical models.
-
-# Arguments
-- `r`: Initial parameters
-- `priormean`: Prior means
-- `transitions, R, S, insertstep`: Model structure parameters
-- `noisepriors`: Noise priors
-- `nindividuals`: Number of individuals (trace trials)
-- `coupling`: Coupling structure (default: empty tuple)
-- `grid`: Grid parameter (default: nothing)
-- `nhypersets`: Number of hyperparameter blocks at the start of `r` (must match `hierarchical[1]` in `load_model`; default `1`)
-- `minval`: Minimum valid value (default: 1e-7)
-- `maxval`: Maximum valid value (default: 300.0)
-
-# Returns
-- `Vector{Float64}`: Valid initial parameters for hierarchical model
-
-# Notes
-- Builds `r` with `(nhypersets + nindividuals)` blocks of `n_all_params` each, matching `make_hierarchical`.
-- If `length(priormean) ≥ nhypersets * n_all_params`, hyper blocks are taken from successive slices of `priormean`; otherwise each hyper block is filled from the first block of `priormean` / loaded rates.
-- Used for hierarchical model initialization
-"""
-function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing; nhypersets::Int=1, minval=1e-7, maxval=300.0)
-    c = ncoupling(coupling)
-    g = isnothing(grid) ? 0 : 1
-    n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors) + c + g
-    # Stacked layout matches `make_hierarchical`: nhypersets full blocks + one block per individual
-    total_expected = (nhypersets + nindividuals) * n_all_params
-    if isempty(r) || any(isnan.(r)) || any(isinf.(r)) || length(r) < total_expected
-        isempty(r) && println("No rate file, set rate to prior")
-        any(isnan.(r)) && println("r contains NaN, set rate to prior")
-        any(isinf.(r)) && println("r contains Inf, set rate to prior")
-        length(r) < total_expected && !isempty(r) && println("Rate file too short ($(length(r)) < $total_expected), expanding from prior")
-        # Seed individual inits from loaded rates when available, else fall back to priormean
-        seed = Vector{Float64}(
-            (length(r) >= n_all_params && !any(isnan.(Float64.(r[1:n_all_params])))) ?
-            r[1:n_all_params] : priormean[1:n_all_params]
-        )
-        # Validate coupling parameters match their specified sign mode
-        if c > 0
-            modes = coupling_ranges(coupling)
-            coupling_start = n_all_params - g - c + 1
-            for k in 1:c
-                idx = coupling_start + k - 1
-                mode = k <= length(modes) ? modes[k] : :free
-                γ = seed[idx]
-                # Check if initial coupling parameter sign matches the specified mode
-                if mode === :activate && γ <= 0.0
-                    throw(ArgumentError("Coupling parameter $k (value $γ) is invalid for mode $mode; must be > 0"))
-                elseif mode === :inhibit && (γ >= 0.0 || γ <= -1.0)
-                    throw(ArgumentError("Coupling parameter $k (value $γ) is invalid for mode $mode; must be in (-1, 0)"))
-                elseif mode === :free && γ <= -1.0
-                    throw(ArgumentError("Coupling parameter $k (value $γ) is invalid for mode $mode; must be > -1"))
-                end
-            end
-        end
-        r = Vector{Float64}()
-        if length(priormean) >= nhypersets * n_all_params
-            for b in 1:nhypersets
-                lo = (b - 1) * n_all_params + 1
-                hi = b * n_all_params
-                append!(r, priormean[lo:hi])
-            end
-        else
-            for _ in 1:nhypersets
-                append!(r, seed)
-            end
-        end
-        for _ in 1:nindividuals
-            append!(r, seed)
-        end
-    end
-    r
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    num_noiseparams(datatype, noisepriors)
-
-Calculate the number of noise parameters for a given data type.
-
-# Arguments
-- `datatype`: Type of data being analyzed
-- `noisepriors`: Noise prior specifications
-
-# Returns
-- `Int`: Number of noise parameters
-
-# Notes
-- Returns 0 for non-trace data types
-- Returns length of noisepriors for trace data types
-- Used for parameter counting in model setup
-"""
-function num_noiseparams(datatype, noisepriors)
-    if occursin("trace", lowercase(datatype))
-        if eltype(noisepriors) <: Number
-            return length(noisepriors)
-        else
-            return length.(noisepriors)
-        end
-    else
-        return 0
-    end
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling, grid)
-
-Generate default fitted parameter indices for coupled models.
-
-# Arguments
-- `datatype::String`: Type of data being analyzed
-- `transitions`: Model transitions for each unit
-- `R::Tuple`: Number of RNA steps for each unit
-- `S::Tuple`: Number of splice states for each unit
-- `insertstep::Tuple`: Insertion steps for each unit
-- `noiseparams::Tuple`: Number of noise parameters for each unit
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-
-# Returns
-- `Vector{Int}`: Default fitted parameter indices
-
-# Notes
-- Processes each unit in coupled model separately
-- Includes coupling parameters if coupling is not empty
-- Includes grid parameter if grid is not nothing
-- Used for coupled model parameter setup
-"""
-function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling, grid)
-    fittedparam = Int[]
-    totalrates = 0
-    for i in eachindex(R)
-        fittedparam = vcat(fittedparam, totalrates .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i], coupling, grid))
-        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
-    end
-    [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+ncoupling(coupling))]
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    default_fitted(datatype::String, transitions, R::Int, S::Int, insertstep::Int, noiseparams, coupling, grid)
-
-Generate default fitted parameter indices for single-unit models.
-
-# Arguments
-- `datatype::String`: Type of data being analyzed
-- `transitions`: Model transitions
-- `R::Int`: Number of RNA steps
-- `S::Int`: Number of splice states
-- `insertstep::Int`: Insertion step
-- `noiseparams`: Number of noise parameters
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-
-# Returns
-- `Vector{Int}`: Default fitted parameter indices
-
-# Notes
-- Creates indices for all rate parameters except decay rate
-- Includes noise parameters for trace data types
-- Includes coupling parameters if coupling is not empty
-- Includes grid parameter if grid is not nothing
-- Used for single-unit model parameter setup
-"""
-function default_fitted(datatype::String, transitions, R::Int, S::Int, insertstep::Int, noiseparams, coupling, grid)
-    n = num_rates(transitions, R, S, insertstep)
-    fittedparam = collect(1:n-1)
-    if occursin("trace", datatype)
-        if isnothing(grid)
-            isempty(noiseparams) && throw(ArgumentError("noisepriors cannot be empty for trace data"))
-            fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
-        else
-            fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams+1))
-        end
-    end
-    fittedparam
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-
-Set fitted parameter indices if empty, using default values.
-
-# Arguments
-- `fittedparam`: Fitted parameter indices (if empty, will be generated)
-- `datatype`: Type of data being analyzed
-- `transitions, R, S, insertstep`: Model structure parameters
-- `noisepriors`: Noise priors
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-
-# Returns
-- `Vector{Int}`: Fitted parameter indices
-
-# Notes
-- Generates default fitted parameter indices if fittedparam is empty
-- Handles both single-unit and coupled models
-- Delegates to appropriate default_fitted function
-- Used for model parameter setup
-"""
-function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(datatype, noisepriors), coupling, grid)
-    else
-        return fittedparam
-    end
-end
-
-
-"""
-    make_fixed(fixedshared, fixedindividual, nallparams, nindividuals)
-
-Create fixed parameter indices for hierarchical models.
-
-# Arguments
-- `fixedshared`: Indices of fixed shared parameters
-- `fixedindividual`: Indices of fixed individual parameters
-- `nallparams`: Total number of parameters per individual
-- `nindividuals`: Number of individuals
-
-# Returns
-- `Tuple`: (f, fhyper, fpriors)
-
-# Notes
-- Creates comprehensive fixed parameter indexing for hierarchical models
-- f: all fixed parameters (shared + hyper + individual)
-- fhyper: fixed hyper parameters for each hyperparameter set
-- fpriors: fixed parameters that have priors (shared + hyper)
-- Used for hierarchical model parameter organization
-"""
-function make_fixed(fixedshared, fixedindividual, nallparams, nindividuals)
-    fixed = Vector{Int}[]
-    for f in fixedshared
-        push!(fixed, f)
-    end
-    for h in fixedindividual
-        push!(fixed, [h + i * nallparams for i in 0:nindividuals-1])
-    end
-    tuple(fixed...)
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-    make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling, grid)
-
-Create fixed and fitted parameter indices based on fixedeffects string.
-
-# Arguments
-- `datatype`: Type of data being analyzed
-- `fixedeffects::String`: String specifying which parameters to fix
-- `transitions, R, S, insertstep`: Model structure parameters
-- `noiseparams`: Number of noise parameters
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
-
-# Returns
-- `Tuple`: (fixedeffects, fittedparam)
-
-# Notes
-- Parses fixedeffects string to determine which parameters to fix
-- Creates complementary fitted parameter indices
-- Handles both single-unit and coupled models
-- Used for model parameter setup with fixed effects
-"""
-function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling, grid)
-    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling, grid)
-    fixed = split(fixedeffects, "-")
-    if length(fixed) > 1
-        fixed = parse.(Int, fixed)
-        deleteat!(fittedparam, fixed[2:end])
-        fixed = tuple(fixed)
-    else
-        fixed = tuple()
-    end
-    return fixed, fittedparam
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
 """
-lossfn(x,data,model)
-
-Compute loss function
-
-"""
-lossfn(x, data, model) = -loglikelihood(x, data, model)[1]
-
-"""
-    burstsize(fits, model::AbstractGMmodel)
-
-Calculate burst size from fitted parameters for gene-only models.
-
-# Arguments
-- `fits`: Fitted parameters and statistics
-- `model::AbstractGMmodel`: Gene-only model
-
-# Returns
-- `Float64`: Burst size
-
-# Notes
-- Calculates burst size as ratio of initiation rate to gene inactivation rate
-- Uses maximum likelihood parameters from fits
-- Used for gene-only model analysis
-"""
-function burstsize(fits, model::AbstractGMmodel)
-    if model.G > 1
-        b = Float64[]
-        for p in eachcol(fits.param)
-            r = get_rates(p, model)
-            push!(b, r[2*model.G-1] / r[2*model.G-2])
-        end
-        return BurstMeasures(mean(b), std(b), median(b), mad(b, normalize=false), quantile(b, [0.025; 0.5; 0.975]))
-    else
-        return 0
-    end
-end
-"""
-    burstsize(fits::Fit, model::AbstractGRSMmodel)
-
-Calculate burst size from fitted parameters for GRS models.
-
-# Arguments
-- `fits::Fit`: Fitted parameters and statistics
-- `model::AbstractGRSMmodel`: GRS model
-
-# Returns
-- `Float64`: Burst size
-
-# Notes
-- Calculates burst size using model-specific burstsize function
-- Uses maximum likelihood parameters from fits
-- Delegates to burstsize(r, transitions, G, R, S, insertstep, splicetype, ejectnumber)
-- Used for GRS model analysis
-"""
-function burstsize(fits::Fit, model::AbstractGRSMmodel)
-    if model.G > 1
-        b = Float64[]
-        L = size(fits.param, 2)
-        rho = 100 / L
-        println(rho)
-        for p in eachcol(fits.param)
-            r = get_rates(p, model)
-            if rand() < rho
-                push!(b, burstsize(r, model))
-            end
-        end
-        return BurstMeasures(mean(b), std(b), median(b), mad(b), quantile(b, [0.025; 0.5; 0.975]))
-    else
-        return 0
-    end
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
 end
 
-burstsize(r, model::AbstractGRSMmodel, ejectnumber=1) = burstsize(r, model.Gtransitions, model.G, model.R, model.S, model.insertstep, model.splicetype, ejectnumber)
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
 
 """
-    burstsize(r, transitions, G, R, S, insertstep, splicetype="", ejectnumber=1)
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
 
-Calculate burst size from rate parameters for GRS models.
-
-Burst size = mean emission rate (while in state G) / k_off (rate of leaving state G)
-
-# Arguments
-- `r`: Rate parameters
-- `transitions`: Model transitions
-- `G, R, S, insertstep`: Model structure parameters
-- `splicetype`: Splicing type (default: "")
-- `ejectnumber`: Number of mRNAs per burst (default: 1)
-
-# Returns
-- `Float64`: Mean burst size (mean number of mRNA produced per burst)
-
-# Notes
-- For classic telegraph models (GM, R=0), burst size = eject_rate / off_rate
-- For GRSM models (R>0), this function:
-  1. Computes k_off: sum of all transition rates from gene state G to other gene states
-  2. Computes steady-state distribution over R states while in gene state G
-  3. Computes mean emission rate = sum(P(R config) * emission_rate(R config))
-  4. Returns mean emission rate / k_off
-
-The lifetime of state G is exponential with rate k_off, so the mean number of mRNA
-produced during a burst is the mean emission rate divided by k_off.
 """
-function burstsize(r, transitions, G, R, S, insertstep, splicetype="", ejectnumber=1)
-    ntransitions = num_rates(transitions, R, S, insertstep)
-    
-    # Step 1: Compute k_off (rate of leaving gene state G)
-    # Find all transitions that start from gene state G
-    k_off = 0.0
-    nG_transitions = length(transitions)
-    for (i, trans) in enumerate(transitions)
-        if trans[1] == G  # Transition starts from state G
-            k_off += r[i]
-        end
-    end
-    
-    if k_off == 0.0
-        # If state G never transitions away, burst size is infinite
-        return Inf
-    end
-    
-    # Step 2: Compute mean emission rate while in state G
-    # For R=0: emission rate is just the ejection/initiation rate
-    if R == 0
-        # For R=0, ejection rate is at index ntransitions (before decay)
-        # Rate order: G transitions, then ejection, then decay
-        emission_rate = r[ntransitions] * ejectnumber
-        return emission_rate / k_off
-    end
-    
-    # For R>0: Need to compute steady-state distribution over R states while in gene state G
-    # Set up reduced master equation: only R state transitions, no gene state transitions, no mRNA
-    # State space: only R configurations with gene state = G
-    nR_configs = 2^R  # Number of R configurations
-    nT = G * 2^R
-    
-    # Identify R configurations that correspond to gene state G
-    # For gene state G: config indices are G, 2*G, 3*G, ..., nR_configs*G
-    # But we need to map these to a reduced state space (just R configs)
-    R_configs_in_G = Int[]
-    for z in 1:nR_configs
-        config_idx = state_index(G, G, z)  # Gene state G, R config z
-        push!(R_configs_in_G, config_idx)
-    end
-    
-    # Build reduced transition matrix for R states only (within gene state G)
-    # This includes: R step transitions, S transitions, and ejection
-    # Need to extract relevant elements from the full TComponents
-    tcomponents = TComponents(transitions, G, R, S, insertstep, splicetype)
-    T_full = make_mat_T(tcomponents, r)
-    
-    # Extract submatrix for R states in gene state G
-    # Only include transitions within gene state G (R state transitions)
-    # Exclude transitions from gene state G to other gene states
-    nR = length(R_configs_in_G)
-    T_reduced = zeros(nR, nR)
-    for i in 1:nR
-        for j in 1:nR
-            if i != j
-                # Off-diagonal: transitions between R configs within gene state G
-                T_reduced[i, j] = T_full[R_configs_in_G[i], R_configs_in_G[j]]
-            end
-        end
-        # Diagonal: negative sum of all outgoing transitions within gene state G only
-        # (excludes transitions to other gene states, which we don't want in reduced matrix)
-        T_reduced[i, i] = -sum(T_reduced[i, :])
-    end
-    
-    # Compute steady-state distribution over R states
-    T_reduced_sparse = sparse(T_reduced)
-    pss_R = normalized_nullspace(T_reduced_sparse)
-    
-    # Step 3: Compute mean emission rate
-    # Emission occurs from R states where the final R step is occupied
-    # For each R config z, check if final R step is occupied and get emission rate
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+end
+
+"""
+    make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(data::Abstract
     mean_emission_rate = 0.0
     nG_rates = length(transitions)
     # Rate order: G transitions (1 to nG_rates), initiation (nG_rates+1), 
@@ -3649,16 +3645,12 @@ function print_ll(data, model, message="initial ll: ")
 end
 
 """
-printinfo(gene,G,datacond,datapath,infolder,resultfolder,maxtime)
-
-print out run information
-"""
-# function printinfo(gene, G, datacond, datapath, infolder, resultfolder, maxtime)
-#     println("Gene: ", gene, " G: ", G, " Treatment:  ", datacond)
-#     println("data: ", datapath)
-#     println("in: ", infolder, " out: ", resultfolder)
-#     println("maxtime: ", maxtime)
-# end
+printinfo(gene, G, datacond, datapath, infolder, resultfolder, maxtime)
+    println("Gene: ", gene, " G: ", G, " Treatment:  ", datacond)
+    println("data: ", datapath)
+    println("in: ", infolder, " out: ", resultfolder)
+    println("maxtime: ", maxtime)
+end
 
 function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     if R == 0
