@@ -19,10 +19,13 @@ struct MHOptions <: Options
     warmupsteps::Int64
     maxtime::Float64
     temp::Float64
+    device::Symbol  # :cpu, :gpu
+    parallel::Symbol  # :single, :threaded, :distributed
+    gradient::Symbol
 end
 
-MHOptions(samplesteps::Integer, warmupsteps::Integer, maxtime::Real, temp::Real) =
-    MHOptions(Int64(samplesteps), Int64(warmupsteps), Float64(maxtime), Float64(temp))
+MHOptions(samplesteps::Integer, warmupsteps::Integer, maxtime::Real, temp::Real; device::Symbol=:cpu, parallel::Symbol=:single, gradient::Symbol=:none) =
+    MHOptions(Int64(samplesteps), Int64(warmupsteps), Float64(maxtime), Float64(temp), device, parallel, gradient)
 
 """
 struct Fit <: Results

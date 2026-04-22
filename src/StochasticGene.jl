@@ -216,14 +216,10 @@ export
     GenePosteriorLogDensity,
     NUTSOptions,
     ADVIOptions,
-    run_nuts,
-    longest_trace_timesteps,
-    check_ad_gradient_feasibility,
-    run_nuts_fit,
-    run_NUTS,
-    run_advi,
-    run_advi_fit,
-    run_ADVI,
+   longest_trace_timesteps,
+   check_ad_gradient_feasibility,
+   run_nuts_fit,
+   run_inference,
     logposterior,
     norm,
     normalize_histogram,
@@ -258,8 +254,7 @@ export
     read_rates_folder,
     rate_distribution_summary,
     rna_setup,
-    run_mh,
-    run_mcmc_parallel,
+   run_mh,
     set_indices,
     set_elements_TCoupledUnit,
     simulate_trace,
@@ -393,8 +388,12 @@ include("likelihoods.jl")
 # Metropolis Hastings MCMC for computing posterior distributions of model parameters
 include("metropolis_hastings.jl")
 
+
 # NUTS / ADVI (gradient-based inference on transformed parameters)
 include("gradient_inference.jl")
+
+# Unified inference dispatcher (run_inference)
+include("inference_common.jl")
 
 # Input output functions
 include("io.jl")

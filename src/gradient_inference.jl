@@ -172,10 +172,12 @@ struct NUTSOptions
     fd_ε::Float64
     verbose::Bool
     progress::Bool
+    device::Symbol  # :cpu, :gpu
+    parallel::Symbol  # :single, :threaded, :distributed
 end
 
-NUTSOptions(; n_samples=1000, n_adapts=1000, δ=0.8, gradient=:ForwardDiff, fd_ε=1e-5, verbose=true, progress=false) =
-    NUTSOptions(n_samples, n_adapts, δ, gradient, fd_ε, verbose, progress)
+NUTSOptions(; n_samples=1000, n_adapts=1000, δ=0.8, gradient=:ForwardDiff, fd_ε=1e-5, verbose=true, progress=false, device::Symbol=:cpu, parallel::Symbol=:single) =
+    NUTSOptions(n_samples, n_adapts, δ, gradient, fd_ε, verbose, progress, device, parallel)
 
 """
     run_nuts(data, model, rng, options=NUTSOptions(); kwargs...)
@@ -282,10 +284,12 @@ struct ADVIOptions
     verbose::Bool
     gradient::Symbol
     time_limit::Union{Nothing,Float64}
+    device::Symbol  # :cpu, :gpu
+    parallel::Symbol  # :single, :threaded, :distributed
 end
 
-ADVIOptions(; maxiter=500, n_mc=8, σ_floor=1e-4, init_s_raw=-4.0, verbose=false, gradient=:Zygote, time_limit=nothing) =
-    ADVIOptions(maxiter, n_mc, σ_floor, init_s_raw, verbose, gradient, time_limit)
+ADVIOptions(; maxiter=500, n_mc=8, σ_floor=1e-4, init_s_raw=-4.0, verbose=false, gradient=:Zygote, time_limit=nothing, device::Symbol=:cpu, parallel::Symbol=:single) =
+    ADVIOptions(maxiter, n_mc, σ_floor, init_s_raw, verbose, gradient, time_limit, device, parallel)
 
 """
     run_advi(data, model, rng, options=ADVIOptions(); kwargs...)
