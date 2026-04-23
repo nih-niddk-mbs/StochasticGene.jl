@@ -8,7 +8,8 @@ export fit, fit_parallel, loglikelihood, predictedarray, predictedfn
 export simulator, simulate_trace, simulate_trace_data, simulate_trace_vector, simulate_trials, get_3unit_model_params, test_simulate_trials
 
 # Data Types
-export RNAData, RNADwellTimeData, RNAOnOffData, TraceData, TraceRNAData
+export RNAData, RNADwellTimeData, RNAOnOffData, TraceData, TraceRNAData,
+    AbstractObservationBundle, ObservationBundle, observation_modalities, reconstruct_tracerna
 
 # Data Handling
 export load_data, load_model, write_histograms, write_traces, write_dataframes

@@ -111,6 +111,20 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.test_trace_specs_utilities()
     end
 
+    @testset "ObservationBundle (tracerna split / round-trip)" begin
+        len = 5
+        h = fill(0.1, len)
+        trace = [rand(4, 2)]
+        tup = (trace, 0.0, 0.0, 4, 1.0)
+        d = StochasticGene.TraceRNAData("lab", "gene", 1.0, tup, len, h, 1.0, Int[])
+        b = StochasticGene.ObservationBundle(d)
+        @test StochasticGene.observation_modalities(b) == (:rna, :trace)
+        d2 = StochasticGene.reconstruct_tracerna(b)
+        @test d2.label == d.label && d2.gene == d.gene && d2.interval == d.interval
+        @test d2.nRNA == d.nRNA && d2.histRNA == d.histRNA && d2.yield == d.yield
+        @test d2.trace == d.trace && d2.units == d.units
+    end
+
     @testset "inference benchmark (smoke)" begin
         scen = StochasticGene.benchmark_inference_simrna_small(seed=7)
         @test hasproperty(scen, :data) && hasproperty(scen, :model)

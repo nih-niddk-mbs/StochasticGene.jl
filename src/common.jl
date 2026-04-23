@@ -223,7 +223,7 @@ TraceData(label, gene, interval, trace) = TraceData(label, gene, interval, trace
 """
     TraceRNAData{traceType,hType}
 
-Structure for storing trace RNA histogram data.
+Joint **trace + RNA FISH histogram** payload (legacy single-struct layout).
 
 # Fields
 - `label`: Label for the data set.
@@ -234,6 +234,9 @@ Structure for storing trace RNA histogram data.
 - `histRNA`: RNA histogram (type varies).
 - `yield`: Detection efficiency (Float64 or (yield, nRNA_true) tuple).
 - `units::Vector{Int}`: Unit index per observation; empty means legacy 1:1.
+
+For a **split** representation (separate [`TraceData`](@ref) and [`RNAData`](@ref) legs
+in one container), use [`ObservationBundle`](@ref) and [`ObservationBundle(::TraceRNAData)`](@ref).
 """
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     label::String
