@@ -198,7 +198,7 @@ end
 
 """
     build_coupled_fit_spec_from_csv_cells(e1, e1s, e2, e2s, ge, ges, key::AbstractString;
-        G, R, S, insertstep, transitions, datapath, infolder, resultfolder, root,
+        G, R, S, insertstep, transitions, datapath, resultfolder, root,
         noisepriors, elongationtime, datacond, cell, hierarchical, interval, tracetime,
         zeromedian, probfn, method, trace_specs, initprior, tie_rsum, ...)
 
@@ -213,7 +213,6 @@ function build_coupled_fit_spec_from_csv_cells(
     insertstep::Tuple,
     transitions::Tuple,
     datapath::AbstractString,
-    infolder::AbstractString,
     resultfolder::AbstractString,
     root::AbstractString,
     gene::AbstractString="MYC",
@@ -317,7 +316,6 @@ function build_coupled_fit_spec_from_csv_cells(
         :datacond => datacond,
         :datatype => "tracejoint",
         :datapath => datapath,
-        :infolder => infolder,
         :resultfolder => resultfolder,
         :root => root,
         :transitions => transitions,
@@ -333,7 +331,6 @@ function build_coupled_fit_spec_from_csv_cells(
         :noisepriors => noisepriors,
         :hierarchical => h,
         :elongationtime => elongationtime,
-        :traceinfo => (interval, 1.0, tracetime),
         :zeromedian => zeromedian,
         :probfn => probfn,
         :method => method,
@@ -349,7 +346,6 @@ function build_coupled_fit_spec_from_csv_cells(
         :splicetype => splicetype,
         :decayrate => decayrate,
         :trace_specs => trace_specs_eff,
-        :inlabel => "",
         :label => "",
     )
 end

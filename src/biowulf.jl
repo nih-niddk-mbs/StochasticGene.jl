@@ -270,26 +270,16 @@ function _folder_path_quiet(folder::AbstractString, root::AbstractString, folder
 end
 
 """
-    _find_existing_info_toml(key, infolder, resultfolder, root) -> String or nothing
+    _find_existing_info_toml(key, resultfolder, root) -> String or nothing
 
-Same resolution as `fit(; key=...)`: `joinpath(folder_path(folder, root, \"results\"), \"info_<key>.toml\")`
-for `resultfolder` and `infolder` (first hit wins).
+Same resolution as `fit(; key=...)`: `joinpath(folder_path(resultfolder, root, \"results\"), \"info_<key>.toml\")`.
 """
-function _find_existing_info_toml(key::AbstractString, infolder, resultfolder, root)
+function _find_existing_info_toml(key::AbstractString, resultfolder, root)
     stem = "info_" * string(key) * ".toml"
-    seen = Set{String}()
-    function try_path(p)
-        p = abspath(p)
-        p in seen && return nothing
-        push!(seen, p)
-        isfile(p) ? p : nothing
-    end
-    for base in (resultfolder, infolder)
-        isempty(strip(string(base))) && continue
-        rr = _folder_path_quiet(base, root, "results")
-        (x = try_path(joinpath(rr, stem))) !== nothing && return x
-    end
-    nothing
+    isempty(strip(string(resultfolder))) && return nothing
+    rr = _folder_path_quiet(resultfolder, root, "results")
+    p = abspath(joinpath(rr, stem))
+    isfile(p) ? p : nothing
 end
 
 """Parse `H3-t1-t2` or `H3-t1-t2-h` batch keys into `(t1, t2)` for hidden-latent coupling; else `nothing`."""
@@ -324,8 +314,8 @@ function _apply_h3_latent_key_overlay!(spec::Dict{Symbol,Any}, t1::Int, t2::Int;
     else
         spec[:elongationtime] = (20.0, 5.0)
     end
-    spec[:traceinfo] = (5.0 / 3.0, 1.0, -1.0)
     spec[:zeromedian] = Bool[true, true]
+    spec[:trace_specs] = default_trace_specs_for_coupled((5.0 / 3.0, 1.0, -1.0), spec[:zeromedian], 2)
     spec[:decayrate] = 1.0
     spec[:splicetype] = "full"
     spec[:prerun] = get(spec, :prerun, 0.0)
@@ -344,12 +334,12 @@ function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::D
     for key in run_keys
         spec = copy(fit_base)
         if merge_existing_info
-            p = _find_existing_info_toml(key, get(spec, :infolder, ""), get(spec, :resultfolder, ""), get(spec, :root, "."))
+            p = _find_existing_info_toml(key, get(spec, :resultfolder, ""), get(spec, :root, "."))
             if p !== nothing
                 loaded = read_run_spec(p)
                 spec = merge(spec, loaded)
                 for k in (
-                    :datapath, :infolder, :resultfolder, :maxtime, :root,
+                    :datapath, :resultfolder, :maxtime, :root,
                     :inference_method, :device, :parallel, :parallelism, :gradient,
                     :samplesteps, :warmupsteps, :n_mc, :maxiter, :n_samples, :n_adapts,
                     :nuts_delta, :δ, :fd_ε, :nuts_fd_ε, :verbose, :progress, :nuts_verbose, :nuts_progress,
@@ -381,7 +371,7 @@ function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::D
         specs_by_key[key] = spec
     end
     if merge_existing_info && n_missing > 0 && warn_missing_info
-        @warn "makeswarmfiles: no info_<key>.toml (with JLD2) found for $n_missing of $(length(run_keys)) keys under infolder/resultfolder; run specs use merged defaults only — add prior `info_<key>` files next to those fits or pass full model kwargs. Silence when expected: `warn_missing_info=false`." n_missing=n_missing nkeys=length(run_keys)
+        @warn "makeswarmfiles: no info_<key>.toml (with JLD2) found for $n_missing of $(length(run_keys)) keys under resultfolder; run specs use merged defaults only — add prior `info_<key>` files next to those fits or pass full model kwargs. Silence when expected: `warn_missing_info=false`." n_missing=n_missing nkeys=length(run_keys)
     end
     _makeswarm_with_run_specs(run_keys, swarm_kw, specs_by_key)
     return run_keys
@@ -459,9 +449,14 @@ function _makeswarmfiles_coupled_models_csv(
                 e2u = vkind === :none ? e2 : replace_csv_cell_legacy_r(e2, vkind)
                 geu = vkind === :none ? ge : replace_csv_cell_legacy_r(ge, vkind)
                 key = key_base * (hierarchical ? "-h" : "") * vsuffix
-                ti = get(merged, :traceinfo, (5.0 / 3.0, 1.0, -1.0))
-                interval = Float64(ti[1])
-                tracetime = length(ti) >= 3 ? Float64(ti[3]) : -1.0
+                ts0 = get(merged, :trace_specs, [])
+                interval, tracetime = if !isempty(ts0)
+                    s1 = ts0[1]
+                    Float64(get(s1, :interval, 5.0 / 3.0)), Float64(get(s1, :t_end, -1.0))
+                else
+                    ti = get(merged, :traceinfo, (5.0 / 3.0, 1.0, -1.0))
+                    Float64(ti[1]), (length(ti) >= 3 ? Float64(ti[3]) : -1.0)
+                end
                 dc = get(merged, :datacond, ["gene", "enhancer"])
                 dc_vec = dc isa AbstractVector ? String[string(x) for x in dc] : String[string(dc)]
                 pfn0 = get(merged, :probfn, nothing)
@@ -492,7 +487,6 @@ function _makeswarmfiles_coupled_models_csv(
                     insertstep=insertstep,
                     transitions=transitions,
                     datapath=string(merged[:datapath]),
-                    infolder=string(merged[:infolder]),
                     resultfolder=string(merged[:resultfolder]),
                     root=string(get(merged, :root, ".")),
                     gene=string(get(merged, :gene, "MYC")),
@@ -556,7 +550,7 @@ function makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), transitionsvec=no
 end
 
 """
-    makeswarmfiles(; filedir=".", csv_file="", datapath, infolder, folder, maxtime=30.0, hierarchical_modes=(true,false), key_col="Model_name", skip_empty=true, base_keys=nothing, h3_transition_range=nothing, coupled=nothing, merge_existing_info=true, warn_missing_info=true, h3_latent=false, h3_coupling_ranges=(:activate, :activate), warn_coupled_csv_shape=true, models=nothing, Gvec=nothing, Rvec=nothing, Svec=nothing, insertvec=nothing, combine=:product, transitions=([1,2],[2,1]), transitionsvec=nothing, kwargs...)
+    makeswarmfiles(; filedir=".", csv_file="", datapath, folder, maxtime=30.0, hierarchical_modes=(true,false), key_col="Model_name", skip_empty=true, base_keys=nothing, h3_transition_range=nothing, coupled=nothing, merge_existing_info=true, warn_missing_info=true, h3_latent=false, h3_coupling_ranges=(:activate, :activate), warn_coupled_csv_shape=true, models=nothing, Gvec=nothing, Rvec=nothing, Svec=nothing, insertvec=nothing, combine=:product, transitions=([1,2],[2,1]), transitionsvec=nothing, kwargs...)
 
 Unified entry for [`write_run_spec_preset`](@ref) plus swarm and `fitscript_<key>.jl` under `filedir`
 (one `info_<key>.jld2` and marker TOML per key). Single-unit `Gvec`…`insertvec` / `models` batches use
@@ -594,9 +588,9 @@ Set **`coupled`** for this workflow (defaults to **`true`** when omitted):
 - **`coupled=false`**: run specs start from [`fit_default_spec`](@ref) (single-unit GRSM baseline). Use when keys refer to **uncoupled** models (e.g. CSV of `default_model_key` strings) but you still want string-key batching.
 
 If **`merge_existing_info=true`** (default), each key also merges an existing
-`info_<key>.toml` / JLD2 found under `infolder` or `folder` (same resolution as `fit(; key=...)`),
+`info_<key>.toml` / JLD2 found under `folder` (`resultfolder`; same resolution as `fit(; key=...)`),
 so layouts, priors, and trace settings from a prior fit are preserved; explicit
-`infolder`, `folder` (`resultfolder`), `maxtime`, and `root` from this call still win, as do
+`folder` (`resultfolder`), `maxtime`, and `root` from this call still win, as do
 any fit keywords you pass (including **`datapath`** when you set it here).
 
 Optional **`hierarchical_modes`**: tuple of `Bool` (default `(true, false)`) applies
@@ -621,9 +615,9 @@ Delegates to [`makeswarmfiles_driver`](@ref) → [`makeswarm_models`](@ref), whi
 # Common keywords
 
 - **`filedir`**: directory for `*.swarm` and `fitscript_<key>.jl`.
-- **`datapath`, `infolder`, `folder`**: merged into the run spec (`folder` is written as `resultfolder`).
-  There is **no** repository default for **`datapath`**—set it to your machine’s data root. Defaults
-  **`infolder="coupled"`** and **`folder="coupled"`**; if that path is missing, [`folder_path`](@ref) logs a warning naming the folder (e.g. `coupled`)—not a Julia “variable not found” error.
+- **`datapath`, `folder`**: merged into the run spec (`folder` is written as `resultfolder`).
+  There is **no** repository default for **`datapath`**—set it to your machine’s data root. Default
+  **`folder="coupled"`**; if that path is missing, [`folder_path`](@ref) logs a warning naming the folder (e.g. `coupled`)—not a Julia “variable not found” error.
 - **`maxtime`**: wall-time hint for scripts.
 - **`coupled`**: only for the **key-first** branch (`csv_file` / `base_keys` / `h3_transition_range`); see above.
 - **`merge_existing_info`**: if `true`, merge each key’s existing `info_<key>` run spec when found (see above).
@@ -667,7 +661,6 @@ function makeswarmfiles(;
         coupled_csv::Bool=false,
         coupled_models_csv::Union{Nothing,AbstractString}=nothing,
         datapath::AbstractString="",
-        infolder="coupled",
         folder="coupled",
         maxtime=30.0,
         hierarchical_modes=(true, false),
@@ -727,7 +720,6 @@ function makeswarmfiles(;
         swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
         merged = merge(fit_coupled_default_spec(), fit_kw)
         merged[:datapath] = datapath
-        merged[:infolder] = infolder
         merged[:resultfolder] = folder
         merged[:maxtime] = maxtime
         swarm_kw[:filedir] = filedir
@@ -762,7 +754,7 @@ function makeswarmfiles(;
         base_keys !== nothing &&
             throw(ArgumentError("makeswarmfiles: base_keys cannot be used together with single-unit model sweep"))
         return makeswarmfiles_driver(; transitions=transitions, transitionsvec=transitionsvec, Gvec=Gvec, Rvec=Rvec, Svec=Svec, insertvec=insertvec,
-            combine=combine, models=models, datapath=datapath, infolder=infolder, resultfolder=folder, maxtime=maxtime,
+            combine=combine, models=models, datapath=datapath, resultfolder=folder, maxtime=maxtime,
             filedir=filedir, kwargs...)
     end
 
@@ -812,7 +804,6 @@ function makeswarmfiles(;
     is_coupled = coupled === nothing ? true : coupled
     fit_base = merge((is_coupled ? fit_coupled_default_spec : fit_default_spec)(), fit_kw)
     fit_base[:datapath] = datapath
-    fit_base[:infolder] = infolder
     fit_base[:resultfolder] = folder
     fit_base[:maxtime] = maxtime
     swarm_kw[:filedir] = filedir
@@ -845,27 +836,26 @@ function makeswarmfiles_coupled(; csv=nothing, csv_file::AbstractString="", file
 end
 
 """
-    makeswarmfiles_h3_latent(filedir::String; transition_range=1:5, datapath, infolder="coupled", folder="coupled", maxtime=43000.0, hierarchical_modes=(true,false), merge_existing_info=true, warn_missing_info=true, kwargs...)
+    makeswarmfiles_h3_latent(filedir::String; transition_range=1:5, datapath, folder="coupled", maxtime=43000.0, hierarchical_modes=(true,false), merge_existing_info=true, warn_missing_info=true, kwargs...)
 
 Convenience wrapper: calls [`makeswarmfiles`](@ref) with `h3_transition_range=transition_range`.
 **`datapath`** is required (no default)—set your machine’s trace data root. Other defaults
 match [`fit_coupled_default_spec`](@ref)-style coupled trace jobs: **`maxtime`** in **seconds**
 (~`43000` ≈ 12 h wall for the MCMC engine, same units as [`fit`](@ref) → `MHOptions`),
-and **`infolder` / `folder`** aligned with [`makeswarmfiles`](@ref) (`"coupled"`). Override
-**`infolder` / `folder`** if you use a separate results directory (e.g. `"coupled-h3"`).
+and **`folder`** (`resultfolder`) aligned with [`makeswarmfiles`](@ref) (`"coupled"`). Override
+**`folder`** if you use a separate results directory (e.g. `"coupled-h3"`).
 Forwarded kwargs include **`warn_missing_info`** (see [`makeswarmfiles`](@ref)).
 """
 function makeswarmfiles_h3_latent(filedir::AbstractString;
         transition_range=1:5,
         datapath::AbstractString,
-        infolder="coupled",
         folder="coupled",
         maxtime=43000.0,
         hierarchical_modes=(true, false),
         kwargs...,
     )
     makeswarmfiles(; filedir=filedir, h3_transition_range=transition_range, datapath=datapath,
-        infolder=infolder, folder=folder, maxtime=maxtime, hierarchical_modes=hierarchical_modes, kwargs...)
+        folder=folder, maxtime=maxtime, hierarchical_modes=hierarchical_modes, kwargs...)
 end
 
 """
@@ -899,14 +889,14 @@ execution). Allocate wall time and CPUs so `maxtime` and `nchains` are feasible.
 makeswarm_genes(["MYC", "SOX9"]; cell="HBEC", datatype="rna", datapath="data/", resultfolder="out")
 ```
 """
-function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",
+function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", datapath="", cell::String="HCT116", datacond="MOCK", resultfolder::String="HCT116_test", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", kwargs...)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
     modelstring = create_modelstring(G, R, S, insertstep)
-    label, inlabel = create_label(label, inlabel, datatype, datacond, cell)
+    label = create_label(label, datatype, datacond, cell)
     label_safe = sanitize_for_filename(label)
     model_safe = sanitize_for_filename(modelstring)
     ngenes = length(genes)
@@ -921,7 +911,7 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
         sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
         write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile_full, genes, project, sysimage)
     end
-    write_fitfile_genes(joinpath(filedir, juliafile_full), nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
+    write_fitfile_genes(joinpath(filedir, juliafile_full), nchains, datatype, datapath, cell, datacond, resultfolder, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
     end
@@ -1040,7 +1030,7 @@ function write_fitscript_tracejoint_key(scriptpath::AbstractString, key::String,
     f = open(scriptpath, "w")
     write_prolog(f, src)
     write(f, "@time fit(; key=$(repr(key))")
-    ks = sort!(collect(setdiff(keys(sp), (:key,))), by = x -> String(x))
+    ks = sort!(collect(setdiff(keys(sp), (:key, :infolder, :traceinfo, :dttype))), by = x -> String(x))
     for sym in ks
         line = _fit_kw_value_for_fitscript_line(sym, sp[sym])
         line === nothing && continue
@@ -1160,13 +1150,13 @@ function write_fitfile_key(fitfile, key::String; src="", resultfolder="", root="
 end
 
 """
-    write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
+    write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacond, resultfolder, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
 
 Writes a fit script that takes the gene as ARGS[1] and calls `fit(nchains, datatype, ..., ARGS[1], cell, ...)`.
 """
-function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
+function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     s = '"'
@@ -1175,7 +1165,7 @@ function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell,
     write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
-    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, ARGS[1], $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)" * _fit_positional_script_kw_suffix(; kwargs...) * "\n")
+    write(f, "@time fit($nchains, $s$datatype$s, $datapath, ARGS[1], $s$cell$s, $datacond, $s$resultfolder$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)" * _fit_positional_script_kw_suffix(; kwargs...) * "\n")
     close(f)
 end
 
@@ -1184,10 +1174,9 @@ end
 
 Like `write_fitfile_genes` but with `gene` hardcoded in the script instead of `ARGS[1]`.
 Used for coupled-model scripts where one gene is fixed per script.
-`trace_specs` and `dwell_specs` are interpolated directly — when non-empty they override
-the legacy `traceinfo`/`zeromedian` inside `fit`.
+`trace_specs` and `dwell_specs` are interpolated directly into the emitted `fit(...)` call.
 """
-function write_fitfile_coupled(fitfile, gene::String, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
+function write_fitfile_coupled(fitfile, gene::String, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     s = '"'
@@ -1196,23 +1185,22 @@ function write_fitfile_coupled(fitfile, gene::String, nchains, datatype, dttype,
     write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
-    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)" * _fit_positional_script_kw_suffix(; kwargs...) * "\n")
+    write(f, "@time fit($nchains, $s$datatype$s, $datapath, $s$gene$s, $s$cell$s, $datacond, $s$resultfolder$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)" * _fit_positional_script_kw_suffix(; kwargs...) * "\n")
     close(f)
 end
 
 """
-    makeswarm_coupled(; gene, inlabel, label, nchains, ..., trace_specs=[], dwell_specs=[], ...)
+    makeswarm_coupled(; gene, label, nchains, ..., trace_specs=[], dwell_specs=[], ...)
 
 Write one fit script for a coupled model (gene hardcoded, not ARGS[1]) and append one
 swarm line. Intended for coupled models where each label/coupling gets its own script.
-`trace_specs` is written directly into the script so `fit` uses it instead of the legacy
-`traceinfo`/`zeromedian` path for determining interval and per-unit zero-centering.
+`trace_specs` is written directly into the script for interval, per-trace window, and per-unit zero-centering.
 """
-function makeswarm_coupled(; gene::String, inlabel::String, label::String,
+function makeswarm_coupled(; gene::String, label::String,
     nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript",
     filedir=".", project="", sysimage="", src="",
-    datatype::String="tracejoint", dttype=String[], datapath="", cell::String="HBEC",
-    datacond=[], traceinfo=(1.0, 1.0, -1.0), infolder::String="", resultfolder::String="",
+    datatype::String="tracejoint", datapath="", cell::String="HBEC",
+    datacond=[], resultfolder::String="",
     fittedparam=Int[], fixedeffects=tuple(), transitions=tuple(), G=2, R=0, S=0, insertstep=1,
     coupling=tuple(), grid=nothing, root=".", maxtime=60.0, elongationtime=6.0,
     priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0,
@@ -1238,8 +1226,8 @@ function makeswarm_coupled(; gene::String, inlabel::String, label::String,
             writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains scriptfile])
         end
     end
-    write_fitfile_coupled(scriptpath, gene, nchains, datatype, dttype, datapath, cell,
-        datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects,
+    write_fitfile_coupled(scriptpath, gene, nchains, datatype, datapath, cell,
+        datacond, resultfolder, label, fittedparam, fixedeffects,
         transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime,
         priormean, nalleles, priorcv, onstates, decayrate, splicetype, probfn, noisepriors,
         hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp,
@@ -1272,39 +1260,31 @@ function write_prolog(f, src)
 end
 
 """
-    create_label(label, inlabel, datatype, datacond, cell)
+    create_label(label, datatype, datacond, cell)
 
-Create a label string based on the provided parameters.
+Return the run label string used for outputs and for looking up prior runs under `resultfolder`.
 
 # Arguments
-- `label`: Initial label string (can be empty).
-- `inlabel`: Initial inlabel string (can be empty).
-- `datatype`: Type of data.
-- `datacond`: Condition of the data. Can be a `String` or a `Vector` of strings.
-- `cell`: Cell type.
-
-# Returns
-- `label`: Generated label string.
-- `inlabel`: Generated inlabel string.
+- `label`: When non-empty, returned unchanged (after `datacond` is normalized for the vector method).
+- `datatype`, `datacond`, `cell`: Used only when `label` is empty to build `datatype * "-" * cell * "_" * datacond`.
 
 # Methods
-- `create_label(label, inlabel, datatype, datacond::String, cell)`: Handles `datacond` as a `String`.
-- `create_label(label, inlabel, datatype, datacond::Vector, cell)`: Handles `datacond` as a `Vector` of strings.
+- `create_label(label, datatype, datacond::String, cell)`
+- `create_label(label, datatype, datacond::Vector, cell)`: joins `datacond` with `"-"`.
 
-When `label` is empty, the built label is `datatype * "-" * cell * "_" * datacond` (with `datacond`
-joined by `"-"` when it is a vector). Pass an explicit `label` when filenames need extra disambiguators.
+When `label` is empty, the built label is `datatype * "-" * cell * "_" * datacond`. Pass an explicit
+`label` when filenames need extra disambiguators.
 """
-function create_label(label, inlabel, datatype, datacond::String, cell)
+function create_label(label, datatype, datacond::String, cell)
     if isempty(label)
         label = datatype * "-" * cell
         typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
     end
-    isempty(inlabel) && (inlabel = label)
-    return label, inlabel
+    return label
 end
 
-function create_label(label, inlabel, datatype, datacond::Vector, cell)
-    create_label(label, inlabel, datatype, join(datacond, "-"), cell)
+function create_label(label, datatype, datacond::Vector, cell)
+    create_label(label, datatype, join(datacond, "-"), cell)
 end
 
 """

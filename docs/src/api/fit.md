@@ -48,7 +48,7 @@ Other cross-method options stored on `MHOptions`, `NUTSOptions`, and `ADVIOption
 ### Data parameters
 
 - **`datatype::String`**: e.g. `"rna"`, `"trace"`, `"rnadwelltime"`, `"tracejoint"`, …
-- **`datapath`**, **`datacond`**, **`cell`**, **`gene`**, **`nalleles`**, **`traceinfo`**, **`trace_specs`**, **`dwell_specs`**, …
+- **`datapath`**, **`datacond`**, **`cell`**, **`gene`**, **`nalleles`**, **`trace_specs`**, **`dwell_specs`**, …
 
 ### Fitting / inference parameters
 
@@ -60,7 +60,7 @@ Other cross-method options stored on `MHOptions`, `NUTSOptions`, and `ADVIOption
 ### Priors, indices, outputs
 
 - **`priormean`**, **`priorcv`**, **`noisepriors`**, **`fittedparam`**, **`fixedeffects`**, **`onstates`**, **`decayrate`**, …
-- **`resultfolder`**, **`label`**, **`infolder`**, **`inlabel`**, **`writesamples`**, **`burst`**, **`optimize`**, …
+- **`resultfolder`**, **`label`**, **`writesamples`**, **`burst`**, **`optimize`**, …
 
 ### Run specification and key-based naming
 
@@ -127,7 +127,7 @@ fits, stats, measures, data, model, options = fit(
     cell = "TEST",
     gene = "test",
     datacond = "testtrace",
-    traceinfo = (1.0, 1., -1, 1.),
+    trace_specs = [(unit = 1, interval = 1.0, start = 1.0, t_end = -1.0, zeromedian = true, active_fraction = 1.0, background = 0.0)],
     noisepriors = [40., 20., 200., 10.],
     nchains = 4,
 )

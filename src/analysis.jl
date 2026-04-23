@@ -1793,12 +1793,12 @@ function make_halflife(infile, outfile, col=4)
 end
 
 """
-    make_datafiles(infolder, outfolder, label)
+    make_datafiles(srcdir, outfolder, label)
 
 Copy files from input folder to output folder, removing a label from filenames.
 
 # Arguments
-- `infolder::String`: Path to input folder
+- `srcdir::String`: Path to input folder
 - `outfolder::String`: Path to output folder
 - `label::String`: Label to remove from filenames
 
@@ -1822,14 +1822,14 @@ make_datafiles("input/", "output/", "temp_")
 # - "temp_data2.txt" → "data2.txt"
 ```
 """
-function make_datafiles(infolder, outfolder, label)
-    histograms = readdir(infolder)
+function make_datafiles(srcdir, outfolder, label)
+    histograms = readdir(srcdir)
     if ~isdir(outfolder)
         mkpath(outfolder)
     end
     for file in histograms
         newfile = replace(file, label => "")
-        cp(joinpath(infolder, file), joinpath(outfolder, newfile))
+        cp(joinpath(srcdir, file), joinpath(outfolder, newfile))
     end
 end
 
@@ -2421,18 +2421,27 @@ function write_traces_key(folder::String;
         @info "writing traces for $ratefile"
         info     = read_run_spec(info_path)
         r        = readrates(ratefile, get_row(ratetype))
-        traceinfo = info[:traceinfo]
-        dt       = isnothing(interval)   ? Float64(traceinfo[1]) : Float64(interval)
-        start    = length(traceinfo) > 1 ? traceinfo[2] : 1
-        stop     = length(traceinfo) > 2 ? traceinfo[3] : -1
+        trace_specs = get(info, :trace_specs, [])
+        dwell_specs = get(info, :dwell_specs, [])
+        ti_legacy = get(info, :traceinfo, nothing)
+        dt, start, stop = if !isempty(trace_specs)
+            s1 = trace_specs[1]
+            isnothing(interval) ? Float64(get(s1, :interval, 1.0)) : Float64(interval),
+            Float64(get(s1, :start, 1.0)),
+            Float64(get(s1, :t_end, -1.0))
+        elseif ti_legacy !== nothing
+            isnothing(interval) ? Float64(ti_legacy[1]) : Float64(interval),
+            length(ti_legacy) > 1 ? Float64(ti_legacy[2]) : 1.0,
+            length(ti_legacy) > 2 ? Float64(ti_legacy[3]) : -1.0
+        else
+            isnothing(interval) ? 1.0 : Float64(interval), 1.0, -1.0
+        end
         dp       = isnothing(datapath)   ? info[:datapath]   : datapath
         dc       = isnothing(datacond)   ? info[:datacond]   : datacond
         col      = isnothing(datacol)    ? info[:datacol]    : datacol
         zm       = isnothing(zeromedian) ? info[:zeromedian] : zeromedian
         datatype = String(get(info, :datatype, "trace"))
         dttype = get(info, :dttype, String[])
-        trace_specs = get(info, :trace_specs, [])
-        dwell_specs = get(info, :dwell_specs, [])
         temprna = Float64(get(info, :temprna, 1.0))
         data = load_data(datatype, dttype, dp, "", "", dc, (dt, start, stop, 1.0, 0.0), temprna, col, zm, 1.0, trace_specs, dwell_specs)
         sp = splicetype == "" ? get(info, :splicetype, "") : splicetype
