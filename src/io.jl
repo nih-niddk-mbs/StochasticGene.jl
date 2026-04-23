@@ -2524,11 +2524,19 @@ function _from_toml_value(k::String, v)
 end
 
 """
-    info_jld2_path(file_toml::String)
+    info_jld2_path(info_file::String)
 
-Return path to the companion JLD2 file for a given info TOML path (same stem, `.jld2` extension).
+Return the path to the run-spec **JLD2** file.
+
+- If `info_file` already ends in `.jld2` (any case), return it unchanged.
+- If it ends in `.toml` (any case), return the same stem with a `.jld2` extension.
+- Otherwise, apply the legacy rule: replace a trailing `.toml` if present; if absent, return `info_file` unchanged (caller should pass a `.toml` or `.jld2` path).
 """
-info_jld2_path(file_toml::String) = replace(file_toml, r"\.toml$" => ".jld2")
+function info_jld2_path(info_file::String)
+    occursin(r"\.jld2\z"i, info_file) && return info_file
+    occursin(r"\.toml\z"i, info_file) && return replace(info_file, r"\.toml\z"i => ".jld2")
+    return info_file
+end
 
 """
     write_run_spec_jld2(file_toml::String, run_spec)
@@ -2550,14 +2558,18 @@ function write_run_spec_jld2(file_toml::String, run_spec)
 end
 
 """
-    read_run_spec(file_toml::String)
+    read_run_spec(info_file::String)
 
-Load run specification from the companion JLD2 file (same stem, `.jld2` extension).
-Returns Dict{Symbol, Any} with exact Julia types (functions, ODE solvers, tuples, etc.).
-The TOML file is the human-readable record; this function always reads from JLD2.
+Load run specification from the **JLD2** store. Pass either `results/.../info_<stem>.jld2`
+or the matching `info_<stem>.toml` path (same stem); the TOML path is only used to locate
+the `.jld2` file. The human-readable `.toml` is not parsed here.
+
+Throws `ArgumentError` if the resolved `.jld2` file does not exist.
 """
-function read_run_spec(file_toml::String)
-    d = load(info_jld2_path(file_toml), "run_spec")
+function read_run_spec(info_file::String)
+    jld2 = info_jld2_path(info_file)
+    isfile(jld2) || throw(ArgumentError("run spec JLD2 not found: $(repr(jld2)) (from $(repr(info_file)))"))
+    d = load(jld2, "run_spec")
     Dict{Symbol, Any}(Symbol(k) => v for (k, v) in d)
 end
 
@@ -2577,12 +2589,14 @@ end
 """
     read_run_spec_for_rates_file(rates_file::String)
 
-If an info TOML exists next to the given rates file (same stem), load and return the run spec
-as Dict{Symbol, Any} suitable for fit(; spec...). Otherwise return nothing.
+If the **JLD2** run spec exists next to the given rates file (same stem as `info_<label>_....toml`,
+i.e. `info_<label>_....jld2`), load and return the run spec as `Dict{Symbol, Any}` suitable for
+`fit(; spec...)`. The companion **TOML** is not required for loading. Otherwise return `nothing`.
 """
 function read_run_spec_for_rates_file(rates_file::String)
     toml_path = info_toml_path_for_rates_file(rates_file)
-    isfile(toml_path) ? read_run_spec(toml_path) : nothing
+    jld2_path = info_jld2_path(toml_path)
+    isfile(jld2_path) ? read_run_spec(jld2_path) : nothing
 end
 
 """

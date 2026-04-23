@@ -251,6 +251,7 @@ export
     readrates,
     read_run_spec,
     read_run_spec_for_rates_file,
+    info_jld2_path,
     info_toml_path_for_rates_file,
     read_rates_folder,
     rate_distribution_summary,

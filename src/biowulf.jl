@@ -217,7 +217,7 @@ end
 
 Write a swarm file and one fit script per key for Biowulf. Each swarm line runs one script:
 `julia -t nthreads -p nchains fitscript_<key>.jl`. Each script calls `fit(; key=key, ...)` so the
-run is defined by `info_<key>.toml` (if present) plus any overrides.
+run is defined by `info_<key>.jld2` (if present) plus any overrides.
 
 # Arguments
 - `keys` or `key`: run key(s); each key gets one swarm line and one script `fitscript_<key>.jl`.
@@ -270,16 +270,17 @@ function _folder_path_quiet(folder::AbstractString, root::AbstractString, folder
 end
 
 """
-    _find_existing_info_toml(key, resultfolder, root) -> String or nothing
+    _find_existing_run_spec_jld2(key, resultfolder, root) -> String or nothing
 
-Same resolution as `fit(; key=...)`: `joinpath(folder_path(resultfolder, root, \"results\"), \"info_<key>.toml\")`.
+Same stem as `fit(; key=...)`: `joinpath(folder_path(resultfolder, root, \"results\"), \"info_<key>.jld2\")`.
+Returns the path only if that JLD2 file exists (the machine-readable run spec).
 """
-function _find_existing_info_toml(key::AbstractString, resultfolder, root)
-    stem = "info_" * string(key) * ".toml"
+function _find_existing_run_spec_jld2(key::AbstractString, resultfolder, root)
     isempty(strip(string(resultfolder))) && return nothing
     rr = _folder_path_quiet(resultfolder, root, "results")
-    p = abspath(joinpath(rr, stem))
-    isfile(p) ? p : nothing
+    stem_toml = joinpath(rr, "info_" * string(key) * ".toml")
+    jld = abspath(info_jld2_path(stem_toml))
+    isfile(jld) ? jld : nothing
 end
 
 """Parse `H3-t1-t2` or `H3-t1-t2-h` batch keys into `(t1, t2)` for hidden-latent coupling; else `nothing`."""
@@ -334,7 +335,7 @@ function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::D
     for key in run_keys
         spec = copy(fit_base)
         if merge_existing_info
-            p = _find_existing_info_toml(key, get(spec, :resultfolder, ""), get(spec, :root, "."))
+            p = _find_existing_run_spec_jld2(key, get(spec, :resultfolder, ""), get(spec, :root, "."))
             if p !== nothing
                 loaded = read_run_spec(p)
                 spec = merge(spec, loaded)
@@ -371,7 +372,7 @@ function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::D
         specs_by_key[key] = spec
     end
     if merge_existing_info && n_missing > 0 && warn_missing_info
-        @warn "makeswarmfiles: no info_<key>.toml (with JLD2) found for $n_missing of $(length(run_keys)) keys under resultfolder; run specs use merged defaults only — add prior `info_<key>` files next to those fits or pass full model kwargs. Silence when expected: `warn_missing_info=false`." n_missing=n_missing nkeys=length(run_keys)
+        @warn "makeswarmfiles: no info_<key>.jld2 found for $n_missing of $(length(run_keys)) keys under resultfolder; run specs use merged defaults only — add prior `info_<key>.jld2` next to those fits or pass full model kwargs. Silence when expected: `warn_missing_info=false`." n_missing=n_missing nkeys=length(run_keys)
     end
     _makeswarm_with_run_specs(run_keys, swarm_kw, specs_by_key)
     return run_keys

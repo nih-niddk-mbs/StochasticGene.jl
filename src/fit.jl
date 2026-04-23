@@ -49,7 +49,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, for coupled models, nalleles is only used when computing steady state RNA histograms and considered uncoupled.  For add coupled alleles as units and set nalleles to 1.
 - `nchains::Int=2`: number of parallel chains passed to [`run_inference`](@ref) for [`fit(nchains, data, model, ...)`](@ref) (MH pooled chains; NUTS/ADVI multi-chain with merging when `nchains > 1`). Align swarm `-p` with this when using cluster helpers.
 - `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
-- `onstates=Int[]`: vector of on or sojourn states, e.g. [2], if multiple onstates are desired, use vector of vectors, e.g. [[2,3],Int[]], use empty vector for R states or vector of empty vectors for R states in coupled models, do not use Int[] for R=0 models
+- `onstates=Int[]`: vector of on or sojourn states, e.g. [2], if multiple onstates are desired, use vector of vectors, e.g. [[2,3],Int[]], use empty vector for R states or vector of empty vectors for R states in coupled models, do not use Int[] for R=0 models. **Coupled dwell with non-empty `dwell_specs`:** put per-unit onstates on each dwell spec row (see `dwell_specs`); [`load_model`](@ref) then builds the full per-unit vector from `dwell_specs` and the top-level `onstates` is not used.
 - `optimize=false`: use optimizer to compute maximum likelihood value
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
@@ -64,12 +64,12 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `temp=1.0`: MCMC temperature (**MH**); retained in the run dict for other methods for compatibility
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
 - `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `t_end`, `zeromedian` (and optionally `active_fraction`, `background`). **Coupled `tracejoint`:** when `trace_specs` is empty, `make_structures` fills defaults via [`default_trace_specs_for_coupled`](@ref) from an internal default window and `zeromedian` so `data.units` lists observed units. **If you pass non-empty `trace_specs`,** `interval`, `zeromedian`, and **`t_end`** (→ effective end time for [`read_tracefiles`](@ref), same semantics as the legacy third tuple slot) control loading.
-- `dwell_specs=[]`: container of dwell-time specs per unit (e.g. onstates, bins, `dttype`). When non-empty, used for dwell-time data with multiple units or observation mapping. Single-unit dwell defaults use an empty `dttype` list when `dwell_specs` is empty.
+- `dwell_specs=[]`: container of dwell-time specs per unit; each row is typically a NamedTuple (or dict-like row) with at least **`unit`**, **`onstates`**, and **`dttype`** (and any binning fields your loaders expect). When non-empty, used for dwell-time data with multiple units or observation mapping. **Coupled + non-empty `dwell_specs`:** these per-row **`onstates`** are the source of truth for the model (`load_model` calls `full_onstates_dttype_from_dwell_specs`). Single-unit dwell defaults use an empty `dttype` list when `dwell_specs` is empty; then use top-level **`onstates`** as usual.
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
 - `warmupsteps=0`: MH — warmup steps to adapt proposal covariance before sampling. Harmonized to NUTS `n_adapts` (unless `n_adapts` is set explicitly) via [`load_options`](@ref). Warmup runs before sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
 - `writesamples=false`: write out posterior samples when supported (MH; see IO paths for other methods)
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
-- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present. Legacy keys **`traceinfo`** and **`dttype`** in an old merged spec are applied for loading then **dropped** from the persisted run dict (use **`trace_specs`** / **`dwell_specs`** going forward).
+- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for **`info_<key>.jld2`** under the resolved results folder; if present, loads the merged run dict via [`read_run_spec`](@ref) and merges with defaults and any kwargs you pass (kwargs take precedence). The companion **`info_<key>.toml`** is not required for this load path. On write, both TOML (human-readable) and JLD2 (full types) are produced. Legacy keys **`traceinfo`** and **`dttype`** in an old merged spec are applied for loading then **dropped** from the persisted run dict (use **`trace_specs`** / **`dwell_specs`** going forward).
 
 # Returns
 
@@ -251,13 +251,15 @@ function fit(; key=nothing, kwargs...)
     if key !== nothing
         resultfolder = merged[:resultfolder]
         root = merged[:root]
-        spec_path = joinpath(folder_path(resultfolder, root, "results"), "info_" * key * ".toml")
-        if isfile(spec_path)
+        spec_toml = joinpath(folder_path(resultfolder, root, "results"), "info_" * key * ".toml")
+        spec_jld2 = info_jld2_path(spec_toml)
+        # Machine-readable run spec is always the companion JLD2 (see `read_run_spec`); do not require the TOML to exist.
+        if isfile(spec_jld2)
             try
-                spec = read_run_spec(spec_path)
+                spec = read_run_spec(spec_jld2)
                 merged = merge(defaults, spec, kw)
             catch
-                # Info file exists but failed to parse (e.g. malformed TOML); use kwargs only
+                # JLD2 exists but failed to load; use kwargs only
             end
         end
     end
