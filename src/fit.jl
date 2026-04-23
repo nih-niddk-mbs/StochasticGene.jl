@@ -12,6 +12,16 @@ Fit steady state or transient GM/GRSM model to RNA data for a single gene, write
 
 For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G=2 and G=3 then G = (2,3).
 
+# Inference
+
+Posterior / variational inference is selected by **`inference_method`** (default `:mh` / [`INFERENCE_MH`](@ref)): [`INFERENCE_MH`](@ref) for Metropolis–Hastings, [`INFERENCE_NUTS`](@ref) for NUTS (AdvancedHMC), [`INFERENCE_ADVI`](@ref) for mean-field ADVI. Additional keywords are stored on the corresponding options type ([`MHOptions`](@ref), [`NUTSOptions`](@ref), [`ADVIOptions`](@ref) in `common.jl`):
+
+- **`device`**: `:cpu` or `:gpu` (unsupported GPU paths may error).
+- **`parallel`** (alias **`parallelism`**): `:single`, `:threaded`, or `:distributed` (used with multi-chain NUTS/ADVI in [`run_inference`](@ref)).
+- **`gradient`**: method-specific (e.g. `:finite`, `:ForwardDiff`, `:Zygote` for NUTS/ADVI; `:none` default for MH).
+
+[`make_structures`](@ref) merges the active run dict (defaults, `fit(; key=...)` spec, and explicit keywords) and calls [`load_options`](@ref), which maps shared budgets (**`samplesteps`**, **`warmupsteps`**, **`maxtime`**, **`temp`**) onto each method’s options. Positional [`fit`](@ref) overloads accept a filtered subset of these keywords (see `_MAKE_STRUCTURES_OPTION_KW` in the source) and forward them into `make_structures`.
+
 # Arguments
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
@@ -37,10 +47,10 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted. Must be >= 1; when R = 0, insertstep is ignored (no RNA steps).
 - `label::String=""`: label of output files produced
-- `maxtime=60`: maximum wall time for run, default = 60 min
+- `maxtime=60`: maximum wall time for **MH** (warmup + sampling together); numeric value is **seconds** (same units as `Base.time()`), split between warmup and sampling in proportion to `warmupsteps` and `samplesteps` (see [`metropolis_hastings`](@ref)). NUTS/ADVI wall time is primarily controlled via method-specific options produced by [`load_options`](@ref) unless otherwise documented.
 - `method=Tsit5()`: DifferentialEquations.jl numerical method (e.g. Tsit5(), Tsit5(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
 - `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, for coupled models, nalleles is only used when computing steady state RNA histograms and considered uncoupled.  For add coupled alleles as units and set nalleles to 1.
-- `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
+- `nchains::Int=2`: number of parallel chains passed to [`run_inference`](@ref) for [`fit(nchains, data, model, ...)`](@ref) (MH pooled chains; NUTS/ADVI multi-chain with merging when `nchains > 1`). Align swarm `-p` with this when using cluster helpers.
 - `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
 - `onstates=Int[]`: vector of on or sojourn states, e.g. [2], if multiple onstates are desired, use vector of vectors, e.g. [[2,3],Int[]], use empty vector for R states or vector of empty vectors for R states in coupled models, do not use Int[] for R=0 models
 - `optimize=false`: use optimizer to compute maximum likelihood value
@@ -51,10 +61,10 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
-- `samplesteps::Int=1000000`: number of MCMC sampling steps
+- `samplesteps::Int=1000000`: MH — posterior samples to collect; harmonized to NUTS `n_samples` / ADVI `maxiter` (unless `maxiter` / `n_samples` set explicitly) via [`load_options`](@ref)
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `splicetype=""`: RNA pathway for GRS models, (e.g., "offeject" = spliced intron is not viable)
-- `temp=1.0`: MCMC temperature
+- `temp=1.0`: MCMC temperature (**MH**); retained in the run dict for other methods for compatibility
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
 - `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `t_end`, `zeromedian` (and optionally `active_fraction`, `background`). **Coupled `tracejoint`:** when `trace_specs` is empty, `make_structures` fills defaults via [`default_trace_specs_for_coupled`](@ref) from `traceinfo` and `zeromedian` so `data.units` lists observed units. **If you pass non-empty `trace_specs`,** `interval`, `zeromedian`, and **`t_end`** (→ effective `traceinfo[3]` for [`read_tracefiles`](@ref), same semantics as `traceinfo[3]`) control loading; keep `traceinfo[1]` in sync with `interval` or expect a warning.
 - `dwell_specs=[]`: container of dwell-time specs per unit (e.g. onstates, bins, dttype). When non-empty, used for dwell-time data with multiple units or observation mapping. Legacy dwell data uses single-unit defaults when empty.
@@ -62,43 +72,52 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
     for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7], [0.5,0.5]) 
     If active fraction is 1.0, then traceinfo can be a 3-tuple, e.g. (1.0, 1., -1) since background correction is not needed
     Note that all traces are scaled by the maximum of the medians of all the traces, the traces are all scaled by the same factor since the signal amplitude should be the same
-- `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
-- `warmupsteps=0`: number of MCMC warmup steps to adapt proposal distribution covariance. Warmup runs beore sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
-- `writesamples=false`: write out MH samples if true, default is false
+- `warmupsteps=0`: MH — warmup steps to adapt proposal covariance before sampling. Harmonized to NUTS `n_adapts` (unless `n_adapts` is set explicitly) via [`load_options`](@ref). Warmup runs before sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
+- `writesamples=false`: write out posterior samples when supported (MH; see IO paths for other methods)
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
 - `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
 
 # Returns
-- `fits`: MCMC fit results (posterior samples, log-likelihoods, etc.)
-- `stats`: Summary statistics for parameters
-- `measures`: Diagnostic measures (including WAIC and its standard error, which is now for the total WAIC and scaled by sqrt(n_obs))
-- `data`, `model`, `options`: The data, model, and options structures used
+
+The keyword entry point returns a **6-tuple**:
+
+```julia
+fits, stats, measures, data, model, options = fit(; kwargs...)
+```
+
+- `fits`: [`Fit`](@ref) — posterior samples (MH/NUTS) or variational summary (ADVI); fields such as `ll`, WAIC-related arrays, and acceptance summaries depend on the method.
+- `stats`: [`Stats`](@ref) — summary statistics for parameters.
+- `measures`: [`Measures`](@ref) — diagnostics (WAIC tuple, R-hat, ESS, Geweke, MCSE); interpret ADVI entries per [`run_advi_fit`](@ref).
+- `data`, `model`: experimental data and fitted model.
+- `options`: [`MHOptions`](@ref), [`NUTSOptions`](@ref), or [`ADVIOptions`](@ref) depending on `inference_method`.
 
 # Notes
+- When `label` is empty, `create_label` (in `biowulf.jl`) builds `datatype * "-" * cell * "_" * datacond`; set `label` explicitly if result filenames must include extra tokens (for example topology tags formerly carried in a separate keyword).
 - If `propcv < 0`, proposal covariance is loaded from previous run if available during [`make_structures`](@ref), after model parameters (including fittedparam) are determined. Validation occurs against stored metadata to ensure compatibility.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
 - File and folder conventions: see the package manual (*Package overview*, *Cluster and batch workflows*) and the [GitHub README](https://github.com/nih-niddk-mbs/StochasticGene.jl#readme).
 
 # Example
-If you are in the folder where data/HCT116_testdata is installed, you can fit the mock RNA histogram running 4 MCMC chains with:
+If you are in the folder where data/HCT116_testdata is installed, you can fit the mock RNA histogram running 4 MH chains with:
 
 ```julia
-fits = fit(
+fits, stats, measures, data, model, options = fit(
     G = 2,
     R = 0,
     transitions = ([1,2], [2,1]),
     datatype = "rna",
     datapath = "data/HCT116_testdata/",
     gene = "MYC",
-    datacond = "MOCK"
+    datacond = "MOCK",
+    nchains = 4,
 )
 ```
 
-Trace data fit:
+Trace data fit (MH default):
 
 ```julia
-fits = fit(
+fits, stats, measures, data, model, options = fit(
     G = 3,
     R = 2,
     S = 2,
@@ -111,7 +130,17 @@ fits = fit(
     datacond = "testtrace",
     traceinfo = (1.0, 1., -1, 1.),
     noisepriors = [40., 20., 200., 10.],
-    nchains = 4
+    nchains = 4,
+)
+```
+
+NUTS on the same keyword surface:
+
+```julia
+fits, stats, measures, data, model, options = fit(
+    G = 2, R = 0, transitions = ([1,2], [2,1]),
+    datatype = "rna", datapath = "data/HCT116_testdata/", gene = "MYC", datacond = "MOCK",
+    inference_method = :nuts, samplesteps = 500, warmupsteps = 250, parallel = :single, gradient = :ForwardDiff,
 )
 ```
 """
@@ -141,7 +170,6 @@ const _FIT_DEFAULTS = (
     S=0,
     insertstep=1,
     coupling=tuple(),
-    TransitionType="nstate",
     grid=nothing,
     root=".",
     elongationtime=6.0,
@@ -299,7 +327,7 @@ function fit(; key=nothing, kwargs...)
     yieldfactor = merged[:yieldfactor]
     trace_specs = merged[:trace_specs]
     dwell_specs = merged[:dwell_specs]
-    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, merged[:TransitionType])
+    label, inlabel = create_label(label, inlabel, datatype, datacond, cell)
     run_spec[:label] = label
     run_spec[:inlabel] = inlabel
     if rinit === nothing && key !== nothing && key != ""
@@ -433,33 +461,36 @@ Return a dictionary mapping HBEC gene names to their half-lives.
 halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1", 9.0), ("MYH9", 10.0), ("Rab7a", 50.0), ("RHOA", 50.0), ("RPAP3", 7.5), ("Sec16A", 8.0), ("SLC2A1", 5.0), ("RAB7A", 50.0), ("SEC16A", 8.0)])
 
 """
-    get_transitions(G::Int, TransitionType)
+    get_transitions(G::Int, transition_hint)
 
-Return the default transitions tuple for a given number of gene states `G` and a transition type string.
+Return the default transitions tuple for a given number of gene states `G` and a hint string
+(often a filename label segment from [`fields`](@ref) / [`parse_filename`](@ref)).
 
 # Arguments
 - `G::Int`: Number of gene states.
-- `TransitionType`: String describing the transition type (e.g., "KP", "cyclic").
+- `transition_hint`: Substring cues for G ≥ 3, e.g. `"KP"` (kinetic proofreading) or `"cyclic"`;
+  otherwise the fully connected reversible pattern is used.
 
 # Returns
 - Tuple of allowed transitions for the specified model.
 """
-function get_transitions(G::Int, TransitionType)
+function get_transitions(G::Int, transition_hint)
     typeof(G) <: AbstractString && (G = parse(Int, G))
+    h = transition_hint isa AbstractString ? transition_hint : string(transition_hint)
     if G == 2
         return ([1, 2], [2, 1])
     elseif G == 3
-        if occursin("KP", TransitionType)
+        if occursin("KP", h)
             return ([1, 2], [2, 1], [2, 3], [3, 1])
-        elseif occursin("cyclic", TransitionType)
+        elseif occursin("cyclic", h)
             return ([1, 2], [2, 3], [3, 1])
         else
             return ([1, 2], [2, 1], [2, 3], [3, 2])
         end
     elseif G == 4
-        if occursin("KP", TransitionType)
+        if occursin("KP", h)
             return ([1, 2], [2, 1], [2, 3], [3, 2], [3, 4], [4, 2])
-        elseif occursin("cyclic", TransitionType)
+        elseif occursin("cyclic", h)
             return ([1, 2], [2, 3], [3, 4], [4, 1])
         else
             return ([1, 2], [2, 1], [2, 3], [3, 2], [3, 4], [4, 3])
@@ -515,19 +546,19 @@ function normalize_datatype(datatype::AbstractString)
 end
 
 """
-    get_transitions(G::Tuple, TransitionType)
+    get_transitions(G::Tuple, transition_hint)
 
 Return a tuple of transitions for each element in `G` (for coupled models).
 
 # Arguments
 - `G::Tuple`: Tuple of gene state counts.
-- `TransitionType`: String describing the transition type.
+- `transition_hint`: Same role as in the `G::Int` method (shared across units).
 
 # Returns
 - Tuple of transitions for each model.
 """
-function get_transitions(G::Tuple, TransitionType)
-    Tuple([get_transitions(G, TransitionType) for G in G])
+function get_transitions(G::Tuple, transition_hint)
+    Tuple([get_transitions(g, transition_hint) for g in G])
 end
 
 """
@@ -848,7 +879,7 @@ Create and configure data, model, and options structures for fitting.
 - `coupling::Tuple`: Coupling structure (default: empty tuple)
 - `grid`: Grid parameter (default: nothing)
 - `root`: Root directory (default: ".")
-- `maxtime`: Maximum runtime in minutes (default: 60)
+- `maxtime`: Maximum wall-clock time for **MH** in **seconds** (default: 60); passed through to [`load_options`](@ref) and compared to elapsed time in [`metropolis_hastings`](@ref)
 - `elongationtime`: RNA elongation time (default: 6.0)
 - `priormean`: Prior means for parameters (default: empty array)
 - `priorcv`: Prior coefficient of variation (default: 10.0)

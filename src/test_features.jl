@@ -798,7 +798,6 @@ function test_run_spec_roundtrip(; tmpdir=mktempdir())
     run_spec = Dict{Symbol, Any}(
         :key            => "11",
         :datapath       => "data/3Prime_gene_enhancer/including_background/short",
-        :TransitionType => "nstate",
         :maxtime        => 30.0,
         :inlabel        => "tracejoint-HBEC-nstate_enhancer-gene11",
         :label          => "tracejoint-HBEC-nstate_enhancer-gene11",

@@ -11,7 +11,7 @@ StochasticGene expects a **project root** (`root` keyword, often `"."`). Under i
 
 The canonical resolution uses `folder_path` (see [Utilities](api/utilities.md)): if `joinpath(root, resultfolder)` exists it is used; otherwise `joinpath(root, "results", resultfolder)` is used (and created if needed). So fits usually land in **`root/results/<name>/`**.
 
-**Version control:** the repository’s `.gitignore` excludes **`results/`** so large MCMC outputs stay local. Archive what you need for papers or collaboration separately (e.g. exported CSV summaries, small `info_*.toml` markers without huge binaries).
+**Version control:** the repository’s `.gitignore` excludes **`results/`** so large fit outputs (MCMC, NUTS, ADVI) stay local. Archive what you need for papers or collaboration separately (e.g. exported CSV summaries, small `info_*.toml` markers without huge binaries).
 
 Use `rna_setup("dirname")` (see the [API reference](api/index.md)) to create a minimal tree with example data for learning the layout.
 

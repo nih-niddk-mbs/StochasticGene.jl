@@ -3,9 +3,13 @@
 ## Core Functions
 
 ### Model Fitting
-- [`fit`](fit.md): Main function for fitting models to data
+- [`fit`](fit.md): Main function for fitting models to data (MH, NUTS, ADVI via `inference_method`)
+- `load_options`: Build `MHOptions` / `NUTSOptions` / `ADVIOptions` from a run-spec dict
+- `run_inference`: Unified entry point used by `fit(nchains, data, model, …)`
+- `run_mh`: Metropolis–Hastings MCMC sampling
+- `run_nuts_fit`, `run_advi_fit`: Gradient-based inference pipelines
+- `INFERENCE_MH`, `INFERENCE_NUTS`, `INFERENCE_ADVI`, `INFERENCE_CHOICES`: symbolic method tags for run specs
 - [`loglikelihood`](@ref): Calculate log-likelihood for model parameters
-- [`run_mh`](@ref): Run Metropolis-Hastings MCMC sampling
 - [`run_mcmc_parallel`](@ref): Run parallel MCMC chains
 
 ### Model Simulation

@@ -5,7 +5,7 @@
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/)
 
-Julia package for **stochastic models of gene transcription**, **Bayesian inference** (Metropolis–Hastings MCMC), and **analysis** of smFISH, scRNA-seq, live-cell traces, and dwell-time data.
+Julia package for **stochastic models of gene transcription**, **Bayesian inference** (Metropolis–Hastings, NUTS, and mean-field ADVI on the same transformed parameters), and **analysis** of smFISH, scRNA-seq, live-cell traces, and dwell-time data.
 
 ---
 
@@ -37,7 +37,7 @@ Julia **≥ 1.9.3** is required (see `Project.toml`). For development, clone the
 ## What this package provides
 
 - **Models:** Generalized telegraph / GRSM dynamics — arbitrary **G** (gene) states, **R** pre-RNA steps, **S** splice sites, reporter **insertstep**, multiple alleles, **coupled** transcribing units (e.g. enhancer–gene, hidden latent units).
-- **Inference:** MCMC fitting with adaptive proposals, multi-chain runs (`Distributed`), optional hierarchical structure.
+- **Inference:** `fit` selects **MH**, **NUTS**, or **ADVI** via `inference_method`; shared budgets (`samplesteps`, `warmupsteps`, …) map through `load_options` to method-specific structs. MH uses adaptive proposals and multi-chain `Distributed` pooling; cluster helpers emit compatible `fit(; …)` overrides (see **Cluster & batch workflows** in the manual).
 - **Data:** Stationary RNA histograms, ON/OFF and dwell-time histograms, intensity traces (`.trk` etc.), joint traces, grids — alone or in combination.
 - **Batch & HPC:** Helpers in `biowulf.jl` write **swarm** files and **fit scripts** for NIH Biowulf or any scheduler; run specs can be saved as `info_<key>.toml` + `info_<key>.jld2` for reproducible `fit(; key=...)`.
 

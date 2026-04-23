@@ -6,7 +6,7 @@ A Julia package for simulating and fitting stochastic models of gene transcripti
 
 ## Overview
 
-If you install the package from the Julia registry (`Pkg.add("StochasticGene")`) or from GitHub, the full manual on **this site** includes **[Cluster and batch workflows](cluster_batch_workflows.md)** — how to use [`makeswarm`](@ref) on **NIH Biowulf**, and how to **merge single-unit fitted rates** into an **initial combined rate file** for **coupled** models.
+If you install the package from the Julia registry (`Pkg.add("StochasticGene")`) or from GitHub, the full manual on **this site** includes **[Cluster and batch workflows](cluster_batch_workflows.md)** — how to use `makeswarm` on **NIH Biowulf**, and how to **merge single-unit fitted rates** into an **initial combined rate file** for **coupled** models.
 
 StochasticGene.jl is designed to analyze various types of experimental data including:
 - Distributions of mRNA counts per cell (e.g., single molecule FISH (smFISH) or single cell RNA sequencing (scRNA-seq) data)
@@ -33,8 +33,8 @@ The package implements stochastic (continuous Markov) models with:
 - **Advanced Capabilities**
   - Parallel processing capabilities
   - Scalable from laptop to cluster computing
-  - Bayesian parameter estimation
-  - MCMC fitting
+  - Bayesian parameter estimation (**Metropolis–Hastings**, **NUTS**, and **mean-field ADVI** on the same transformed parameter space)
+  - Cluster / batch helpers (`makeswarm`, run specs) aware of shared `samplesteps` / `warmupsteps` and inference keywords
   - Comprehensive result analysis
 
 ## Quick Start
@@ -45,8 +45,11 @@ using StochasticGene
 # Set up directory structure
 rna_setup("scRNA")
 
-# Fit a simple two-state model
-fits, stats, measures, data, model, options = fit(nchains=4)
+# Fit a simple two-state model (uses package defaults; see Getting Started for a minimal explicit call)
+fits, stats, measures, data, model, options = fit(
+    G = 2, R = 0, transitions = ([1,2], [2,1]),
+    datatype = "rna", datapath = "data/HCT116_testdata/", gene = "MYC", datacond = "MOCK",
+)
 ```
 
 ## Documentation Structure

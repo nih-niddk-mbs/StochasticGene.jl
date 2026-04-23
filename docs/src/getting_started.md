@@ -60,7 +60,7 @@ time3 intensity3
 Fit a simple two-state model to RNA count data:
 
 ```julia
-fits = fit(
+fits, stats, measures, data, model, options = fit(
     G = 2,                    # Two gene states
     R = 0,                    # No pre-RNA steps
     transitions = ([1,2], [2,1]),  # Transitions between states
@@ -68,6 +68,7 @@ fits = fit(
     datapath = "data/HCT116_testdata/",
     gene = "MYC",            # Gene name
     datacond = "MOCK"        # Experimental condition
+    # Optional: inference_method = :mh (default), :nuts, :advi; see docs/src/api/fit.md
 )
 ```
 
@@ -75,7 +76,7 @@ fits = fit(
 Fit a model with pre-RNA processing steps:
 
 ```julia
-fits = fit(
+fits, stats, measures, data, model, options = fit(
     G = 2,                    # Two gene states
     R = 3,                    # Three pre-RNA steps
     S = 2,                    # Two splice sites
@@ -87,7 +88,7 @@ fits = fit(
     datacond = "testtrace",   # Experimental condition
     traceinfo = (1.0, 1., -1, 1.),  # Frame interval, start, end, active fraction
     noisepriors = [40., 20., 200., 10.],  # Noise parameters
-    nchains = 4              # Number of MCMC chains
+    nchains = 4              # Number of parallel chains (pooling for MH; see `run_inference` for NUTS/ADVI)
 )
 ```
 

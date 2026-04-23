@@ -38,7 +38,7 @@ This order—**individual fits → merge → coupled fit**—is the standard way
 [`makeswarm`](@ref) does **not** submit jobs to the scheduler by itself. It **writes files** you submit with Biowulf’s **`swarm`** (or your own `sbatch` wrappers):
 
 - **`<swarmfile>.swarm`** — one command line per run key (each line runs `julia` with your project and one fit script).
-- **`fitscript_<key>.jl`** per key — typically calls `fit(; key="<key>", ...)` with shared options (`resultfolder`, `maxtime`, `samplesteps`, etc.).
+- **`fitscript_<key>.jl`** per key — typically calls `fit(; key="<key>", ...)` with shared options (`resultfolder`, `maxtime`, `samplesteps`, `warmupsteps`, `inference_method`, `device`, `parallel`, `gradient`, etc.). Symbol-valued overrides (e.g. `inference_method=:nuts`) are supported in minimal scripts; full key-based specs store the same keys in **`info_<key>.jld2`** (see [Run specification](run_spec_toml.md)).
 
 **Typical use on Biowulf**
 
@@ -58,6 +58,11 @@ makeswarm(
     nthreads     = 1,
     maxtime      = 72000.0,
     samplesteps  = 1_000_000,
+    # Optional: same keywords as `fit(; ...)` overrides, e.g.:
+    # warmupsteps = 50_000,
+    # inference_method = :mh,
+    # parallel = :distributed,
+    # gradient = :finite,
 )
 ```
 
@@ -79,7 +84,7 @@ Adjust **`-g`**, **`-t`**, **time**, and **module** to match your allocation and
 
 ### Swarm `julia -p`, `nchains`, merged `info_<key>`, and `root`
 
-- **Parallel workers:** The swarm command should use **`-p N`** (or equivalent) consistent with how many chains run in parallel. For [`makeswarmfiles`](@ref) / [`makeswarm_models`](@ref), if you do **not** pass an explicit swarm-only **`nchains=`** in kwargs, the generated **`-p`** is taken from each run spec’s **`nchains`** (e.g. coupled defaults often use 16), so it stays aligned with **`fit(; …, nchains=…)`**. See the [`makeswarmfiles`](@ref) docstring.
+- **Parallel workers:** The swarm command should use **`-p N`** (or equivalent) consistent with how many chains run in parallel. For [`makeswarmfiles`](@ref) / [`makeswarm_models`](@ref), if you do **not** pass an explicit swarm-only **`nchains=`** in kwargs, the generated **`-p`** is taken from each run spec’s **`nchains`** (e.g. coupled defaults often use 16), so it stays aligned with **`fit(; …, nchains=…)`**. See the [`makeswarmfiles`](@ref) docstring. For **NUTS/ADVI**, `nchains` still controls how many independent chains are launched; within-chain parallelism follows each method’s options (`parallel` on [`NUTSOptions`](@ref) / [`ADVIOptions`](@ref), set via [`load_options`](@ref) from the run spec).
 
 - **Merged presets:** With **`merge_existing_info=true`** (default), older **`info_<key>.jld2`** files are merged into new specs. Legacy **`trace_specs`** sometimes used a huge **`t_end`** (historical “open end” sentinel). When saving, [`write_run_spec_preset`](@ref) runs [`normalize_trace_specs_legacy_t_end!`](@ref) so those values are rewritten to **`t_end = -1.0`**, matching current [`default_trace_specs_for_coupled`](@ref) and avoiding invalid frame indices in [`read_tracefiles`](@ref).
 

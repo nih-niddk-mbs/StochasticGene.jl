@@ -240,7 +240,6 @@ function build_coupled_fit_spec_from_csv_cells(
     prerun::Float64=0.0,
     splicetype::AbstractString="",
     decayrate::Float64=1.0,
-    TransitionType::AbstractString="nstate",
 )
     if noisepriors === nothing || noisepriors == [] || (noisepriors isa AbstractVector && isempty(noisepriors))
         noisepriors = ([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2])
@@ -317,7 +316,6 @@ function build_coupled_fit_spec_from_csv_cells(
         :cell => cell,
         :datacond => datacond,
         :datatype => "tracejoint",
-        :TransitionType => TransitionType,
         :datapath => datapath,
         :infolder => infolder,
         :resultfolder => resultfolder,

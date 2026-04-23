@@ -518,7 +518,6 @@ function _makeswarmfiles_coupled_models_csv(
                     prerun=Float64(get(merged, :prerun, 0.0)),
                     splicetype=string(get(merged, :splicetype, "")),
                     decayrate=Float64(get(merged, :decayrate, 1.0)),
-                    TransitionType=string(get(merged, :TransitionType, "nstate")),
                 )
                 spec0 === nothing && continue
                 spec = merge(merged, spec0)
@@ -901,13 +900,13 @@ makeswarm_genes(["MYC", "SOX9"]; cell="HBEC", datatype="rna", datapath="data/", 
 ```
 """
 function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
+    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", kwargs...)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
     modelstring = create_modelstring(G, R, S, insertstep)
-    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
+    label, inlabel = create_label(label, inlabel, datatype, datacond, cell)
     label_safe = sanitize_for_filename(label)
     model_safe = sanitize_for_filename(modelstring)
     ngenes = length(genes)
@@ -1273,7 +1272,7 @@ function write_prolog(f, src)
 end
 
 """
-    create_label(label, inlabel, datatype, datacond, cell, TransitionType)
+    create_label(label, inlabel, datatype, datacond, cell)
 
 Create a label string based on the provided parameters.
 
@@ -1283,28 +1282,29 @@ Create a label string based on the provided parameters.
 - `datatype`: Type of data.
 - `datacond`: Condition of the data. Can be a `String` or a `Vector` of strings.
 - `cell`: Cell type.
-- `TransitionType`: Type of transition.
 
 # Returns
 - `label`: Generated label string.
 - `inlabel`: Generated inlabel string.
 
 # Methods
-- `create_label(label, inlabel, datatype, datacond::String, cell, TransitionType)`: Handles `datacond` as a `String`.
-- `create_label(label, inlabel, datatype, datacond::Vector, cell, TransitionType)`: Handles `datacond` as a `Vector` of strings.
+- `create_label(label, inlabel, datatype, datacond::String, cell)`: Handles `datacond` as a `String`.
+- `create_label(label, inlabel, datatype, datacond::Vector, cell)`: Handles `datacond` as a `Vector` of strings.
+
+When `label` is empty, the built label is `datatype * "-" * cell * "_" * datacond` (with `datacond`
+joined by `"-"` when it is a vector). Pass an explicit `label` when filenames need extra disambiguators.
 """
-function create_label(label, inlabel, datatype, datacond::String, cell, TransitionType)
+function create_label(label, inlabel, datatype, datacond::String, cell)
     if isempty(label)
         label = datatype * "-" * cell
-        ~isempty(TransitionType) && (label = label * "-" * TransitionType)
         typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
     end
     isempty(inlabel) && (inlabel = label)
     return label, inlabel
 end
 
-function create_label(label, inlabel, datatype, datacond::Vector, cell, TransitionType)
-    create_label(label, inlabel, datatype, join(datacond, "-"), cell, TransitionType)
+function create_label(label, inlabel, datatype, datacond::Vector, cell)
+    create_label(label, inlabel, datatype, join(datacond, "-"), cell)
 end
 
 """

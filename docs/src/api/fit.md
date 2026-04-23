@@ -1,111 +1,122 @@
 # fit Function
 
 !!! note "Authoritative reference"
-    The full keyword list, coupling description, `key`-based loading, and return values are maintained in the **in-source docstring** for [`fit`](@ref). In the Julia REPL, use `?fit` after `using StochasticGene`. This page is a **short** summary; details may lag the code.
+    The full keyword list, coupling description, `key`-based loading, and return values are maintained in the **in-source docstring** for `fit`. In the Julia REPL, use `?fit` after `using StochasticGene`. This page is a **short** summary; details may lag the code.
 
-Fit steady state or transient GM/GRSM model to RNA data for a single gene, write the result (through function finalize), and return fit results and diagnostics.
+`fit` fits steady-state or transient GM/GRSM models to data for a single gene (or coupled units), writes results through `finalize`, and returns fit results and diagnostics.
 
-For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G=2 and G=3 then G = (2,3).
+For coupled transcribing units, arguments `transitions`, `G`, `R`, `S`, `insertstep`, and trace-related settings become **tuples** of the single-unit type (e.g. two units with `G = (2, 3)`).
 
 ## Syntax
 
 ```julia
-fits = fit(; kwargs...)
+fits, stats, measures, data, model, options = fit(; kwargs...)
 ```
 
-## Arguments
+The keyword form is the usual entry point. Positional overloads exist for advanced / legacy callers; optional inference keywords on the positional path are forwarded into `make_structures` (see the `_MAKE_STRUCTURES_OPTION_KW` constant in `fit.jl`).
 
-### Basic Model Parameters
+## Inference methods
 
-- `G::Int = 2`: Number of gene states
-- `R::Int = 0`: Number of pre-RNA steps
-- `S::Int = 0`: Number of splice sites (must be ≤ R - insertstep + 1)
-- `insertstep::Int = 1`: Reporter insertion step (must be ≥ 1; ignored when R = 0)
-- `transitions::Tuple`: Tuple of vectors specifying state transitions
+Posterior / variational inference is selected with **`inference_method`** (also accepted: plain symbols `:mh`, `:nuts`, `:advi`, or the aliases `INFERENCE_MH`, `INFERENCE_NUTS`, `INFERENCE_ADVI`):
 
-### Data Parameters
-- `datatype::String = "rna"`: Data type:
-  - "rna": mRNA count distributions
-  - "trace": Intensity traces
-  - "rnadwelltime": Combined RNA and dwell time data
-  - "tracejoint": Simultaneous recorded traces
-- `datapath::String = ""`: Path to data file or folder
-- `datacond::String = ""`: Data condition identifier
-- `cell::String = ""`: Cell type
-- `gene::String = "MYC"`: Gene name
-- `nalleles::Int = 1`: Number of alleles
+| Method | Meaning |
+|--------|---------|
+| **`:mh` / `INFERENCE_MH`** | Metropolis–Hastings MCMC (`run_mh` / `metropolis_hastings`); default. |
+| **`:nuts` / `INFERENCE_NUTS`** | NUTS HMC on the same transformed parameter space as MH (`run_nuts_fit`, AdvancedHMC). |
+| **`:advi` / `INFERENCE_ADVI`** | Mean-field ADVI (`run_advi_fit`); returns a variational approximation (see notes below). |
 
-### Fitting Parameters
+Shared **budget** keywords are harmonized in `load_options` when building option structs:
 
-- `nchains::Int = 2`: Number of parallel chains for **Metropolis–Hastings** (`inference=:mh`). For **NUTS** (`inference=:nuts`), must be `1` (single chain).
-- `inference = :mh`: Posterior algorithm — [`INFERENCE_MH`](@ref) (MH, default), [`INFERENCE_NUTS`](@ref) (NUTS via AdvancedHMC; use `samplesteps` / `warmupsteps` as `n_samples` / `n_adapts`), or [`INFERENCE_ADVI`](@ref) (not wired through `fit`; call [`run_advi`](@ref)).
-- `steady_state_solver = :augmented`: Passed to the likelihood when using NUTS.
-- `ad_likelihood = nothing`: Passed to NUTS (`nothing` selects AD likelihood for RNA count data when appropriate).
-- `maxtime = 60`: Maximum **total** wall time for the **MH** phase, including **warmup and sampling** together. A **numeric** value is **seconds**; you may also pass a **string** with suffix `m` (minutes) or `h` (hours), e.g. `"90m"`, `"2h"`. Set `samplesteps` large and use `maxtime` as the primary stop (e.g. cluster time limits). See [`maxtime_seconds`](@ref). (NUTS stopping is controlled by `samplesteps` / `warmupsteps`; `maxtime` is not applied to NUTS in the current `fit` wiring.)
-- `samplesteps::Int = 1000000`: MH: max sampling steps (may stop earlier at `maxtime`). NUTS: `n_samples`.
-- `warmupsteps::Int = 0`: MH: discarded warmup (shared `maxtime` with sampling). NUTS: `n_adapts`.
-- `propcv::Float64 = 0.01`: Proposal distribution coefficient of variation
-- `temp::Float64 = 1.0`: MCMC temperature
+- **`samplesteps`**: MH — posterior samples to collect; NUTS — `n_samples`; ADVI — `maxiter` unless you set **`maxiter`** explicitly in the run dict.
+- **`warmupsteps`**: MH — discarded warmup (shares wall time with sampling via **`maxtime`**); NUTS — `n_adapts` unless **`n_adapts`** is set explicitly; ADVI — not the same semantic object (use **`n_mc`** for ELBO Monte Carlo draws).
 
-### Prior Parameters
+Other cross-method options stored on `MHOptions`, `NUTSOptions`, and `ADVIOptions` in `common.jl`:
 
-- `priormean::Vector{Float64} = Float64[]`: Mean rates for prior distribution
-- `priorcv::Float64 = 10.0`: Prior distribution coefficient of variation
-- `noisepriors::Vector = []`: Observation noise priors
-- `fittedparams::Vector{Int} = Int[]`: Indices of rates to fit
-- `fixedeffects::Tuple = tuple()`: Fixed effects specification
+- **`device`**: `:cpu` or `:gpu` (GPU paths may error if unsupported for a method).
+- **`parallel`** (alias **`parallelism`**): `:single`, `:threaded`, or `:distributed` — used with **`nchains`** for multi-chain NUTS/ADVI dispatch (`run_inference`); MH multi-chain still uses the existing distributed MH chain runner when `nchains > 1`.
+- **`gradient`**: method-specific; e.g. `:finite`, `:ForwardDiff`, `:Zygote` for NUTS/ADVI; `:none` default for MH. String values in TOML/JSON-style dicts are coerced when possible.
 
-### Trace Parameters (for trace data)
+`make_structures` merges **`_current_run_spec[]`** (from `fit(; key=...)`) with explicit `samplesteps` / `warmupsteps` / `maxtime` / `temp` and any extra `kwargs...`, then calls `load_options` on that dict. You can also call `load_options` directly in scripts or tests.
 
-- `traceinfo::Tuple = (1.0, 1., -1, 1.)`: Trace parameters:
-  - Frame interval (minutes)
-  - Starting frame time (minutes)
-  - Ending frame time (-1 for last)
-  - Fraction of active traces
-- `datacol::Int = 3`: Data column index
-- `probfn::Function = prob_Gaussian`: Observation probability function
-- `noiseparams::Int = 4`: Number of noise parameters
-- `zeromedian::Bool = true`: Subtract median from traces
+## Arguments (high level)
 
-### Output Parameters
+### Basic model parameters
 
-- `resultfolder::String = "test"`: Results output folder
-- `label::String = ""`: Output file label
-- `infolder::String = ""`: Folder for initial parameters
-- `inlabel::String = ""`: Label of initial parameter files
-- `writesamples::Bool = false`: Write MCMC samples
+- **`G::Int`**, **`R::Int`**, **`S::Int`**, **`insertstep::Int`**, **`transitions`**: Model topology (see in-source `fit` docstring).
+- **`coupling`**, **`grid`**, **`hierarchical`**: Coupled / grid / hierarchical layouts.
+
+### Data parameters
+
+- **`datatype::String`**: e.g. `"rna"`, `"trace"`, `"rnadwelltime"`, `"tracejoint"`, …
+- **`datapath`**, **`datacond`**, **`cell`**, **`gene`**, **`nalleles`**, **`traceinfo`**, **`trace_specs`**, **`dwell_specs`**, …
+
+### Fitting / inference parameters
+
+- **`nchains::Int`**: Number of parallel chains for **`fit(nchains, data, model, …)`** dispatch (`run_inference`); for MH this matches the existing pooled-chain behavior; for NUTS/ADVI, multi-chain runs are merged when `nchains > 1` (see `src/inference_common.jl` in the package source).
+- **`maxtime`**: Primary wall budget for **MH** (warmup + sampling); numeric seconds or strings like `"90m"`, `"2h"` (see `maxtime_seconds`). Interpretation for NUTS/ADVI is method-specific (many NUTS/ADVI controls are in the option structs from `load_options`).
+- **`samplesteps`**, **`warmupsteps`**, **`temp`**: As above; **`temp`** is MH temperature; NUTS/ADVI paths use a neutral value for finalize when not applicable.
+- **`propcv`**: MH proposal CV / covariance loading (see [Package overview](../package_overview.md#MCMC-proposal-covariance-and-warmup)).
+
+### Priors, indices, outputs
+
+- **`priormean`**, **`priorcv`**, **`noisepriors`**, **`fittedparam`**, **`fixedeffects`**, **`onstates`**, **`decayrate`**, …
+- **`resultfolder`**, **`label`**, **`infolder`**, **`inlabel`**, **`writesamples`**, **`burst`**, **`optimize`**, …
 
 ### Run specification and key-based naming
 
-- `key = nothing`: When nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key = "33il"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec (kwargs override spec); if not found, uses kwargs and defaults. All outputs use that stem (e.g. `rates_<key>.txt`, `info_<key>.toml`). See [Run specification (info TOML)](@ref).
+- **`key = nothing`**: When a string, `fit` loads `info_<key>.jld2` (companion to the marker TOML) and merges with explicit keywords (keywords win). Outputs use that stem. See [Run specification (info TOML)](../run_spec_toml.md).
 
 ## Returns
 
-- `fits`: MCMC fit results containing:
-  - Posterior samples
-  - Log-likelihoods
-  - Acceptance rates
+The top-level **`fit(; …)`** return tuple is:
+
+```julia
+fits, stats, measures, data, model, options = fit(; ...)
+```
+
+- **`fits`**: `Fit` — posterior samples (MH/NUTS) or variational mean column (ADVI); **`ll`**, WAIC-related fields, acceptance summaries depend on the method.
+- **`stats`**, **`measures`**: `Stats`, `Measures` — comparable structs across methods where meaningful (ADVI may use single-point proxies for some diagnostics; see the `run_advi_fit` docstring in the source).
+- **`data`**, **`model`**, **`options`**: The concrete `Options` subtype is **`MHOptions`**, **`NUTSOptions`**, or **`ADVIOptions`** depending on `inference_method`.
 
 ## Examples
 
-### Basic RNA Histogram Fit
+### Basic RNA histogram (MH default)
 
 ```julia
-fits = fit(
+fits, stats, measures, data, model, options = fit(
     G = 2,
     R = 0,
     transitions = ([1,2], [2,1]),
     datatype = "rna",
     datapath = "data/HCT116_testdata/",
     gene = "MYC",
-    datacond = "MOCK"
+    datacond = "MOCK",
 )
 ```
 
-### Trace Data Fit
+### NUTS (same keyword surface; different `options` type)
 
 ```julia
-fits = fit(
+fits, stats, measures, data, model, options = fit(
+    G = 2,
+    R = 0,
+    transitions = ([1,2], [2,1]),
+    datatype = "rna",
+    datapath = "data/HCT116_testdata/",
+    gene = "MYC",
+    datacond = "MOCK",
+    inference_method = :nuts,
+    samplesteps = 500,
+    warmupsteps = 250,
+    parallel = :single,
+    gradient = :ForwardDiff,
+)
+```
+
+### Trace fit with multiple MH chains
+
+```julia
+fits, stats, measures, data, model, options = fit(
     G = 3,
     R = 2,
     S = 2,
@@ -118,29 +129,18 @@ fits = fit(
     datacond = "testtrace",
     traceinfo = (1.0, 1., -1, 1.),
     noisepriors = [40., 20., 200., 10.],
-    nchains = 4
+    nchains = 4,
 )
 ```
 
 ## Notes
 
-1. **Rate Order**
-   - G transitions
-   - R transitions
-   - S transitions
-   - Decay
-   - Noise parameters
+1. **Rate order** — G transitions, R transitions, S if present, decay, noise parameters (see package overview).
 
-2. **MCMC Convergence**
-   - R-hat should be close to 1 (ideally < 1.05)
-   - Increase `maxtime` or `samplesteps` if R-hat is high
-   - Use `warmupsteps` to improve proposal distribution
+2. **Convergence** — R-hat, ESS, etc. apply to sample-based chains; interpret ADVI diagnostics separately.
 
-3. **Proposal Covariance and Warmup**
-   - **First run** with expensive models: Set `propcv=0.01` and `warmupsteps` > 0. The covariance is learned during warmup and saved to `proposal-cov_*.jld2`.
-   - **Subsequent runs** with same model: Use `propcv=-0.01` to attempt loading the saved covariance. If successful, warmup is **automatically skipped** (even if `warmupsteps > 0`). If loading fails, falls back to abs(propcv) and warmup runs normally.
-   - Warmup adapts periodically every ~1/3 of warmup steps, targeting an acceptance rate that scales with dimension (30% for typical d=5–20 gene models).
-   - Time allocation: warmup receives `maxtime × (warmupsteps / total_steps)`. For very expensive steps (minutes each), increase `maxtime` or reduce total steps if warmup times out.
+3. **MH proposal covariance and warmup** — See [Package overview](../package_overview.md#MCMC-proposal-covariance-and-warmup).
 
-4. **Key-Based Workflows**
-   - Use `key="<name>"` to load run specifications from `info_<name>.toml` and ensure consistent naming across runs. All outputs (including `proposal-cov_<name>.jld2`) use that stem.
+4. **Key-based workflows** — Use `key="..."` for reproducible cluster runs and `write_run_spec_preset` / `makeswarmfiles`; include `inference_method` / `parallel` / `gradient` in the saved dict when needed.
+
+5. **Cluster scripts** — `makeswarm` and related helpers can emit `fit(; key=..., inference_method=:nuts, …)` overrides; positional gene/coupled scripts append `; kw=...` suffixes for the same keywords. See [Cluster and batch workflows](../cluster_batch_workflows.md).
