@@ -3645,7 +3645,7 @@ Use **`steady_state_solver=:default`** to align log-likelihood with MH for RNA h
 
 # Keywords
 - `nchains`, `n_samples`, `n_adapts`, `nuts_δ`, `nuts_gradient`, `nuts_fd_ε`, `steady_state_solver` (`:auto` / `:default` / `:augmented`), `nuts_seed`, `ad_likelihood`: NUTS / likelihood options.
-- `verbose`, `progress`: passed to [`NUTSOptions`](@ref) → [`AdvancedHMC.sample`](@ref). With **`nchains > 1`**, `progress` is forced to **`false`** on workers ([`Distributed.@spawn`](@ref) cannot reliably run AdvancedHMC’s progress machinery across processes). Use **`report_chains`** for parallel feedback, or run a **single chain** (`nchains=1`) if you want `progress=true`.
+- `verbose`, `progress`: passed to [`NUTSOptions`](@ref) → [`AdvancedHMC.sample`](@ref). Default in [`fit`](@ref) / [`load_options`](@ref) is **`progress=true`** (ProgressMeter bar) for **`nchains==1`**; [`run_inference`](@ref) forces **`progress=false`** whenever **`nchains > 1`** so parallel chains do not interleave bars. This benchmark helper defaults **`progress=false`** for quiet parallel runs; use **`nchains=1`** and **`progress=true`** locally if you want the bar.
 - `report_chains` (default `true`): log on the **main** process after each `fetch` (chain index order; use when runs are long).
 
 # Returns

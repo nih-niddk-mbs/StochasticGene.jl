@@ -361,7 +361,6 @@ Builds **`data`**, **`model`**, and **`options`** via [`make_structures`](@ref),
 """
 function fit(rinit, nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     println(now())
-    printinfo(gene, G, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     kwp = Dict{Symbol,Any}(pairs(kwargs))
     leg_ti = pop!(kwp, :legacy_traceinfo, nothing)
@@ -376,6 +375,7 @@ function fit(rinit, nchains::Int, datatype::String, datapath, gene, cell, dataco
     end
     opt = _make_structures_option_kwargs(; pairs(kwp)...)
     data, model, options = make_structures(rinit, datatype, datapath, gene, cell, datacond, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; pairs(opt)..., legacy_traceinfo=leg_ti, legacy_dttype=leg_dt)
+    printinfo(gene, G, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv, options)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
@@ -848,6 +848,7 @@ const _MAKE_STRUCTURES_OPTION_KW = (
     :verbose, :progress, :nuts_verbose, :nuts_progress,
     :time_limit, :advi_time_limit, :σ_floor, :advi_σ_floor, :init_s_raw, :advi_init_s_raw,
     :advi_verbose, :advi_n_mc, :zygote_trace,
+    :likelihood_executor, :gradient_checkpoint_length, :hmm_stack, :hmm_checkpoint_steps,
 )
 
 function _make_structures_option_kwargs(; kwargs...)
@@ -1037,7 +1038,23 @@ Shared keys:
 - `device`: `:cpu` or `:gpu` (GPU paths may error if unsupported)
 - `parallel` (alias `parallelism`): `:single`, `:threaded`, `:distributed`
 - `gradient`: method-specific (`:none`/`:finite`/`:ForwardDiff`/`:Zygote`, with `:forward` accepted as `:ForwardDiff`)
+- `likelihood_executor` (alias `hmm_stack`): `:fast` ([`HMM_STACK_MH`](@ref)) vs `:zygote` ([`HMM_STACK_AD`](@ref)) for modalities with dual likelihood implementations (trace HMM today; extensible).
+- `gradient_checkpoint_length` (alias `hmm_checkpoint_steps`): optional positive `Int` frame chunk size for reverse-mode checkpointing on long time-series likelihoods (Zygote); `nothing` leaves globals unchanged except where inference wrappers set them.
+- NUTS: `progress` / `nuts_progress` (default **`true`**): AdvancedHMC ProgressMeter bar for single-chain runs; set **`nuts_progress=false`** when you prefer plain logs only.
 """
+function _parse_likelihood_executor(v, default::Symbol)
+    v === nothing && return default
+    v isa AbstractString && return Symbol(lowercase(strip(v)))
+    v isa Symbol && return v
+    return default
+end
+
+function _parse_gradient_checkpoint_length(run::AbstractDict)
+    v = get(run, :gradient_checkpoint_length, get(run, :hmm_checkpoint_steps, nothing))
+    v === nothing && return nothing
+    return Int(v)
+end
+
 function load_options(run0::AbstractDict)
     run = Dict{Symbol,Any}(Symbol(string(k)) => v for (k, v) in pairs(run0))
     inference_method = get(run, :inference_method, INFERENCE_MH)
@@ -1082,10 +1099,21 @@ function load_options(run0::AbstractDict)
     maxtime = Float64(get(run, :maxtime, 60.0))
     temp = Float64(get(run, :temp, 1.0))
 
+    gck = _parse_gradient_checkpoint_length(run)
+    lik_mh = _parse_likelihood_executor(
+        get(run, :likelihood_executor, get(run, :hmm_stack, nothing)),
+        HMM_STACK_MH,
+    )
+
     if inference_method == INFERENCE_MH || inference_method == :mh
         gh = gradient === nothing ? :none : gradient
         gh isa Symbol || throw(ArgumentError("MH gradient must be a Symbol or nothing, got $(repr(gh))"))
-        return MHOptions(samplesteps, warmupsteps, maxtime, temp; device=device, parallel=parallel, gradient=gh)
+        return MHOptions(
+            samplesteps, warmupsteps, maxtime, temp;
+            device=device, parallel=parallel, gradient=gh,
+            likelihood_executor=lik_mh,
+            gradient_checkpoint_length=gck,
+        )
     elseif inference_method == INFERENCE_NUTS || inference_method == :nuts
         n_samples = Int(get(run, :n_samples, samplesteps))
         n_adapts = if haskey(run, :n_adapts) && run[:n_adapts] !== nothing
@@ -1098,7 +1126,7 @@ function load_options(run0::AbstractDict)
         δ = Float64(get(run, :nuts_delta, get(run, :δ, 0.8)))
         fd_ε = Float64(get(run, :fd_ε, get(run, :nuts_fd_ε, 1e-5)))
         verbose = Bool(get(run, :verbose, get(run, :nuts_verbose, true)))
-        progress = Bool(get(run, :progress, get(run, :nuts_progress, false)))
+        progress = Bool(get(run, :progress, get(run, :nuts_progress, true)))
         g = if gradient === nothing
             :ForwardDiff
         elseif gradient === :forward
@@ -1112,6 +1140,10 @@ function load_options(run0::AbstractDict)
         end
         g isa Symbol || throw(ArgumentError("NUTS gradient must be a Symbol or nothing, got $(repr(g))"))
         g in (:ForwardDiff, :Zygote, :finite) || throw(ArgumentError("Invalid NUTS gradient $(repr(g))"))
+        lik_nuts = _parse_likelihood_executor(
+            get(run, :likelihood_executor, get(run, :hmm_stack, nothing)),
+            HMM_STACK_AD,
+        )
         return NUTSOptions(;
             n_samples=n_samples,
             n_adapts=n_adapts,
@@ -1122,6 +1154,8 @@ function load_options(run0::AbstractDict)
             progress=progress,
             device=device,
             parallel=parallel,
+            likelihood_executor=lik_nuts,
+            gradient_checkpoint_length=gck,
         )
     elseif inference_method == INFERENCE_ADVI || inference_method == :advi
         maxiter = Int(get(run, :maxiter, samplesteps))
@@ -1145,6 +1179,10 @@ function load_options(run0::AbstractDict)
         end
         g isa Symbol || throw(ArgumentError("ADVI gradient must be a Symbol or nothing, got $(repr(g))"))
         g in (:ForwardDiff, :Zygote, :finite) || throw(ArgumentError("Invalid ADVI gradient $(repr(g))"))
+        lik_advi = _parse_likelihood_executor(
+            get(run, :likelihood_executor, get(run, :hmm_stack, nothing)),
+            HMM_STACK_AD,
+        )
         return ADVIOptions(;
             maxiter=maxiter,
             n_mc=n_mc,
@@ -1155,6 +1193,8 @@ function load_options(run0::AbstractDict)
             time_limit=time_limit,
             device=device,
             parallel=parallel,
+            likelihood_executor=lik_advi,
+            gradient_checkpoint_length=gck,
         )
     else
         error("Unknown inference_method $(repr(inference_method)); expected one of $(repr(INFERENCE_CHOICES)).")
@@ -3924,9 +3964,9 @@ function print_ll(data, model, message="initial ll: ")
 end
 
 """
-printinfo(gene,G,datacond,datapath,resultfolder,maxtime)
+    printinfo(gene, G, R, S, insertstep, …)
 
-print out run information
+Print gene / data / folder lines. With an [`Options`](@ref) argument, [`print_inference_options_info`](@ref) is called for MH vs NUTS vs ADVI details.
 """
 # function printinfo(gene, G, datacond, datapath, resultfolder, maxtime)
 #     println("Gene: ", gene, " G: ", G, " Treatment:  ", datacond)
@@ -3955,6 +3995,56 @@ function printinfo(gene, G::Tuple, R, S, insertstep, datacond, datapath, resultf
     println("data: ", datapath)
     println("results folder: ", resultfolder)
     println("maxtime: ", maxtime, ", propcv: ", propcv)
+end
+
+"""
+    printinfo(gene, G, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv, options)
+
+Same as [`printinfo`](@ref) without `options`, then prints sampler-specific lines via [`print_inference_options_info`](@ref).
+"""
+function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv, options::Options)
+    printinfo(gene, G, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv)
+    print_inference_options_info(options)
+    return nothing
+end
+
+function printinfo(gene, G::Tuple, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv, options::Options)
+    printinfo(gene, G, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv)
+    print_inference_options_info(options)
+    return nothing
+end
+
+"""
+    print_inference_options_info(options)
+
+Print one block of inference-specific settings (MCMC vs NUTS vs ADVI) after the generic [`printinfo`](@ref) lines.
+"""
+function print_inference_options_info(options::MHOptions)
+    println("inference: Metropolis–Hastings (MH)")
+    println("  samplesteps: ", options.samplesteps, ", warmupsteps: ", options.warmupsteps, ", wall maxtime (s): ", options.maxtime, ", temperature: ", options.temp)
+    println("  device: ", options.device, ", parallel: ", options.parallel, ", likelihood_executor: ", options.likelihood_executor,
+        ", gradient_checkpoint_length: ", options.gradient_checkpoint_length === nothing ? "default" : options.gradient_checkpoint_length)
+    return nothing
+end
+
+function print_inference_options_info(options::NUTSOptions)
+    println("inference: NUTS (AdvancedHMC)")
+    println("  n_samples: ", options.n_samples, ", n_adapts: ", options.n_adapts, ", δ: ", options.δ, ", gradient: ", options.gradient,
+        ", fd_ε: ", options.fd_ε)
+    println("  verbose: ", options.verbose, ", progress: ", options.progress, " (ProgressMeter bar when true and nchains==1)")
+    println("  device: ", options.device, ", parallel: ", options.parallel, ", likelihood_executor: ", options.likelihood_executor,
+        ", gradient_checkpoint_length: ", options.gradient_checkpoint_length === nothing ? "default" : options.gradient_checkpoint_length)
+    return nothing
+end
+
+function print_inference_options_info(options::ADVIOptions)
+    println("inference: mean-field ADVI (Optim LBFGS)")
+    println("  maxiter: ", options.maxiter, ", n_mc: ", options.n_mc, ", σ_floor: ", options.σ_floor, ", gradient: ", options.gradient,
+        ", time_limit: ", options.time_limit === nothing ? "none" : options.time_limit)
+    println("  verbose: ", options.verbose, ", device: ", options.device, ", parallel: ", options.parallel,
+        ", likelihood_executor: ", options.likelihood_executor,
+        ", gradient_checkpoint_length: ", options.gradient_checkpoint_length === nothing ? "default" : options.gradient_checkpoint_length)
+    return nothing
 end
 
 

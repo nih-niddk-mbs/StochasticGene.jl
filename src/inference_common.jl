@@ -68,13 +68,32 @@ function _merge_advi_chains(data, model, chain_rows::AbstractVector)
     return _merge_nuts_chains(data, model, chain_rows)
 end
 
+function _nuts_options_progress(options::NUTSOptions, progress::Bool)
+    return NUTSOptions(;
+        n_samples=options.n_samples,
+        n_adapts=options.n_adapts,
+        δ=options.δ,
+        gradient=options.gradient,
+        fd_ε=options.fd_ε,
+        verbose=options.verbose,
+        progress=progress,
+        device=options.device,
+        parallel=options.parallel,
+        likelihood_executor=options.likelihood_executor,
+        gradient_checkpoint_length=options.gradient_checkpoint_length,
+    )
+end
+
 function _run_nuts_inference(data, model, options::NUTSOptions, rng, nchains::Int)
     if options.device === :gpu
         error("NUTS inference on GPU is not implemented.")
-    elseif nchains > 1 && options.parallel === :distributed
+    end
+    # One ProgressMeter bar per process; disable when multiple chains interleave output.
+    opts = nchains > 1 ? _nuts_options_progress(options, false) : options
+    if nchains > 1 && options.parallel === :distributed
         @info "Running NUTS inference with Distributed parallelism ($(nchains) chains)."
         chain_rows = Distributed.pmap(1:nchains) do _
-            run_nuts_fit(data, model, options; rng=Random.default_rng())
+            run_nuts_fit(data, model, opts; rng=Random.default_rng())
         end
         return _merge_nuts_chains(data, model, chain_rows)
     elseif nchains > 1 && options.parallel === :threaded
@@ -85,18 +104,18 @@ function _run_nuts_inference(data, model, options::NUTSOptions, rng, nchains::In
         chain_rows = Vector{Any}(undef, nchains)
         Threads.@threads for i in 1:nchains
             s = seeds[i]
-            chain_rows[i] = run_nuts_fit(data, model, options; rng=Random.Xoshiro(s[1], s[2], s[3], s[4]))
+            chain_rows[i] = run_nuts_fit(data, model, opts; rng=Random.Xoshiro(s[1], s[2], s[3], s[4]))
         end
         return _merge_nuts_chains(data, model, chain_rows)
     elseif nchains > 1
         @info "Running NUTS inference serially ($(nchains) chains); set options.parallel=:threaded or :distributed for parallel chains."
         chain_rows = Vector{Any}(undef, nchains)
         for i in 1:nchains
-            chain_rows[i] = run_nuts_fit(data, model, options; rng=Random.Xoshiro(rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64)))
+            chain_rows[i] = run_nuts_fit(data, model, opts; rng=Random.Xoshiro(rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64)))
         end
         return _merge_nuts_chains(data, model, chain_rows)
     else
-        fits, stats, measures, _ = run_nuts_fit(data, model, options; rng=rng)
+        fits, stats, measures, _ = run_nuts_fit(data, model, opts; rng=rng)
         return fits, stats, measures
     end
 end

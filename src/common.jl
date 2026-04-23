@@ -77,8 +77,10 @@ For **multiple discrete traces**, [`loglikelihood_ad`](@ref) / [`ll_hmm_trace`](
 also applies [`Zygote.checkpointed`](@ref) **per trace** so reverse-mode does not retain one tape over all traces
 (only the per-trace forward pass is recomputed on the backward pass).
 
-The same frame setting can be passed per call as `hmm_checkpoint_steps` to [`run_nuts`](@ref), [`ll_hmm_trace`](@ref),
-or [`loglikelihood_ad`](@ref) on trace data (restored after the call).
+The same frame setting is preferred on inference **options** as
+[`NUTSOptions`](@ref) / [`ADVIOptions`](@ref) field `gradient_checkpoint_length` (run-spec keys
+`gradient_checkpoint_length` or legacy `hmm_checkpoint_steps`). Per-call `hmm_checkpoint_steps` on
+[`run_nuts`](@ref), [`ll_hmm_trace`](@ref), or [`loglikelihood_ad`](@ref) still overrides for that call.
 
 Does not affect [`ForwardDiff`](@ref) or finite-difference gradients.
 """
@@ -599,6 +601,13 @@ Options for Metropolis-Hastings MCMC.
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
 - `gradient::Symbol`: Gradient type (:none, :finite, :ForwardDiff, :Zygote)
+- `likelihood_executor::Symbol`: Which **likelihood implementation** to use for modalities that support a primal
+  vs reverse-diff-friendly path (same values as [`HMM_STACK_MH`](@ref) / [`HMM_STACK_AD`](@ref); see `hmm.jl`).
+  Default [`HMM_STACK_MH`](@ref) (`:fast`, in-place / MCMC-oriented). Other differentiable likelihood subgraphs can
+  read this field in the future; trace HMMs use it today.
+- `gradient_checkpoint_length::Union{Nothing,Int}`: When an integer `> 0`, reverse-mode through **long time-series**
+  likelihoods may process time in chunks of this many frames (Zygote checkpointing; see [`with_hmm_zygote_checkpoint`](@ref)).
+  `nothing` leaves the process-global setting unchanged except where inference wrappers set it explicitly.
 """
 struct MHOptions <: Options
     samplesteps::Int64
@@ -608,10 +617,22 @@ struct MHOptions <: Options
     device::Symbol  # :cpu, :gpu
     parallel::Symbol  # :single, :threaded, :distributed
     gradient::Symbol
+    likelihood_executor::Symbol
+    gradient_checkpoint_length::Union{Nothing,Int}
 end
 
-MHOptions(samplesteps::Integer, warmupsteps::Integer, maxtime::Real, temp::Real; device::Symbol=:cpu, parallel::Symbol=:single, gradient::Symbol=:none) =
-    MHOptions(Int64(samplesteps), Int64(warmupsteps), Float64(maxtime), Float64(temp), device, parallel, gradient)
+function MHOptions(
+    samplesteps::Integer, warmupsteps::Integer, maxtime::Real, temp::Real;
+    device::Symbol=:cpu, parallel::Symbol=:single, gradient::Symbol=:none,
+    likelihood_executor::Symbol=HMM_STACK_MH,
+    gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
+)
+    gck = gradient_checkpoint_length === nothing ? nothing : Int(gradient_checkpoint_length)
+    MHOptions(
+        Int64(samplesteps), Int64(warmupsteps), Float64(maxtime), Float64(temp),
+        device, parallel, gradient, likelihood_executor, gck,
+    )
+end
 
 """
     NUTSOptions
@@ -623,9 +644,11 @@ Options for `run_nuts` (NUTS/AdvancedHMC).
 - `δ`: target acceptance (NUTS dual averaging)
 - `gradient`: :ForwardDiff (default), :finite, :Zygote
 - `fd_ε`: finite-difference step when `gradient === :finite`
-- `verbose`, `progress`: passed to AdvancedHMC.sample
+- `verbose`, `progress`: passed to AdvancedHMC.sample (`progress` defaults to `true`, enabling AdvancedHMC’s ProgressMeter sampling bar; set `nuts_progress=false` in [`fit`](@ref) / run-spec when running many parallel chains)
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
+- `likelihood_executor::Symbol`: likelihood track for AD-friendly modalities (default [`HMM_STACK_AD`](@ref)).
+- `gradient_checkpoint_length::Union{Nothing,Int}`: optional frame chunk size for reverse-mode through long trace likelihoods.
 """
 struct NUTSOptions <: Options
     n_samples::Int
@@ -637,10 +660,20 @@ struct NUTSOptions <: Options
     progress::Bool
     device::Symbol  # :cpu, :gpu
     parallel::Symbol  # :single, :threaded, :distributed
+    likelihood_executor::Symbol
+    gradient_checkpoint_length::Union{Nothing,Int}
 end
 
-NUTSOptions(; n_samples=1000, n_adapts=1000, δ=0.8, gradient=:ForwardDiff, fd_ε=1e-5, verbose=true, progress=false, device::Symbol=:cpu, parallel::Symbol=:single) =
-    NUTSOptions(n_samples, n_adapts, δ, gradient, fd_ε, verbose, progress, device, parallel)
+function NUTSOptions(;
+    n_samples=1000, n_adapts=1000, δ=0.8, gradient=:ForwardDiff, fd_ε=1e-5, verbose=true, progress=true,
+    device::Symbol=:cpu, parallel::Symbol=:single,
+    likelihood_executor::Symbol=HMM_STACK_AD,
+    gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
+    max_depth=nothing,  # unused here; kept for benchmark/API compatibility with AdvancedHMC-style kwargs
+)
+    gck = gradient_checkpoint_length === nothing ? nothing : Int(gradient_checkpoint_length)
+    NUTSOptions(n_samples, n_adapts, Float64(δ), gradient, Float64(fd_ε), verbose, progress, device, parallel, likelihood_executor, gck)
+end
 
 """
     ADVIOptions
@@ -657,6 +690,8 @@ Options for mean-field ADVI.
 - `time_limit`: wall-clock limit (seconds)
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
+- `likelihood_executor::Symbol`: likelihood track for AD-friendly modalities (default [`HMM_STACK_AD`](@ref)).
+- `gradient_checkpoint_length::Union{Nothing,Int}`: optional frame chunk size for reverse-mode through long trace likelihoods.
 """
 struct ADVIOptions <: Options
     maxiter::Int
@@ -668,10 +703,23 @@ struct ADVIOptions <: Options
     time_limit::Union{Nothing,Float64}
     device::Symbol  # :cpu, :gpu
     parallel::Symbol  # :single, :threaded, :distributed
+    likelihood_executor::Symbol
+    gradient_checkpoint_length::Union{Nothing,Int}
 end
 
-ADVIOptions(; maxiter=500, n_mc=8, σ_floor=1e-4, init_s_raw=-4.0, verbose=false, gradient=:Zygote, time_limit=nothing, device::Symbol=:cpu, parallel::Symbol=:single) =
-    ADVIOptions(maxiter, n_mc, σ_floor, init_s_raw, verbose, gradient, time_limit, device, parallel)
+function ADVIOptions(;
+    maxiter=500, n_mc=8, σ_floor=1e-4, init_s_raw=-4.0, verbose=false, gradient=:Zygote, time_limit=nothing,
+    device::Symbol=:cpu, parallel::Symbol=:single,
+    likelihood_executor::Symbol=HMM_STACK_AD,
+    gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
+)
+    gck = gradient_checkpoint_length === nothing ? nothing : Int(gradient_checkpoint_length)
+    ADVIOptions(
+        Int(maxiter), Int(n_mc), Float64(σ_floor), Float64(init_s_raw), verbose, gradient,
+        time_limit === nothing ? nothing : Float64(time_limit), device, parallel,
+        likelihood_executor, gck,
+    )
+end
 
 """
     INFERENCE_MH, INFERENCE_NUTS, INFERENCE_ADVI, INFERENCE_CHOICES

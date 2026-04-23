@@ -75,17 +75,30 @@ space (same as `get_param(model)`).
 - `data`, `model`: passed through to `loglikelihood` / `logprior`
 - `steady_state_solver`: forwarded to likelihood (default `:augmented` is best for downstream use)
 - `ad_likelihood`: if `true`, uses `loglikelihood_ad` for `AbstractHistogramData` and `AbstractTraceData` (Zygote-friendly likelihood); otherwise `loglikelihood`
+- `likelihood_executor`: which AD-friendly likelihood track to use when `ad_likelihood` is true (typically [`HMM_STACK_AD`](@ref)); from [`NUTSOptions`](@ref) / [`ADVIOptions`](@ref).
 """
 struct GenePosteriorLogDensity{D,M}
     data::D
     model::M
     steady_state_solver::Symbol
     ad_likelihood::Bool
+    likelihood_executor::Symbol
 end
 
-function _ll_first(θ, data, model, steady_state_solver::Symbol, ad_likelihood::Bool)
+function _ll_first(
+    θ,
+    data,
+    model,
+    steady_state_solver::Symbol,
+    ad_likelihood::Bool,
+    likelihood_executor::Symbol,
+)
     if ad_likelihood && (data isa AbstractHistogramData || data isa AbstractTraceData)
-        return loglikelihood_ad(θ, data, model; steady_state_solver=steady_state_solver)[1]
+        return loglikelihood_ad(
+            θ, data, model;
+            steady_state_solver=steady_state_solver,
+            hmm_stack=likelihood_executor,
+        )[1]
     end
     return loglikelihood(θ, data, model; steady_state_solver=steady_state_solver)[1]
 end
@@ -102,9 +115,11 @@ function logposterior(
     model::AbstractGeneTransitionModel;
     steady_state_solver::Symbol=:augmented,
     ad_likelihood::Union{Nothing,Bool}=nothing,
+    likelihood_executor::Union{Nothing,Symbol}=nothing,
 )
     ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
-    return logprior(θ, model) + _ll_first(θ, data, model, steady_state_solver, ad)
+    lik_ad = something(likelihood_executor, HMM_STACK_AD)
+    return logprior(θ, model) + _ll_first(θ, data, model, steady_state_solver, ad, lik_ad)
 end
 
 function LogDensityProblems.dimension(p::GenePosteriorLogDensity)
@@ -112,7 +127,7 @@ function LogDensityProblems.dimension(p::GenePosteriorLogDensity)
 end
 
 function LogDensityProblems.logdensity(p::GenePosteriorLogDensity, θ)
-    return logprior(θ, p.model) + _ll_first(θ, p.data, p.model, p.steady_state_solver, p.ad_likelihood)
+    return logprior(θ, p.model) + _ll_first(θ, p.data, p.model, p.steady_state_solver, p.ad_likelihood, p.likelihood_executor)
 end
 
 function LogDensityProblems.capabilities(::Type{<:GenePosteriorLogDensity})
@@ -164,6 +179,8 @@ For **trace** data, `:finite` (central differences) is preferred; [`fit`](@ref) 
 
 `rng` must be an `AbstractRNG` (e.g. `using Random; Random.default_rng()`).
 
+When **`options.progress`** is `true` (the default on [`NUTSOptions`](@ref)), AdvancedHMC shows a **ProgressMeter** sampling bar for the total number of draws (`n_samples`); multi-chain [`run_inference`](@ref) disables progress automatically to avoid garbled output.
+
 Keyword arguments:
 - `steady_state_solver`: passed to likelihood (default `:augmented`)
 - `ad_likelihood`: override automatic choice (`nothing` → use `loglikelihood_ad` for `AbstractHistogramData` and `AbstractTraceData`)
@@ -180,9 +197,10 @@ function run_nuts(
     ad_likelihood::Union{Nothing,Bool}=nothing,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
-    with_hmm_zygote_checkpoint(hmm_checkpoint_steps) do
+    ck_outer = something(hmm_checkpoint_steps, options.gradient_checkpoint_length)
+    with_hmm_zygote_checkpoint(ck_outer) do
         ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
-        ℓ = GenePosteriorLogDensity(data, model, steady_state_solver, ad)
+        ℓ = GenePosteriorLogDensity(data, model, steady_state_solver, ad, options.likelihood_executor)
         θ0 = Vector{Float64}(get_param(model))
         D = length(θ0)
         D == LogDensityProblems.dimension(ℓ) || throw(DimensionMismatch("parameter dimension mismatch"))
@@ -258,11 +276,12 @@ so invalid variational draws must not throw; they should yield `-Inf`/`NaN` log-
 # Trace data and `gradient=:Zygote`
 
 Reverse-mode AD through a long trace HMM (`loglikelihood_ad`) builds a huge Zygote tape and can **overflow the compiler stack** (`_pullback_generator` / huge `NTuple` types).
-Use **`hmm_checkpoint_steps`** on [`run_nuts`](@ref), [`ll_hmm_trace`](@ref), or [`loglikelihood_ad`](@ref) for trace data, or [`set_hmm_zygote_checkpoint_steps!`](@ref), to enable gradient checkpointing on the HMM forward pass (Zygote only).
+Use **`hmm_checkpoint_steps`** on this function, [`run_nuts`](@ref), [`ll_hmm_trace`](@ref), or [`loglikelihood_ad`](@ref) for trace data, or [`set_hmm_zygote_checkpoint_steps!`](@ref), to enable gradient checkpointing on the HMM forward pass (Zygote only). Otherwise prefer [`ADVIOptions`](@ref) field `gradient_checkpoint_length` (or run-spec `gradient_checkpoint_length` / legacy `hmm_checkpoint_steps`).
 By default, **`AbstractTraceData` forces the ForwardDiff ELBO gradient path** (`gradient=:finite` after override; same as explicit `gradient=:ForwardDiff`) even if `ADVIOptions` requests Zygote. Set `zygote_trace=true` to attempt Zygote anyway (short traces only).
 
 # Keywords
 - `zygote_trace`: if `true` and `data isa AbstractTraceData`, use Zygote when `options.gradient === :Zygote` (default `false`).
+- `hmm_checkpoint_steps`: optional per-call override for Zygote checkpoint chunk size; `nothing` uses `options.gradient_checkpoint_length` then the process-global setting.
 """
 function run_advi(
     data::AbstractExperimentalData,
@@ -272,6 +291,7 @@ function run_advi(
     steady_state_solver::Symbol=:augmented,
     ad_likelihood::Union{Nothing,Bool}=nothing,
     zygote_trace::Bool=false,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
     ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
     options.gradient in (:Zygote, :finite, :ForwardDiff) ||
@@ -291,6 +311,8 @@ function run_advi(
             time_limit=options.time_limit,
             device=options.device,
             parallel=options.parallel,
+            likelihood_executor=options.likelihood_executor,
+            gradient_checkpoint_length=options.gradient_checkpoint_length,
         )
     else
         options
@@ -308,51 +330,55 @@ function run_advi(
     θ0 = Vector{Float64}(get_param(model))
     D = length(θ0)
     εs = [randn(rng, D) for _ in 1:options_eff.n_mc]
+    ck_outer = something(hmm_checkpoint_steps, options_eff.gradient_checkpoint_length)
+    lik_ex = options_eff.likelihood_executor
 
-    neg_elbo(x::AbstractVector{T}) where {T<:Real} = _neg_elbo_internal(
-        x, εs, data, model, steady_state_solver, ad, D, options_eff.σ_floor,
-    )
+    return with_hmm_zygote_checkpoint(ck_outer) do
+        neg_elbo(x::AbstractVector{T}) where {T<:Real} = _neg_elbo_internal(
+            x, εs, data, model, steady_state_solver, ad, D, options_eff.σ_floor, lik_ex,
+        )
 
-    x0 = Vector{Float64}(undef, 2D)
-    x0[1:D] .= θ0
-    x0[D+1:2D] .= options_eff.init_s_raw
+        x0 = Vector{Float64}(undef, 2D)
+        x0[1:D] .= θ0
+        x0[D+1:2D] .= options_eff.init_s_raw
 
-    opts = if options_eff.time_limit === nothing
-        Optim.Options(iterations=options_eff.maxiter, show_trace=options_eff.verbose)
-    else
-        Optim.Options(iterations=options_eff.maxiter, show_trace=options_eff.verbose, time_limit=options_eff.time_limit)
+        opts = if options_eff.time_limit === nothing
+            Optim.Options(iterations=options_eff.maxiter, show_trace=options_eff.verbose)
+        else
+            Optim.Options(iterations=options_eff.maxiter, show_trace=options_eff.verbose, time_limit=options_eff.time_limit)
+        end
+        lbfgs_method = LBFGS(linesearch=Optim.LineSearches.BackTracking())
+        result = if options_eff.gradient === :finite || options_eff.gradient === :ForwardDiff
+            if options_eff.verbose && data isa AbstractTraceData
+                @info "ADVI: gradients use ForwardDiff on neg_elbo (not Optim finite-differences); " *
+                    "LBFGS may still spend a long time on early line searches — try smaller `n_mc` (e.g. 2) if too slow."
+            end
+            function neg_elbo_grad_fd!(g::AbstractVector{Float64}, x::AbstractVector{Float64})
+                gx = ForwardDiff.gradient(neg_elbo, x)
+                g .= gx
+                return g
+            end
+            od = OnceDifferentiable(neg_elbo, neg_elbo_grad_fd!, x0)
+            Optim.optimize(od, x0, lbfgs_method, opts)
+        else
+            # One Zygote tape over the whole MC loop retains every forward intermediate → huge RAM.
+            # ∇(-mean_i ℓ_i - H) = -mean_i ∇ℓ_i - ∇H, so accumulate per-ε gradients separately.
+            function neg_elbo_grad!(g, x)
+                _neg_elbo_grad_zygote!(
+                    g, x, εs, data, model, steady_state_solver, ad, D, options_eff.σ_floor, lik_ex,
+                )
+                return g
+            end
+            od = OnceDifferentiable(neg_elbo, neg_elbo_grad!, x0)
+            Optim.optimize(od, x0, lbfgs_method, opts)
+        end
+
+        xmin = Optim.minimizer(result)
+        μ = xmin[1:D]
+        s_raw = xmin[D+1:2D]
+        σ = _softplus.(s_raw) .+ options_eff.σ_floor
+        return (μ=μ, σ=σ, optimization=result, initial_θ=θ0)
     end
-    lbfgs_method = LBFGS(linesearch=Optim.LineSearches.BackTracking())
-    result = if options_eff.gradient === :finite || options_eff.gradient === :ForwardDiff
-        if options_eff.verbose && data isa AbstractTraceData
-            @info "ADVI: gradients use ForwardDiff on neg_elbo (not Optim finite-differences); " *
-                "LBFGS may still spend a long time on early line searches — try smaller `n_mc` (e.g. 2) if too slow."
-        end
-        function neg_elbo_grad_fd!(g::AbstractVector{Float64}, x::AbstractVector{Float64})
-            gx = ForwardDiff.gradient(neg_elbo, x)
-            g .= gx
-            return g
-        end
-        od = OnceDifferentiable(neg_elbo, neg_elbo_grad_fd!, x0)
-        Optim.optimize(od, x0, lbfgs_method, opts)
-    else
-        # One Zygote tape over the whole MC loop retains every forward intermediate → huge RAM.
-        # ∇(-mean_i ℓ_i - H) = -mean_i ∇ℓ_i - ∇H, so accumulate per-ε gradients separately.
-        function neg_elbo_grad!(g, x)
-            _neg_elbo_grad_zygote!(
-                g, x, εs, data, model, steady_state_solver, ad, D, options_eff.σ_floor,
-            )
-            return g
-        end
-        od = OnceDifferentiable(neg_elbo, neg_elbo_grad!, x0)
-        Optim.optimize(od, x0, lbfgs_method, opts)
-    end
-
-    xmin = Optim.minimizer(result)
-    μ = xmin[1:D]
-    s_raw = xmin[D+1:2D]
-    σ = _softplus.(s_raw) .+ options_eff.σ_floor
-    return (μ=μ, σ=σ, optimization=result, initial_θ=θ0)
 end
 
 function _elbo_single_lp(
@@ -364,6 +390,7 @@ function _elbo_single_lp(
     ad_likelihood::Bool,
     D::Int,
     σ_floor::Float64,
+    likelihood_executor::Symbol,
 ) where {T<:Real}
     μ = view(x, 1:D)
     s_raw = view(x, D+1:2D)
@@ -372,7 +399,7 @@ function _elbo_single_lp(
     # No try/catch here: Zygote cannot differentiate through `catch` (see ADVI + `gradient=:Zygote`).
     lp = logprior(η, model)
     isfinite(lp) || return oftype(lp, -Inf)
-    ll = _ll_first(η, data, model, steady_state_solver, ad_likelihood)
+    ll = _ll_first(η, data, model, steady_state_solver, ad_likelihood, likelihood_executor)
     isfinite(ll) || return oftype(lp + ll, -Inf)
     return lp + ll
 end
@@ -396,10 +423,11 @@ function _neg_elbo_internal(
     ad_likelihood::Bool,
     D::Int,
     σ_floor::Float64,
+    likelihood_executor::Symbol,
 ) where {T<:Real}
     L = zero(T)
     for ε in εs
-        L += _elbo_single_lp(x, ε, data, model, steady_state_solver, ad_likelihood, D, σ_floor)
+        L += _elbo_single_lp(x, ε, data, model, steady_state_solver, ad_likelihood, D, σ_floor, likelihood_executor)
     end
     L = L / length(εs)
     ent = _elbo_entropy(x, D, σ_floor)
@@ -417,13 +445,17 @@ function _neg_elbo_grad_zygote!(
     ad_likelihood::Bool,
     D::Int,
     σ_floor::Float64,
+    likelihood_executor::Symbol,
 )
     fill!(g, 0.0)
     n = length(εs)
     n >= 1 || throw(ArgumentError("n_mc must be ≥ 1"))
     invn = 1.0 / n
     for ε in εs
-        gs = Zygote.gradient(x′ -> _elbo_single_lp(x′, ε, data, model, steady_state_solver, ad_likelihood, D, σ_floor), x)
+        gs = Zygote.gradient(
+            x′ -> _elbo_single_lp(x′, ε, data, model, steady_state_solver, ad_likelihood, D, σ_floor, likelihood_executor),
+            x,
+        )
         gx = gs[1]
         gx === nothing && error("Zygote returned no gradient for ELBO MC term; check logprior and likelihood.")
         g .+= gx
@@ -444,15 +476,16 @@ function _loglikelihood_predictions(
     model::AbstractGeneTransitionModel,
     steady_state_solver::Symbol,
     ad_likelihood::Bool,
+    likelihood_executor::Symbol,
 )
     if ad_likelihood && (data isa AbstractHistogramData || data isa AbstractTraceData)
-        return loglikelihood_ad(θ, data, model; steady_state_solver=steady_state_solver)
+        return loglikelihood_ad(θ, data, model; steady_state_solver=steady_state_solver, hmm_stack=likelihood_executor)
     end
     return loglikelihood(θ, data, model; steady_state_solver=steady_state_solver)
 end
 
 """
-    _nuts_samples_to_fit(param, data, model, n_adapts, steady_state_solver, ad_likelihood)
+    _nuts_samples_to_fit(param, data, model, n_adapts, steady_state_solver, ad_likelihood, likelihood_executor)
 
 Build a [`Fit`](@ref) from a `d × n` posterior sample matrix (transformed parameters, same layout as `run_mh`).
 """
@@ -463,15 +496,16 @@ function _nuts_samples_to_fit(
     n_adapts::Int,
     steady_state_solver::Symbol,
     ad_likelihood::Bool,
+    likelihood_executor::Symbol,
 )
     n = size(param, 2)
     n >= 1 || throw(ArgumentError("need at least one posterior sample"))
     ll = Vector{Float64}(undef, n)
-    _, logpred0 = _loglikelihood_predictions(param[:, 1], data, model, steady_state_solver, ad_likelihood)
+    _, logpred0 = _loglikelihood_predictions(param[:, 1], data, model, steady_state_solver, ad_likelihood, likelihood_executor)
     pwaic = (0, log.(max.(logpred0, eps(Float64))), zeros(length(logpred0)))
     lppd = fill(-Inf, length(logpred0))
     for s in 1:n
-        ll[s], logpred = _loglikelihood_predictions(param[:, s], data, model, steady_state_solver, ad_likelihood)
+        ll[s], logpred = _loglikelihood_predictions(param[:, s], data, model, steady_state_solver, ad_likelihood, likelihood_executor)
         lppd, pwaic = update_waic(lppd, pwaic, logpred)
     end
     pwaic = n > 1 ? pwaic[3] / (n - 1) : pwaic[3]
@@ -528,7 +562,7 @@ function run_nuts_fit(
         hmm_checkpoint_steps=hmm_checkpoint_steps,
     )
     param = Matrix{Float64}(nt.samples)
-    fits = _nuts_samples_to_fit(param, data, model, options.n_adapts, steady_state_solver, ad)
+    fits = _nuts_samples_to_fit(param, data, model, options.n_adapts, steady_state_solver, ad, options.likelihood_executor)
     stats = compute_stats(fits.param, model)
     rhat = vec(compute_rhat([fits]))
     ess, geweke, mcse = compute_measures(fits)
@@ -589,7 +623,7 @@ for interval reporting. Since ADVI returns a single point estimate, `Fit.param` 
 - `data`, `model`: experimental data and model (same as `run_mh`).
 - `options`: [`ADVIOptions`](@ref) (`maxiter`, `n_mc`, `σ_floor`, `gradient`, `time_limit`, …).
 - `rng`: random number generator (default `Random.default_rng()`).
-- `steady_state_solver`, `ad_likelihood`, `zygote_trace`: forwarded to [`run_advi`](@ref).
+- `steady_state_solver`, `ad_likelihood`, `zygote_trace`, `hmm_checkpoint_steps`: forwarded to [`run_advi`](@ref).
 
 # Returns
 - `fits`: [`Fit`](@ref) — `param` is `d × 1` (the variational mean μ); `ll` contains the single log-likelihood; `accept`/`total` are both 1 (pseudo-sample count).
@@ -611,6 +645,7 @@ function run_advi_fit(
     steady_state_solver::Symbol=:augmented,
     ad_likelihood::Union{Nothing,Bool}=nothing,
     zygote_trace::Bool=false,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
     posterior_samples::Int=1000,
 )
     ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
@@ -619,10 +654,11 @@ function run_advi_fit(
         steady_state_solver=steady_state_solver,
         ad_likelihood=ad_likelihood,
         zygote_trace=zygote_trace,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
     )
 
     μ_matrix = reshape(vb_out.μ, :, 1)
-    fits = _nuts_samples_to_fit(μ_matrix, data, model, 0, steady_state_solver, ad)
+    fits = _nuts_samples_to_fit(μ_matrix, data, model, 0, steady_state_solver, ad, options.likelihood_executor)
     stats = _advi_posterior_stats(vb_out.μ, vb_out.σ, model, rng, posterior_samples)
     nparam = size(μ_matrix, 1)
     rhat = fill(NaN, nparam)
@@ -656,6 +692,7 @@ function run_ADVI(
     steady_state_solver::Symbol=:augmented,
     ad_likelihood::Union{Nothing,Bool}=nothing,
     zygote_trace::Bool=false,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
     posterior_samples::Int=1000,
 )
     return run_advi_fit(
@@ -664,6 +701,7 @@ function run_ADVI(
         steady_state_solver=steady_state_solver,
         ad_likelihood=ad_likelihood,
         zygote_trace=zygote_trace,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
         posterior_samples=posterior_samples,
     )
 end
