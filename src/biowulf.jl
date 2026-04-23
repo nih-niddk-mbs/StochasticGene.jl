@@ -1152,9 +1152,9 @@ end
 """
     write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacond, resultfolder, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
 
-Writes a fit script that takes the gene as ARGS[1] and calls `fit(nchains, datatype, ..., ARGS[1], cell, ...)`.
+Writes a fit script that takes the gene as `ARGS[1]` and calls `fit(nchains, datatype, datapath, ARGS[1], cell, datacond, resultfolder, …)` (no legacy `dttype` / `traceinfo` positionals). Optional **`kwargs`** append as `; kw=…` in the emitted line (e.g. `inference_method=:nuts`).
 """
 function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
@@ -1170,11 +1170,13 @@ function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacon
 end
 
 """
-    write_fitfile_coupled(fitfile, gene::String, nchains, ...)
+    write_fitfile_coupled(fitfile, gene::String, nchains, datatype, datapath, cell, datacond, resultfolder, label,
+        fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
+        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
 
-Like `write_fitfile_genes` but with `gene` hardcoded in the script instead of `ARGS[1]`.
+Like `write_fitfile_genes` but with `gene` hard-coded in the script instead of `ARGS[1]`.
 Used for coupled-model scripts where one gene is fixed per script.
-`trace_specs` and `dwell_specs` are interpolated directly into the emitted `fit(...)` call.
+`trace_specs` and `dwell_specs` are interpolated into the emitted `fit(nchains, datatype, datapath, gene, …)` call; additional **`kwargs`** become trailing `fit(...; …)` keywords in the script (same as `write_fitfile_genes`).
 """
 function write_fitfile_coupled(fitfile, gene::String, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,

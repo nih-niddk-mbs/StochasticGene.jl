@@ -10,7 +10,7 @@
 
 Fit steady state or transient GM/GRSM model to RNA data for a single gene, write the result (through function finalize), and return fit results and diagnostics.
 
-For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G=2 and G=3 then G = (2,3).
+For coupled transcribing units, arguments such as **`transitions`**, **`G`**, **`R`**, **`S`**, **`insertstep`**, and **`coupling`** use the per-unit tuple (or vector) form, e.g. if two transcription models differ in gene-state count with G=2 and G=3 then `G = (2, 3)`.
 
 # Inference
 
@@ -69,7 +69,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `warmupsteps=0`: MH — warmup steps to adapt proposal covariance before sampling. Harmonized to NUTS `n_adapts` (unless `n_adapts` is set explicitly) via [`load_options`](@ref). Warmup runs before sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
 - `writesamples=false`: write out posterior samples when supported (MH; see IO paths for other methods)
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
-- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
+- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present. Legacy keys **`traceinfo`** and **`dttype`** in an old merged spec are applied for loading then **dropped** from the persisted run dict (use **`trace_specs`** / **`dwell_specs`** going forward).
 
 # Returns
 
@@ -340,8 +340,9 @@ function fit(; key=nothing, kwargs...)
 end
 
 """
-    fit(nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
+    fit(nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
 
+Positional entry point that **`readrates`** from `resultfolder`, then calls the `fit(rinit, nchains, …)` overload with the same arguments. Trailing **`kwargs`** are forwarded to that inner call (inference / sampler options per `_MAKE_STRUCTURES_OPTION_KW`, and optional migration keywords **`traceinfo`** / **`dttype`** consumed there).
 
 """
 function fit(nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
@@ -351,7 +352,9 @@ function fit(nchains::Int, datatype::String, datapath, gene, cell, datacond, res
 end
 
 """
-    fit(rinit, nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
+    fit(rinit, nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
+
+Builds **`data`**, **`model`**, and **`options`** via [`make_structures`](@ref), then runs `fit(nchains, data, model, options, …)`. Trailing **`kwargs`**: keys in `_MAKE_STRUCTURES_OPTION_KW` become inference/sampler options; **`traceinfo`** / **`dttype`** (if present) are accepted for backward compatibility and passed as legacy dwell/trace inputs to [`make_structures`](@ref).
 
 """
 function fit(rinit, nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
@@ -1645,7 +1648,7 @@ const TRACE_DATATYPES = Set([
 ])
 
 """
-    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true)
+    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
 
 Load RNA or trace data based on the provided `datatype` string or symbol.
 
@@ -1654,15 +1657,18 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 
 # Arguments
 - `datatype`: String or Symbol describing the data type (e.g. "rna", "tracegrid")
-- `dttype`: Dwell time type (used only for rnadwelltime and dwelltime)
+- `dttype`: Dwell-time type labels (used for `rnadwelltime` and `dwelltime`; often derived from `dwell_specs` when calling through [`make_structures`](@ref))
 - `datapath`: Path(s) to the data file(s)
 - `label`: Label for the dataset
 - `gene`: Gene name
 - `datacond`: Experimental condition
-- `traceinfo`: Tuple of trace metadata
+- `traceinfo`: Tuple of trace metadata passed through to trace loaders (when `trace_specs` is non-empty, interval / end-time / tails are aligned with specs — see [`load_data_trace`](@ref))
 - `temprna`: Integer divisor for histogram normalization
 - `datacol`: Column of trace data to extract (default = 3)
 - `zeromedian`: If true, zero-center each trace before fitting (default = true)
+- `yieldfactor`: RNA yield / histogram adjustment (default `1.0`)
+- `trace_specs`: Per-unit trace observation specs (default empty; see [`make_structures`](@ref))
+- `dwell_specs`: Per-unit dwell-time specs (default empty)
 
 # Returns
 - A concrete data structure subtype (e.g., `RNAData`, `TraceRNAData`, `DwellTimeData`)
