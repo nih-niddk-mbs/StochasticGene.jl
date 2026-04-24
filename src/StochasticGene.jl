@@ -248,9 +248,9 @@ export
     score_models_from_traces,
     RNADwellTimeData,
     RNAOnOffData,
-    AbstractObservationBundle,
-    ObservationBundle,
-    observation_modalities,
+    AbstractCombinedData,
+    CombinedData,
+    combined_modalities,
     reconstruct_tracerna,
     readrates,
     read_run_spec,
@@ -381,9 +381,6 @@ export
 
 # Type system and common functions
 include("common.jl")
-
-# Multi-modality data container (trace + RNA, …) built on common data structs
-include("observation_bundle.jl")
 
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_structures.jl")

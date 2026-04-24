@@ -93,21 +93,26 @@ function _ll_first(
     ad_likelihood::Bool,
     likelihood_executor::Symbol,
 )
-    if ad_likelihood && (data isa AbstractHistogramData || data isa AbstractTraceData)
-        return loglikelihood_ad(
-            θ, data, model;
-            steady_state_solver=steady_state_solver,
-            hmm_stack=likelihood_executor,
-        )[1]
+    if ad_likelihood && _default_ad_likelihood(data)
+        kwargs = (; steady_state_solver=steady_state_solver)
+        if _trace_or_combined_for_hmm(data)
+            kwargs = (; kwargs..., hmm_stack=likelihood_executor)
+        end
+        return loglikelihood_ad(θ, data, model; kwargs...)[1]
     end
     return loglikelihood(θ, data, model; steady_state_solver=steady_state_solver)[1]
 end
+
+@inline _default_ad_likelihood(data) =
+    data isa AbstractHistogramData || data isa AbstractTraceData || data isa CombinedData
+
+@inline _trace_or_combined_for_hmm(data) = data isa AbstractTraceData || data isa CombinedData
 
 """
     logposterior(θ, data, model; steady_state_solver=:augmented, ad_likelihood=nothing)
 
 Unnormalized log posterior in transformed coordinates. `ad_likelihood` defaults to
-`true` for `AbstractHistogramData` or `AbstractTraceData` (uses `loglikelihood_ad`), else `false`.
+`true` for `AbstractHistogramData`, `AbstractTraceData`, or [`CombinedData`](@ref) (uses `loglikelihood_ad`), else `false`.
 """
 function logposterior(
     θ::AbstractVector,
@@ -117,7 +122,7 @@ function logposterior(
     ad_likelihood::Union{Nothing,Bool}=nothing,
     likelihood_executor::Union{Nothing,Symbol}=nothing,
 )
-    ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
+    ad = something(ad_likelihood, _default_ad_likelihood(data))
     lik_ad = something(likelihood_executor, HMM_STACK_AD)
     return logprior(θ, model) + _ll_first(θ, data, model, steady_state_solver, ad, lik_ad)
 end
@@ -197,9 +202,9 @@ function run_nuts(
     ad_likelihood::Union{Nothing,Bool}=nothing,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
-    ck_outer = something(hmm_checkpoint_steps, options.gradient_checkpoint_length)
+    ck_outer = coalesce(hmm_checkpoint_steps, options.gradient_checkpoint_length)
     with_hmm_zygote_checkpoint(ck_outer) do
-        ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
+        ad = something(ad_likelihood, _default_ad_likelihood(data))
         ℓ = GenePosteriorLogDensity(data, model, steady_state_solver, ad, options.likelihood_executor)
         θ0 = Vector{Float64}(get_param(model))
         D = length(θ0)
@@ -211,8 +216,8 @@ function run_nuts(
 
         check_ad_gradient_feasibility(
             data, model;
-            forwarddiff_through_likelihood=(gopt === :ForwardDiff && ad && data isa AbstractTraceData),
-            zygote_through_likelihood=(gopt === :Zygote && ad && data isa AbstractTraceData),
+            forwarddiff_through_likelihood=(gopt === :ForwardDiff && ad && _trace_or_combined_for_hmm(data)),
+            zygote_through_likelihood=(gopt === :Zygote && ad && _trace_or_combined_for_hmm(data)),
         )
 
         metric = DiagEuclideanMetric(D)
@@ -293,13 +298,13 @@ function run_advi(
     zygote_trace::Bool=false,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
-    ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
+    ad = something(ad_likelihood, _default_ad_likelihood(data))
     options.gradient in (:Zygote, :finite, :ForwardDiff) ||
         throw(ArgumentError("ADVIOptions.gradient must be :Zygote, :finite, or :ForwardDiff, got $(repr(options.gradient))"))
     options.n_mc >= 1 || throw(ArgumentError("ADVIOptions.n_mc must be ≥ 1, got $(options.n_mc)"))
     options.maxiter >= 1 || throw(ArgumentError("ADVIOptions.maxiter must be ≥ 1, got $(options.maxiter)"))
 
-    options_eff = if !zygote_trace && data isa AbstractTraceData && options.gradient === :Zygote
+    options_eff = if !zygote_trace && _trace_or_combined_for_hmm(data) && options.gradient === :Zygote
         @info "ADVI: using finite-difference gradients for trace data (Zygote through long HMM likelihoods is not supported; set `zygote_trace=true` to try)."
         ADVIOptions(;
             maxiter=options.maxiter,
@@ -321,16 +326,16 @@ function run_advi(
     check_ad_gradient_feasibility(
         data, model;
         forwarddiff_through_likelihood=(
-            ad && data isa AbstractTraceData &&
+            ad && _trace_or_combined_for_hmm(data) &&
             (options_eff.gradient === :finite || options_eff.gradient === :ForwardDiff)
         ),
-        zygote_through_likelihood=(ad && data isa AbstractTraceData && options_eff.gradient === :Zygote),
+        zygote_through_likelihood=(ad && _trace_or_combined_for_hmm(data) && options_eff.gradient === :Zygote),
     )
 
     θ0 = Vector{Float64}(get_param(model))
     D = length(θ0)
     εs = [randn(rng, D) for _ in 1:options_eff.n_mc]
-    ck_outer = something(hmm_checkpoint_steps, options_eff.gradient_checkpoint_length)
+    ck_outer = coalesce(hmm_checkpoint_steps, options_eff.gradient_checkpoint_length)
     lik_ex = options_eff.likelihood_executor
 
     return with_hmm_zygote_checkpoint(ck_outer) do
@@ -478,8 +483,12 @@ function _loglikelihood_predictions(
     ad_likelihood::Bool,
     likelihood_executor::Symbol,
 )
-    if ad_likelihood && (data isa AbstractHistogramData || data isa AbstractTraceData)
-        return loglikelihood_ad(θ, data, model; steady_state_solver=steady_state_solver, hmm_stack=likelihood_executor)
+    if ad_likelihood && _default_ad_likelihood(data)
+        kwargs = (; steady_state_solver=steady_state_solver)
+        if _trace_or_combined_for_hmm(data)
+            kwargs = (; kwargs..., hmm_stack=likelihood_executor)
+        end
+        return loglikelihood_ad(θ, data, model; kwargs...)
     end
     return loglikelihood(θ, data, model; steady_state_solver=steady_state_solver)
 end
@@ -554,7 +563,7 @@ function run_nuts_fit(
     ad_likelihood::Union{Nothing,Bool}=nothing,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
-    ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
+    ad = something(ad_likelihood, _default_ad_likelihood(data))
     nt = run_nuts(
         data, model, rng, options;
         steady_state_solver=steady_state_solver,
@@ -648,7 +657,7 @@ function run_advi_fit(
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
     posterior_samples::Int=1000,
 )
-    ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
+    ad = something(ad_likelihood, _default_ad_likelihood(data))
     vb_out = run_advi(
         data, model, rng, options;
         steady_state_solver=steady_state_solver,

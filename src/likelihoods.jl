@@ -739,34 +739,49 @@ end
 
 function loglikelihood(
     param,
-    data::ObservationBundle,
+    data::CombinedData{NT},
+    model::AbstractGRSMmodel;
+    steady_state_solver::Symbol=:default,
+    hmm_stack::Symbol=HMM_STACK_MH,
+) where {NT<:NamedTuple{(:rna, :trace)}}
+    return loglikelihood(param, reconstruct_tracerna(data), model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack)
+end
+
+function loglikelihood(
+    param,
+    data::CombinedData,
     model::AbstractGRSMmodel;
     steady_state_solver::Symbol=:default,
     hmm_stack::Symbol=HMM_STACK_MH,
 )
-    if _is_tracerna_shaped_bundle(data)
-        return loglikelihood(param, reconstruct_tracerna(data), model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack)
-    end
-    throw(ArgumentError("loglikelihood(ObservationBundle, …): unsupported modality set $(observation_modalities(data)); use reconstruct_tracerna shape (trace+RNA) or a single legacy combined data type until more bundles are wired"))
+    throw(ArgumentError("loglikelihood(CombinedData, …): unsupported combination $(combined_modalities(data)); add a method for `CombinedData{NT} where {NT<:NamedTuple{...}}` or use a legacy monolithic data type until this combination is implemented"))
 end
 
 function loglikelihood_ad(
     param,
-    data::ObservationBundle,
+    data::CombinedData{NT},
+    model::AbstractGRSMmodel;
+    steady_state_solver::Symbol=:augmented,
+    hmm_stack::Symbol=HMM_STACK_AD,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+) where {NT<:NamedTuple{(:rna, :trace)}}
+    return loglikelihood_ad(
+        param, reconstruct_tracerna(data), model;
+        steady_state_solver=steady_state_solver,
+        hmm_stack=hmm_stack,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+    )
+end
+
+function loglikelihood_ad(
+    param,
+    data::CombinedData,
     model::AbstractGRSMmodel;
     steady_state_solver::Symbol=:augmented,
     hmm_stack::Symbol=HMM_STACK_AD,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
-    if _is_tracerna_shaped_bundle(data)
-        return loglikelihood_ad(
-            param, reconstruct_tracerna(data), model;
-            steady_state_solver=steady_state_solver,
-            hmm_stack=hmm_stack,
-            hmm_checkpoint_steps=hmm_checkpoint_steps,
-        )
-    end
-    throw(ArgumentError("loglikelihood_ad(ObservationBundle, …): unsupported modality set $(observation_modalities(data))"))
+    throw(ArgumentError("loglikelihood_ad(CombinedData, …): unsupported combination $(combined_modalities(data)); add a method for `CombinedData{NT} where {NT<:NamedTuple{...}}` or use a legacy monolithic data type until this combination is implemented"))
 end
 
 # Helper to get the right component

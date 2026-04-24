@@ -238,7 +238,7 @@ Joint **trace + RNA FISH histogram** payload (legacy single-struct layout).
 - `units::Vector{Int}`: Unit index per observation; empty means legacy 1:1.
 
 For a **split** representation (separate [`TraceData`](@ref) and [`RNAData`](@ref) legs
-in one container), use [`ObservationBundle`](@ref) and [`ObservationBundle(::TraceRNAData)`](@ref).
+in one container), use [`CombinedData`](@ref) and [`CombinedData(::TraceRNAData)`](@ref).
 """
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     label::String
@@ -252,6 +252,107 @@ struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
 end
 # Legacy constructor: omit units (default empty = 1:1 mapping).
 TraceRNAData(label, gene, interval, trace, nRNA, histRNA, yield) = TraceRNAData(label, gene, interval, trace, nRNA, histRNA, yield, Int[])
+
+# --- Combined experimental data (elementary legs only; one type per modality set) ---
+#
+# Elementary legs: e.g. TraceData, RNAData, RNACountData, DwellTimeData. Legacy joint products
+# (RNAOnOffData, RNADwellTimeData, TraceRNAData, …) are not valid legs; use CombinedData once split.
+# CombinedData{NT} dispatches on NamedTuple key type; constructor sorts names lexicographically.
+
+"""
+    AbstractCombinedData <: AbstractExperimentalData
+
+Supertype for experimental data formed by **combining** elementary modalities in one object
+(see [`CombinedData`](@ref)).
+"""
+abstract type AbstractCombinedData <: AbstractExperimentalData end
+
+"""
+    CombinedData{NT<:NamedTuple} <: AbstractCombinedData
+
+Single container type for **any** combination of elementary modalities. `NT` is a
+`NamedTuple` type whose **names** are the combination signature used for Julia dispatch
+(names are stored in **lexicographic** order by the constructor).
+
+# Dispatch pattern
+
+```julia
+foo(d::CombinedData{NT}) where {NT<:NamedTuple{(:rna, :trace)}} = ...
+```
+
+Use `combined_modalities(d)` for a runtime `Tuple` of symbols (same order as `d.legs`).
+
+# Construction
+
+- `CombinedData((; trace=td, rna=rna))` or `CombinedData(trace=td, rna=rna)` — keys are canonicalized.
+- [`CombinedData(::TraceRNAData)`](@ref) splits into `:rna` + `:trace` legs (tracerna on-disk shape).
+
+Legs must not be nested [`CombinedData`](@ref), [`TraceRNAData`](@ref), [`AbstractTraceHistogramData`](@ref),
+[`RNAOnOffData`](@ref), or [`RNADwellTimeData`](@ref) (use a composition of simpler histogram + trace legs when those loaders exist).
+"""
+struct CombinedData{NT<:NamedTuple} <: AbstractCombinedData
+    legs::NT
+    function CombinedData(legs::NamedTuple{names}) where {names}
+        c = _canonical_named_tuple(legs)
+        isempty(keys(c)) && throw(ArgumentError("CombinedData requires at least one non-empty leg"))
+        _assert_elementary_legs(c)
+        return new{typeof(c)}(c)
+    end
+end
+
+CombinedData(pairs::Vararg{Pair{Symbol,<:Any}}) = CombinedData(NamedTuple(pairs))
+
+@generated function _canonical_named_tuple(legs::NamedTuple{names}) where {names}
+    syms = sort(collect(names))
+    isempty(syms) && return :(NamedTuple())
+    perm = Tuple(syms)
+    getters = [:(getfield(legs, $(QuoteNode(s)))) for s in perm]
+    return :(NamedTuple{$(QuoteNode(perm))}(($(getters...),)))
+end
+
+function _assert_elementary_legs(legs::NamedTuple)
+    for (k, v) in pairs(legs)
+        _assert_elementary_leg(v, k)
+    end
+    return nothing
+end
+
+function _assert_elementary_leg(v, k::Symbol)
+    v isa AbstractCombinedData &&
+        throw(ArgumentError("CombinedData leg :$k cannot be nested AbstractCombinedData"))
+    v isa TraceRNAData &&
+        throw(ArgumentError("CombinedData leg :$k cannot be TraceRNAData; split into :rna + :trace elementary legs"))
+    v isa AbstractTraceHistogramData &&
+        throw(ArgumentError("CombinedData leg :$k cannot be AbstractTraceHistogramData (e.g. TraceRNAData)"))
+    v isa RNAOnOffData &&
+        throw(ArgumentError("CombinedData leg :$k cannot be RNAOnOffData; represent ON/OFF as separate elementary legs when that layout is supported"))
+    v isa RNADwellTimeData &&
+        throw(ArgumentError("CombinedData leg :$k cannot be RNADwellTimeData; use a composition of RNA + dwell elementary legs when that layout is supported"))
+    if !(v isa AbstractTraceData || v isa AbstractHistogramData)
+        throw(ArgumentError("CombinedData leg :$k must be AbstractTraceData or AbstractHistogramData, got $(typeof(v))"))
+    end
+    return nothing
+end
+
+"""Return modality keys of `d.legs` (canonical order)."""
+combined_modalities(d::CombinedData) = Tuple(keys(d.legs))
+
+function CombinedData(d::TraceRNAData)
+    td = TraceData(d.label, d.gene, d.interval, d.trace, d.units)
+    rna = RNAData(d.label, d.gene, d.nRNA, d.histRNA, d.yield, d.units)
+    return CombinedData((rna=rna, trace=td))
+end
+
+"""
+    reconstruct_tracerna(b::CombinedData{NT}) where {NT<:NamedTuple{(:rna, :trace)}}
+
+Rebuild [`TraceRNAData`](@ref) from `:rna` + `:trace` legs.
+"""
+function reconstruct_tracerna(b::CombinedData{NT}) where {NT<:NamedTuple{(:rna, :trace)}}
+    r = b.legs.rna
+    t = b.legs.trace
+    return TraceRNAData(t.label, t.gene, t.interval, t.trace, r.nRNA, r.histRNA, r.yield, t.units)
+end
 
 # Helper functions for yield Union type
 """
