@@ -75,14 +75,14 @@ space (same as `get_param(model)`).
 - `data`, `model`: passed through to `loglikelihood` / `logprior`
 - `steady_state_solver`: forwarded to likelihood (default `:augmented` is best for downstream use)
 - `ad_likelihood`: if `true`, uses `loglikelihood_ad` for `AbstractHistogramData` and `AbstractTraceData` (Zygote-friendly likelihood); otherwise `loglikelihood`
-- `likelihood_executor`: which AD-friendly likelihood track to use when `ad_likelihood` is true (typically [`HMM_STACK_AD`](@ref)); from [`NUTSOptions`](@ref) / [`ADVIOptions`](@ref).
+- `options`: inference options; [`CombinedData`](@ref) likelihoods receive the full struct, while legacy paths read `likelihood_executor`.
 """
-struct GenePosteriorLogDensity{D,M}
+struct GenePosteriorLogDensity{D,M,O}
     data::D
     model::M
     steady_state_solver::Symbol
     ad_likelihood::Bool
-    likelihood_executor::Symbol
+    options::O
 end
 
 function _ll_first(
@@ -91,8 +91,15 @@ function _ll_first(
     model,
     steady_state_solver::Symbol,
     ad_likelihood::Bool,
-    likelihood_executor::Symbol,
+    options::Options,
 )
+    if data isa CombinedData
+        if ad_likelihood && _default_ad_likelihood(data)
+            return loglikelihood_ad(θ, data, model, options; steady_state_solver=steady_state_solver)[1]
+        end
+        return loglikelihood(θ, data, model, options; steady_state_solver=steady_state_solver)[1]
+    end
+    likelihood_executor = options.likelihood_executor
     if ad_likelihood && _default_ad_likelihood(data)
         kwargs = (; steady_state_solver=steady_state_solver)
         if _trace_or_combined_for_hmm(data)
@@ -124,7 +131,8 @@ function logposterior(
 )
     ad = something(ad_likelihood, _default_ad_likelihood(data))
     lik_ad = something(likelihood_executor, HMM_STACK_AD)
-    return logprior(θ, model) + _ll_first(θ, data, model, steady_state_solver, ad, lik_ad)
+    options = NUTSOptions(; likelihood_executor=lik_ad)
+    return logprior(θ, model) + _ll_first(θ, data, model, steady_state_solver, ad, options)
 end
 
 function LogDensityProblems.dimension(p::GenePosteriorLogDensity)
@@ -132,7 +140,7 @@ function LogDensityProblems.dimension(p::GenePosteriorLogDensity)
 end
 
 function LogDensityProblems.logdensity(p::GenePosteriorLogDensity, θ)
-    return logprior(θ, p.model) + _ll_first(θ, p.data, p.model, p.steady_state_solver, p.ad_likelihood, p.likelihood_executor)
+    return logprior(θ, p.model) + _ll_first(θ, p.data, p.model, p.steady_state_solver, p.ad_likelihood, p.options)
 end
 
 function LogDensityProblems.capabilities(::Type{<:GenePosteriorLogDensity})
@@ -205,7 +213,7 @@ function run_nuts(
     ck_outer = coalesce(hmm_checkpoint_steps, options.gradient_checkpoint_length)
     with_hmm_zygote_checkpoint(ck_outer) do
         ad = something(ad_likelihood, _default_ad_likelihood(data))
-        ℓ = GenePosteriorLogDensity(data, model, steady_state_solver, ad, options.likelihood_executor)
+        ℓ = GenePosteriorLogDensity(data, model, steady_state_solver, ad, options)
         θ0 = Vector{Float64}(get_param(model))
         D = length(θ0)
         D == LogDensityProblems.dimension(ℓ) || throw(DimensionMismatch("parameter dimension mismatch"))
@@ -336,11 +344,11 @@ function run_advi(
     D = length(θ0)
     εs = [randn(rng, D) for _ in 1:options_eff.n_mc]
     ck_outer = coalesce(hmm_checkpoint_steps, options_eff.gradient_checkpoint_length)
-    lik_ex = options_eff.likelihood_executor
+    likelihood_options = options_eff
 
     return with_hmm_zygote_checkpoint(ck_outer) do
         neg_elbo(x::AbstractVector{T}) where {T<:Real} = _neg_elbo_internal(
-            x, εs, data, model, steady_state_solver, ad, D, options_eff.σ_floor, lik_ex,
+            x, εs, data, model, steady_state_solver, ad, D, options_eff.σ_floor, likelihood_options,
         )
 
         x0 = Vector{Float64}(undef, 2D)
@@ -370,7 +378,7 @@ function run_advi(
             # ∇(-mean_i ℓ_i - H) = -mean_i ∇ℓ_i - ∇H, so accumulate per-ε gradients separately.
             function neg_elbo_grad!(g, x)
                 _neg_elbo_grad_zygote!(
-                    g, x, εs, data, model, steady_state_solver, ad, D, options_eff.σ_floor, lik_ex,
+                    g, x, εs, data, model, steady_state_solver, ad, D, options_eff.σ_floor, likelihood_options,
                 )
                 return g
             end
@@ -395,7 +403,7 @@ function _elbo_single_lp(
     ad_likelihood::Bool,
     D::Int,
     σ_floor::Float64,
-    likelihood_executor::Symbol,
+    options::Options,
 ) where {T<:Real}
     μ = view(x, 1:D)
     s_raw = view(x, D+1:2D)
@@ -404,7 +412,7 @@ function _elbo_single_lp(
     # No try/catch here: Zygote cannot differentiate through `catch` (see ADVI + `gradient=:Zygote`).
     lp = logprior(η, model)
     isfinite(lp) || return oftype(lp, -Inf)
-    ll = _ll_first(η, data, model, steady_state_solver, ad_likelihood, likelihood_executor)
+    ll = _ll_first(η, data, model, steady_state_solver, ad_likelihood, options)
     isfinite(ll) || return oftype(lp + ll, -Inf)
     return lp + ll
 end
@@ -428,11 +436,11 @@ function _neg_elbo_internal(
     ad_likelihood::Bool,
     D::Int,
     σ_floor::Float64,
-    likelihood_executor::Symbol,
+    options::Options,
 ) where {T<:Real}
     L = zero(T)
     for ε in εs
-        L += _elbo_single_lp(x, ε, data, model, steady_state_solver, ad_likelihood, D, σ_floor, likelihood_executor)
+        L += _elbo_single_lp(x, ε, data, model, steady_state_solver, ad_likelihood, D, σ_floor, options)
     end
     L = L / length(εs)
     ent = _elbo_entropy(x, D, σ_floor)
@@ -450,7 +458,7 @@ function _neg_elbo_grad_zygote!(
     ad_likelihood::Bool,
     D::Int,
     σ_floor::Float64,
-    likelihood_executor::Symbol,
+    options::Options,
 )
     fill!(g, 0.0)
     n = length(εs)
@@ -458,7 +466,7 @@ function _neg_elbo_grad_zygote!(
     invn = 1.0 / n
     for ε in εs
         gs = Zygote.gradient(
-            x′ -> _elbo_single_lp(x′, ε, data, model, steady_state_solver, ad_likelihood, D, σ_floor, likelihood_executor),
+            x′ -> _elbo_single_lp(x′, ε, data, model, steady_state_solver, ad_likelihood, D, σ_floor, options),
             x,
         )
         gx = gs[1]
@@ -481,8 +489,15 @@ function _loglikelihood_predictions(
     model::AbstractGeneTransitionModel,
     steady_state_solver::Symbol,
     ad_likelihood::Bool,
-    likelihood_executor::Symbol,
+    options::Options,
 )
+    if data isa CombinedData
+        if ad_likelihood && _default_ad_likelihood(data)
+            return loglikelihood_ad(θ, data, model, options; steady_state_solver=steady_state_solver)
+        end
+        return loglikelihood(θ, data, model, options; steady_state_solver=steady_state_solver)
+    end
+    likelihood_executor = options.likelihood_executor
     if ad_likelihood && _default_ad_likelihood(data)
         kwargs = (; steady_state_solver=steady_state_solver)
         if _trace_or_combined_for_hmm(data)
@@ -505,16 +520,16 @@ function _nuts_samples_to_fit(
     n_adapts::Int,
     steady_state_solver::Symbol,
     ad_likelihood::Bool,
-    likelihood_executor::Symbol,
+    options::Options,
 )
     n = size(param, 2)
     n >= 1 || throw(ArgumentError("need at least one posterior sample"))
     ll = Vector{Float64}(undef, n)
-    _, logpred0 = _loglikelihood_predictions(param[:, 1], data, model, steady_state_solver, ad_likelihood, likelihood_executor)
+    _, logpred0 = _loglikelihood_predictions(param[:, 1], data, model, steady_state_solver, ad_likelihood, options)
     pwaic = (0, log.(max.(logpred0, eps(Float64))), zeros(length(logpred0)))
     lppd = fill(-Inf, length(logpred0))
     for s in 1:n
-        ll[s], logpred = _loglikelihood_predictions(param[:, s], data, model, steady_state_solver, ad_likelihood, likelihood_executor)
+        ll[s], logpred = _loglikelihood_predictions(param[:, s], data, model, steady_state_solver, ad_likelihood, options)
         lppd, pwaic = update_waic(lppd, pwaic, logpred)
     end
     pwaic = n > 1 ? pwaic[3] / (n - 1) : pwaic[3]
@@ -571,7 +586,7 @@ function run_nuts_fit(
         hmm_checkpoint_steps=hmm_checkpoint_steps,
     )
     param = Matrix{Float64}(nt.samples)
-    fits = _nuts_samples_to_fit(param, data, model, options.n_adapts, steady_state_solver, ad, options.likelihood_executor)
+    fits = _nuts_samples_to_fit(param, data, model, options.n_adapts, steady_state_solver, ad, options)
     stats = compute_stats(fits.param, model)
     rhat = vec(compute_rhat([fits]))
     ess, geweke, mcse = compute_measures(fits)
@@ -667,7 +682,7 @@ function run_advi_fit(
     )
 
     μ_matrix = reshape(vb_out.μ, :, 1)
-    fits = _nuts_samples_to_fit(μ_matrix, data, model, 0, steady_state_solver, ad, options.likelihood_executor)
+    fits = _nuts_samples_to_fit(μ_matrix, data, model, 0, steady_state_solver, ad, options)
     stats = _advi_posterior_stats(vb_out.μ, vb_out.σ, model, rng, posterior_samples)
     nparam = size(μ_matrix, 1)
     rhat = fill(NaN, nparam)

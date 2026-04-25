@@ -310,6 +310,7 @@ export
     benchmark_inference_ensure_workers,
     benchmark_inference_setup_parallel_workers,
     benchmark_inference_run_mh,
+    benchmark_combined_likelihood_stack,
     benchmark_inference_run_nuts_parallel,
     benchmark_trace_zygote_gradient,
     benchmark_trace_forwarddiff_gradient,

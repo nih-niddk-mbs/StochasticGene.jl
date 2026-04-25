@@ -324,6 +324,91 @@ function benchmark_inference_run_mh(scenario;
     return merge(summary, (fits=fits, stats=stats, measures=measures))
 end
 
+"""
+    benchmark_combined_likelihood_stack(data, model; kwargs...)
+
+Micro-benchmark the independent [`CombinedData`](@ref) likelihood stack. Returns timings for
+the primal and AD-friendly paths, plus optional legacy `TraceRNAData` parity/timing when a
+legacy payload is supplied.
+"""
+function benchmark_combined_likelihood_stack(
+    data::CombinedData,
+    model::AbstractGeneTransitionModel;
+    param=get_param(model),
+    mh_options::MHOptions=MHOptions(1, 0, 1.0, 1.0),
+    ad_options::NUTSOptions=NUTSOptions(),
+    nruns::Int=10,
+    steady_state_solver::Symbol=:augmented,
+    verbose::Bool=true,
+)
+    nruns >= 1 || throw(ArgumentError("nruns must be ≥ 1, got $nruns"))
+    loglikelihood(param, data, model, mh_options; steady_state_solver=steady_state_solver)
+    loglikelihood_ad(param, data, model, ad_options; steady_state_solver=steady_state_solver)
+    t_primal = @elapsed for _ in 1:nruns
+        loglikelihood(param, data, model, mh_options; steady_state_solver=steady_state_solver)
+    end
+    t_ad = @elapsed for _ in 1:nruns
+        loglikelihood_ad(param, data, model, ad_options; steady_state_solver=steady_state_solver)
+    end
+    result = (
+        modalities=combined_modalities(data),
+        nruns=nruns,
+        primal_sec=t_primal / nruns,
+        ad_sec=t_ad / nruns,
+        ad_over_primal=(t_ad / nruns) / (t_primal / nruns),
+    )
+    if verbose
+        println("Combined likelihood modalities=$(result.modalities)")
+        println("  primal_sec=$(round(result.primal_sec; digits=6))")
+        println("  ad_sec=$(round(result.ad_sec; digits=6))")
+        println("  ad_over_primal=$(round(result.ad_over_primal; digits=3))")
+    end
+    return result
+end
+
+function benchmark_combined_likelihood_stack(
+    data::TraceRNAData,
+    model::AbstractGRSMmodel;
+    param=get_param(model),
+    mh_options::MHOptions=MHOptions(1, 0, 1.0, 1.0),
+    ad_options::NUTSOptions=NUTSOptions(),
+    nruns::Int=10,
+    steady_state_solver::Symbol=:augmented,
+    verbose::Bool=true,
+)
+    combined = CombinedData(data)
+    base = benchmark_combined_likelihood_stack(
+        combined, model;
+        param=param,
+        mh_options=mh_options,
+        ad_options=ad_options,
+        nruns=nruns,
+        steady_state_solver=steady_state_solver,
+        verbose=false,
+    )
+    loglikelihood(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=mh_options.likelihood_executor)
+    t_legacy = @elapsed for _ in 1:nruns
+        loglikelihood(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=mh_options.likelihood_executor)
+    end
+    ll_combined, pred_combined = loglikelihood(param, combined, model, mh_options; steady_state_solver=steady_state_solver)
+    ll_legacy, pred_legacy = loglikelihood(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=mh_options.likelihood_executor)
+    result = merge(base, (
+        legacy_sec=t_legacy / nruns,
+        combined_over_legacy=base.primal_sec / (t_legacy / nruns),
+        ll_matches_legacy=isapprox(ll_combined, ll_legacy; rtol=1e-8, atol=1e-8),
+        logprediction_length_matches=length(pred_combined) == length(pred_legacy),
+    ))
+    if verbose
+        println("Combined likelihood modalities=$(result.modalities)")
+        println("  primal_sec=$(round(result.primal_sec; digits=6))")
+        println("  ad_sec=$(round(result.ad_sec; digits=6))")
+        println("  legacy_sec=$(round(result.legacy_sec; digits=6))")
+        println("  combined_over_legacy=$(round(result.combined_over_legacy; digits=3))")
+        println("  ll_matches_legacy=$(result.ll_matches_legacy), logprediction_length_matches=$(result.logprediction_length_matches)")
+    end
+    return result
+end
+
 function benchmark_inference_run_nuts_parallel(
     scenario;
     nchains::Int=4,

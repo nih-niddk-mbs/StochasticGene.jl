@@ -592,6 +592,19 @@ end
 # Trace HMMs use two parallel tracks: `HMM_STACK_MH` (default for `loglikelihood` / MCMC) vs `HMM_STACK_AD`
 # (`loglikelihood_ad` / NUTS / ADVI). Pass `hmm_stack=HMM_STACK_MH` or `HMM_STACK_AD` to `ll_hmm_trace` if needed.
 
+struct LikelihoodParts{T,V}
+    ll::T
+    logpredictions::V
+end
+
+_likelihood_parts(result) = LikelihoodParts(result[1], result[2])
+
+function _assemble_combined_likelihood(parts)
+    ll = sum(p.ll for p in parts)
+    logpredictions = reduce(vcat, (p.logpredictions for p in parts))
+    return ll, logpredictions
+end
+
 """
     loglikelihood(param, data, model)
 
@@ -737,56 +750,207 @@ function loglikelihood_ad(
     return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)
 end
 
-function loglikelihood(
+function _combined_likelihood(
     param,
-    data::CombinedData{NT},
-    model::AbstractGRSMmodel;
-    steady_state_solver::Symbol=:default,
-    hmm_stack::Symbol=HMM_STACK_MH,
-) where {NT<:NamedTuple{(:rna, :trace)}}
-    return loglikelihood(param, reconstruct_tracerna(data), model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack)
+    data::CombinedData,
+    model::AbstractGeneTransitionModel,
+    mode::Val;
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    modalities = combined_modalities(data)
+    parts = map(modalities) do modality
+        _combined_likelihood_leg(
+            Val(modality), param, getfield(data.legs, modality), model, mode;
+            steady_state_solver=steady_state_solver,
+            hmm_stack=hmm_stack,
+            hmm_checkpoint_steps=hmm_checkpoint_steps,
+        )
+    end
+    return _assemble_combined_likelihood(parts)
+end
+
+function _combined_likelihood_leg(
+    ::Val{modality},
+    param,
+    leg,
+    model::AbstractGeneTransitionModel,
+    mode::Val;
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+) where {modality}
+    throw(ArgumentError("loglikelihood(CombinedData, …): unsupported modality :$modality with leg type $(typeof(leg)); add a `_combined_likelihood_leg(::Val{:$modality}, …)` method"))
+end
+
+_combined_rates_fn(::Val{:primal}) = get_rates
+_combined_rates_fn(::Val{:ad}) = get_rates_ad
+_combined_uses_ad(::Val{:primal}) = false
+_combined_uses_ad(::Val{:ad}) = true
+
+function _combined_rna_predictions(
+    param,
+    data::AbstractRNAData,
+    model::AbstractGeneTransitionModel,
+    mode::Val;
+    steady_state_solver::Symbol,
+)
+    rates_fn = _combined_rates_fn(mode)
+    if model isa AbstractGRSMmodel && hasproperty(model.components, :mcomponents)
+        r = rates_fn(param, model)
+        nr = num_rates(model)
+        nr isa Integer || throw(ArgumentError("CombinedData :rna leg with multi-unit GRSM models is not implemented yet"))
+        nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+        p_true = predictedRNA(r[1:nr], model.components.mcomponents, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+        yield_val = get_yield_value(data.yield)
+        return yield_val < 1.0 ? make_loss_matrix(data.nRNA, nRNA_true, yield_val) * p_true : p_true[1:data.nRNA]
+    end
+    return predictedfn(param, data, model; steady_state_solver=steady_state_solver, rates_fn=rates_fn)
+end
+
+function _combined_likelihood_leg(
+    ::Val{:rna},
+    param,
+    data::AbstractRNAData,
+    model::AbstractGeneTransitionModel,
+    mode::Val;
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    if data isa RNACountData
+        return _likelihood_parts(_combined_uses_ad(mode) ?
+            loglikelihood_ad(param, data, model; steady_state_solver=steady_state_solver) :
+            loglikelihood(param, data, model; steady_state_solver=steady_state_solver))
+    end
+    predictions = _combined_rna_predictions(param, data, model, mode; steady_state_solver=steady_state_solver)
+    hist = datahistogram(data)
+    logpredictions = log.(max.(predictions, eps()))
+    return LikelihoodParts(sum(hist .* logpredictions), hist .* logpredictions)
+end
+
+function _combined_likelihood_leg(
+    ::Val{:trace},
+    param,
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel,
+    ::Val{:primal};
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _likelihood_parts(loglikelihood(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack))
+end
+
+function _combined_likelihood_leg(
+    ::Val{:trace},
+    param,
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel,
+    ::Val{:ad};
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _likelihood_parts(loglikelihood_ad(
+        param, data, model;
+        steady_state_solver=steady_state_solver,
+        hmm_stack=hmm_stack,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+    ))
+end
+
+function _combined_likelihood_leg(
+    ::Val{:dwelltime},
+    param,
+    data::DwellTimeData,
+    model::AbstractGeneTransitionModel,
+    ::Val{:primal};
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _likelihood_parts(loglikelihood(param, data, model; steady_state_solver=steady_state_solver))
+end
+
+function _combined_likelihood_leg(
+    ::Val{:dwelltime},
+    param,
+    data::DwellTimeData,
+    model::AbstractGeneTransitionModel,
+    ::Val{:ad};
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _likelihood_parts(loglikelihood_ad(param, data, model; steady_state_solver=steady_state_solver))
 end
 
 function loglikelihood(
     param,
     data::CombinedData,
-    model::AbstractGRSMmodel;
+    model::AbstractGeneTransitionModel,
+    options::Options;
+    steady_state_solver::Symbol=:default,
+)
+    return _combined_likelihood(
+        param, data, model, Val(:primal);
+        steady_state_solver=steady_state_solver,
+        hmm_stack=options.likelihood_executor,
+    )
+end
+
+function loglikelihood(
+    param,
+    data::CombinedData,
+    model::AbstractGeneTransitionModel;
     steady_state_solver::Symbol=:default,
     hmm_stack::Symbol=HMM_STACK_MH,
 )
-    throw(ArgumentError("loglikelihood(CombinedData, …): unsupported combination $(combined_modalities(data)); add a method for `CombinedData{NT} where {NT<:NamedTuple{...}}` or use a legacy monolithic data type until this combination is implemented"))
-end
-
-function loglikelihood_ad(
-    param,
-    data::CombinedData{NT},
-    model::AbstractGRSMmodel;
-    steady_state_solver::Symbol=:augmented,
-    hmm_stack::Symbol=HMM_STACK_AD,
-    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
-) where {NT<:NamedTuple{(:rna, :trace)}}
-    return loglikelihood_ad(
-        param, reconstruct_tracerna(data), model;
+    return _combined_likelihood(
+        param, data, model, Val(:primal);
         steady_state_solver=steady_state_solver,
         hmm_stack=hmm_stack,
-        hmm_checkpoint_steps=hmm_checkpoint_steps,
     )
 end
 
 function loglikelihood_ad(
     param,
     data::CombinedData,
-    model::AbstractGRSMmodel;
+    model::AbstractGeneTransitionModel,
+    options::Options;
+    steady_state_solver::Symbol=:augmented,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _combined_likelihood(
+        param, data, model, Val(:ad);
+        steady_state_solver=steady_state_solver,
+        hmm_stack=options.likelihood_executor,
+        hmm_checkpoint_steps=coalesce(hmm_checkpoint_steps, options.gradient_checkpoint_length),
+    )
+end
+
+function loglikelihood_ad(
+    param,
+    data::CombinedData,
+    model::AbstractGeneTransitionModel;
     steady_state_solver::Symbol=:augmented,
     hmm_stack::Symbol=HMM_STACK_AD,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
-    throw(ArgumentError("loglikelihood_ad(CombinedData, …): unsupported combination $(combined_modalities(data)); add a method for `CombinedData{NT} where {NT<:NamedTuple{...}}` or use a legacy monolithic data type until this combination is implemented"))
+    return _combined_likelihood(
+        param, data, model, Val(:ad);
+        steady_state_solver=steady_state_solver,
+        hmm_stack=hmm_stack,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+    )
 end
 
 # Helper to get the right component
 get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = model.components.tcomponents
-get_components(model::AbstractGRSMmodel, data::AbstractTraceData) = model.components
+get_components(model::AbstractGRSMmodel, data::AbstractTraceData) =
+    hasproperty(model.components, :tcomponents) ? model.components.tcomponents : model.components
 # (Add more as needed)
 
 function ll_hmm_trace(

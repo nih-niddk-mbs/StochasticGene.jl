@@ -39,6 +39,17 @@ end
     return loglikelihood(param, data, model)
 end
 
+@inline function _mh_loglikelihood(param, data::CombinedData, model, options::MHOptions)
+    return loglikelihood(param, data, model, options)
+end
+
+@inline function _mh_loglikelihood(param, data, model, options::MHOptions)
+    return _mh_loglikelihood(param, data, model, options.likelihood_executor)
+end
+
+@inline _mh_likelihood_options(options::Union{Nothing,MHOptions}, stack::Symbol) =
+    options === nothing ? stack : options
+
 """
 struct Stats
 
@@ -290,7 +301,7 @@ Run the Metropolis-Hastings MCMC algorithm for a given model and data.
 function metropolis_hastings(data, model, options)
     param, d = initial_proposal(model)
     stack = options.likelihood_executor
-    ll, logpredictions = _mh_loglikelihood(param, data, model, stack)
+    ll, logpredictions = _mh_loglikelihood(param, data, model, options)
     maxtime = options.maxtime
     totalsteps = options.warmupsteps + options.samplesteps
     parml = param
@@ -305,6 +316,7 @@ function metropolis_hastings(data, model, options)
             logpredictions, param, param, ll, ll, d, model.proposal, data, model,
             options.warmupsteps, options.temp, time(), maxtime * options.warmupsteps / totalsteps;
             hmm_stack=stack,
+            mh_options=options,
         )
         println("Now using adapted proposal covariance")
     elseif options.warmupsteps > 0 && skip_warmup_due_to_loaded_cov
@@ -315,6 +327,7 @@ function metropolis_hastings(data, model, options)
         logpredictions, param, parml, ll, llml, d, proposalcv, data, model,
         options.samplesteps, options.temp, time(), maxtime * options.samplesteps / totalsteps;
         hmm_stack=stack,
+        mh_options=options,
     )
     waic = compute_waic(fits.lppd, fits.pwaic, data)
     return fits, waic
@@ -360,7 +373,7 @@ When `proposalcv` is a scalar (not user-provided), the function adapts periodica
 
 This ensures proposal distributions quickly converge to optimal acceptance rates, improving MCMC efficiency especially with expensive likelihood evaluations.
 """
-function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime; hmm_stack::Symbol=HMM_STACK_MH)
+function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime; hmm_stack::Symbol=HMM_STACK_MH, mh_options::Union{Nothing,MHOptions}=nothing)
     parout = Array{Float64,2}(undef, length(param), samplesteps)
     prior = logprior(param, model)
     step = 0
@@ -375,7 +388,7 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     
     while step < samplesteps && time() - t1 < maxtime
         step += 1
-        accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp; hmm_stack=hmm_stack)
+        accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp; hmm_stack=hmm_stack, mh_options=mh_options)
         if ll > llml
             llml, parml = ll, param
         end
@@ -464,7 +477,7 @@ Run the main MCMC sampling phase, collecting samples and statistics.
 # Returns
 - `Fit`: Structure containing MCMC samples and statistics
 """
-function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime; SLAB=10000, hmm_stack::Symbol=HMM_STACK_MH)
+function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime; SLAB=10000, hmm_stack::Symbol=HMM_STACK_MH, mh_options::Union{Nothing,MHOptions}=nothing)
     llout = Array{Float64,1}(undef, SLAB)
     parout = Array{Float64,2}(undef, length(param), SLAB)
     pwaic = (0, log.(max.(logpredictions, eps(Float64))), zeros(length(logpredictions)))
@@ -475,7 +488,7 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     diag_done = false
     while step < samplesteps && time() - t1 < maxtime
         step += 1
-        accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp; hmm_stack=hmm_stack)
+        accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp; hmm_stack=hmm_stack, mh_options=mh_options)
 
         # One-time diagnostic when acceptance is near zero after first 5000 steps
         if !diag_done && step >= 5000 && accepttotal <= max(1, step ÷ 50000)
@@ -483,7 +496,7 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
             paramt_d, _ = proposal(d, proposalcv, model)
             if !instant_reject(paramt_d, model)
                 priort_d = logprior(paramt_d, model)
-                llt_d, _ = _mh_loglikelihood(paramt_d, data, model, hmm_stack)
+                llt_d, _ = _mh_loglikelihood(paramt_d, data, model, _mh_likelihood_options(mh_options, hmm_stack))
                 log_ratio_d = (llt_d + priort_d - ll - prior) / temp
                 Δ = isempty(param) ? 0.0 : maximum(abs.(paramt_d .- param))
                 @warn "Low acceptance diagnostic (step=$step, accept=$accepttotal): current ll=$ll, prior=$prior; proposed ll=$llt_d, prior=$priort_d; log_accept_ratio=$log_ratio_d; max|Δparam|=$Δ. If log_ratio is very negative or -Inf, proposals are far from posterior support (try smaller propcv or check prior/likelihood)."
@@ -575,7 +588,7 @@ returns 1,logpredictionst,paramt,llt,priort,dt if accept
 
 ll is log-likelihood (NOT negative log-likelihood)
 """
-function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp; hmm_stack::Symbol=HMM_STACK_MH)
+function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp; hmm_stack::Symbol=HMM_STACK_MH, mh_options::Union{Nothing,MHOptions}=nothing)
     paramt, dt = proposal(d, proposalcv, model)
     if instant_reject(paramt, model)
         return 0, logpredictions, param, ll, prior, d
@@ -584,7 +597,7 @@ function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, te
 
     local llt, logpredictionst
     try
-        llt, logpredictionst = _mh_loglikelihood(paramt, data, model, hmm_stack)
+        llt, logpredictionst = _mh_loglikelihood(paramt, data, model, _mh_likelihood_options(mh_options, hmm_stack))
     catch err
         @debug "Rejecting proposal after likelihood evaluation failed" exception=(err, catch_backtrace())
         return 0, logpredictions, param, ll, prior, d

@@ -27,7 +27,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `cell::String=""`: cell type for halflives and allele numbers
 - `coupling=tuple()`: if nonempty, a 2- or 3-tuple: `(unit_model, connections::Vector{ConnectionSpec}[, sign_modes])`. Each connection is `(β, s, α, t) = (source unit, source state, target unit, target transition)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. For **three units** with a **hidden latent** third unit (G=3, fully connected G-only dynamics) modulating observed units 1–2 from hidden states **1** and **3**, use `make_coupling_hidden_latent(t1, t2)` or `make_coupling_hidden_latent("H3#t1-t2")` and `transitions_hidden_g3_all_pairs()` for unit 3; see docs *Units and models — hidden latent unit*. Empty `connections` is valid (uncoupled T is still built). Optional third element `sign_modes` constrains the sign of each coupling parameter γ: use a single `Symbol` for all connections, or a vector/tuple of one per connection. Canonical symbols: `:free` (γ ∈ (-1, ∞)), `:activate` (γ ∈ (0, ∞)), `:inhibit` (γ ∈ (-1, 0)). Aliases `:positive` and `:negative` are normalized to `:activate` and `:inhibit`. See `coupling_ranges`.
 - `datacol=3`: column of data to use, default is 3 for rna data
-- `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
+- `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid". A tuple/vector such as `(:rna, :trace)` requests a [`CombinedData`](@ref) payload; modality order is ignored and canonicalized.
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
 - `datapath=""`: path to data file or folder or array of files or folders
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
@@ -318,7 +318,7 @@ function fit(; key=nothing, kwargs...)
     yieldfactor = merged[:yieldfactor]
     trace_specs = merged[:trace_specs]
     dwell_specs = merged[:dwell_specs]
-    label = create_label(label, datatype, datacond, cell)
+    label = create_label(label, datatype_label(datatype), datacond, cell)
     run_spec[:label] = label
     if rinit === nothing && key !== nothing && key != ""
         rr = folder_path(resultfolder, root, "results")
@@ -347,7 +347,7 @@ end
 Positional entry point that **`readrates`** from `resultfolder`, then calls the `fit(rinit, nchains, …)` overload with the same arguments. Trailing **`kwargs`** are forwarded to that inner call (inference / sampler options per `_MAKE_STRUCTURES_OPTION_KW`, and optional migration keywords **`traceinfo`** / **`dttype`** consumed there).
 
 """
-function fit(nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
+function fit(nchains::Int, datatype, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
     fit(readrates(folder_path(resultfolder, root, "results"), label, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, datapath, gene, cell, datacond, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
@@ -359,7 +359,7 @@ end
 Builds **`data`**, **`model`**, and **`options`** via [`make_structures`](@ref), then runs `fit(nchains, data, model, options, …)`. Trailing **`kwargs`**: keys in `_MAKE_STRUCTURES_OPTION_KW` become inference/sampler options; **`traceinfo`** / **`dttype`** (if present) are accepted for backward compatibility and passed as legacy dwell/trace inputs to [`make_structures`](@ref).
 
 """
-function fit(rinit, nchains::Int, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
+function fit(rinit, nchains::Int, datatype, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     println(now())
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     kwp = Dict{Symbol,Any}(pairs(kwargs))
@@ -510,6 +510,37 @@ const SUPPORTED_DATATYPES = Set([
     :dwelltime, :trace, :tracerna, :tracejoint, :tracegrid
 ])
 
+const COMBINED_MODALITIES = Set([
+    :rna, :trace, :dwelltime, :grid
+])
+
+_datatype_symbol(x::Symbol) = x
+_datatype_symbol(x::AbstractString) = Symbol(lowercase(strip(x)))
+
+function _normalize_modalities(xs)
+    raw = collect(xs)
+    isempty(raw) && throw(ArgumentError("combined datatype requires at least one modality"))
+    modalities = [_datatype_symbol(x) for x in raw]
+    invalid = [m for m in modalities if !(m in COMBINED_MODALITIES)]
+    isempty(invalid) || throw(ArgumentError("Unsupported combined data modalities $(repr(invalid)); supported modalities are $(join(sort(collect(COMBINED_MODALITIES)), ", "))"))
+    length(unique(modalities)) == length(modalities) ||
+        throw(ArgumentError("combined datatype contains duplicate modalities: $(repr(Tuple(modalities)))"))
+    return Tuple(sort(modalities))
+end
+
+is_combined_datatype(datatype) = normalize_datatype(datatype) isa Tuple
+datatype_label(datatype) = string(normalize_datatype(datatype))
+datatype_label(datatype::Union{Tuple,AbstractVector}) = join(string.(normalize_datatype(datatype)), "-")
+
+function legacy_datatype_context(datatype)
+    dt = normalize_datatype(datatype)
+    dt isa Symbol && return string(dt)
+    dt == (:rna, :trace) && return "tracerna"
+    dt == (:dwelltime, :rna) && return "rnadwelltime"
+    length(dt) == 1 && return string(only(dt))
+    throw(ArgumentError("No legacy model-building context is defined for combined datatype $(repr(dt))"))
+end
+
 """
     normalize_datatype(datatype::Symbol) -> Symbol
 
@@ -548,6 +579,9 @@ Normalize and validate a user-supplied or internal data type string.
 function normalize_datatype(datatype::AbstractString)
     return normalize_datatype(Symbol(lowercase(datatype)))
 end
+
+normalize_datatype(datatype::Tuple) = _normalize_modalities(datatype)
+normalize_datatype(datatype::AbstractVector) = _normalize_modalities(datatype)
 
 """
     get_transitions(G::Tuple, transition_hint)
@@ -979,7 +1013,7 @@ Create and configure data, model, and options structures for fitting.
 - Loads proposal covariance via [`get_propcv`](@ref) after fittedparam is determined, enabling validation against actual model parameters
 - Optional trailing `kwargs...` (filtered to inference / sampler option keys; see `_MAKE_STRUCTURES_OPTION_KW` in the source) are merged into the run dict before [`load_options`](@ref) (e.g. `inference_method=:nuts`, `parallel=:distributed`, `gradient=:finite`).
 """
-function make_structures(rinit, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; legacy_traceinfo=nothing, legacy_dttype=nothing, kwargs...)
+function make_structures(rinit, datatype, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; legacy_traceinfo=nothing, legacy_dttype=nothing, kwargs...)
     gene = check_genename(gene, "[")
     insertstep = normalize_insertstep(R, insertstep)
     S = reset_S(S, R, insertstep)
@@ -990,19 +1024,20 @@ function make_structures(rinit, datatype::String, datapath, gene, cell, datacond
     nalleles = reset_nalleles(nalleles, coupling)
     results_dir = folder_path(resultfolder, root, "results")
     datapath = folder_path(datapath, root, "data")
-    dttype = _coalesce_dttype(legacy_dttype, dwell_specs, datatype)
-    traceinfo = _coalesce_traceinfo(legacy_traceinfo, trace_specs, datatype)
+    datatype_context = legacy_datatype_context(datatype)
+    dttype = _coalesce_dttype(legacy_dttype, dwell_specs, datatype_context)
+    traceinfo = _coalesce_traceinfo(legacy_traceinfo, trace_specs, datatype_context)
     trace_specs_work = trace_specs
     # Coupled tracejoint: empty trace_specs leaves TraceData.units unset in load_data_trace; fill from
     # coalesced traceinfo + zeromedian so HMM masking matches observed units (see default_trace_specs_for_coupled).
-    if normalize_datatype(datatype) == :tracejoint && isempty(dwell_specs) && isempty(trace_specs_work) && !isempty(coupling)
+    if normalize_datatype(datatype_context) == :tracejoint && isempty(dwell_specs) && isempty(trace_specs_work) && !isempty(coupling)
         trace_specs_work = default_trace_specs_for_coupled(traceinfo, zeromedian, n_observed_trace_units(coupling))
     end
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs_work, dwell_specs)
     decayrate = set_decayrate(decayrate, gene, cell, root)
-    priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype; priorcv=priorcv)
+    priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype_context; priorcv=priorcv)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
-    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    fittedparam = set_fittedparam(fittedparam, datatype_context, transitions, R, S, insertstep, noisepriors, coupling, grid)
     propcv = get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
     run = if _current_run_spec[] === nothing
@@ -1689,6 +1724,38 @@ const TRACE_DATATYPES = Set([
     :trace, :tracegrid, :tracejoint, :tracerna
 ])
 
+function _combined_datapath(datapath::NamedTuple, modality::Symbol, modalities)
+    haskey(datapath, modality) ||
+        throw(ArgumentError("datapath NamedTuple for combined datatype $(repr(modalities)) is missing :$modality"))
+    return getfield(datapath, modality)
+end
+
+function _combined_datapath(datapath, modality::Symbol, modalities)
+    if modalities == (:rna, :trace)
+        modality === :trace && return datapath isa AbstractString ? datapath : datapath[1]
+        modality === :rna && return datapath isa AbstractString ? datapath : datapath[2]
+    elseif modalities == (:dwelltime, :rna)
+        modality === :rna && return datapath[1]
+        modality === :dwelltime && return datapath[2:end]
+    elseif length(modalities) == 1
+        return datapath
+    elseif datapath isa Union{Tuple,AbstractVector} && length(datapath) == length(modalities)
+        i = findfirst(==(modality), modalities)
+        return datapath[i]
+    end
+    throw(ArgumentError("datapath for combined datatype $(repr(modalities)) must be a NamedTuple keyed by modality, or a supported legacy layout"))
+end
+
+function load_combined_data(modalities::Tuple, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+    legs = map(modalities) do modality
+        leg_datatype = modality === :trace ? :trace : modality
+        leg_path = _combined_datapath(datapath, modality, modalities)
+        leg = load_data(leg_datatype, dttype, leg_path, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs)
+        modality => leg
+    end
+    return CombinedData(legs...)
+end
+
 """
     load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
 
@@ -1720,6 +1787,9 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 """
 function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     dt = normalize_datatype(datatype)
+    if dt isa Tuple
+        return load_combined_data(dt, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs)
+    end
     # Units for non-trace data types come from dwell_specs; for trace types they come from trace_specs.
     units = get_units(dwell_specs, trace_specs)
 
@@ -2276,6 +2346,13 @@ function make_reporter_components(data::AbstractTraceHistogramData, transitions,
     return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
 end
 
+function make_reporter_components(data::CombinedData{NT}, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full) where {NT<:NamedTuple{(:rna, :trace)}}
+    reporter, tcomponents = make_reporter_components(data.legs.trace, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
+    nRNA_size = get_nRNA_true(data.legs.rna.yield, data.legs.rna.nRNA)
+    mcomponents = MComponents(transitions, G, R, nRNA_size, decayrate, splicetype, ejectnumber)
+    return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
+end
+
 """
     make_grid(transitions, R::Int, S, insertstep, noisepriors, grid)
 
@@ -2670,9 +2747,10 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         onstates = full_onstates
     end
     insertstep = normalize_insertstep(R, insertstep)
+    has_trace_leg = data isa AbstractTraceData || (data isa CombinedData && :trace in combined_modalities(data))
     reporter, components = if data isa DwellTimeData
         make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dwell_specs=dwell_specs, coupled_stack=coupled_stack)
-    elseif data isa AbstractTraceData
+    elseif has_trace_leg
         make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
     else
         make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
@@ -2707,7 +2785,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
 
     if CBool && GBool && HBool
         if R == 0
-            if typeof(data) <: AbstractTraceData
+            if has_trace_leg
                 # For trace data with R=0, still use GRSMmodel but with simplified components
                 return GRSMmodel{Nothing,typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(nothing, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
             else

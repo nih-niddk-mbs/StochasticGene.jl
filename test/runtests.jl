@@ -124,10 +124,65 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         b2 = StochasticGene.CombinedData((trace=td, rna=rna))
         @test StochasticGene.combined_modalities(b2) == (:rna, :trace)
         @test typeof(b) === typeof(b2)
+        @test StochasticGene.normalize_datatype((:trace, :rna)) == (:rna, :trace)
+        @test StochasticGene.normalize_datatype(["trace", "rna"]) == (:rna, :trace)
+        @test_throws ArgumentError StochasticGene.normalize_datatype((:rna, :rna))
         d2 = StochasticGene.reconstruct_tracerna(b)
         @test d2.label == d.label && d2.gene == d.gene && d2.interval == d.interval
         @test d2.nRNA == d.nRNA && d2.histRNA == d.histRNA && d2.yield == d.yield
         @test d2.trace == d.trace && d2.units == d.units
+    end
+
+    @testset "CombinedData independent likelihood assembly" begin
+        coupling = tuple()
+        transitions = ([1, 2], [2, 1])
+        G = 2
+        R = 2
+        S = 1
+        insertstep = 1
+        rtarget = Float64[
+            0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0.0, 0.05, 1.0, 0.05,
+        ]
+        interval = 1.0
+        trace = StochasticGene.simulate_trace_vector(
+            rtarget, transitions, G, R, S, insertstep, interval, 4.0, 1,
+        )
+        nRNA = 8
+        h = fill(1 / nRNA, nRNA)
+        data = StochasticGene.TraceRNAData(
+            "tracerna", "test", interval, (trace, 0.0, 0.0, 4, 1.0),
+            nRNA, h, 1.0, Int[],
+        )
+        priormean = StochasticGene.set_priormean(
+            [], transitions, R, S, insertstep, 1.0, [0.0, 0.1, 1.0, 0.1],
+            StochasticGene.mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing,
+        )
+        model = StochasticGene.load_model(
+            data, rtarget, priormean, Int[1], tuple(), transitions, G, R, S, insertstep,
+            "", 1, 10.0, Int[], rtarget[StochasticGene.num_rates(transitions, R, S, insertstep)],
+            0.2, StochasticGene.prob_Gaussian, [0.0, 0.1, 1.0, 0.1],
+            StochasticGene.Tsit5(), tuple(), coupling, nothing,
+        )
+        θ = StochasticGene.get_param(model)
+        combined = StochasticGene.CombinedData(data)
+        opts = StochasticGene.MHOptions(1, 0, 1.0, 1.0)
+
+        ll, pred = StochasticGene.loglikelihood(θ, combined, model, opts; steady_state_solver=:augmented)
+        ll_rna, pred_rna = StochasticGene.loglikelihood(θ, StochasticGene.CombinedData((rna=combined.legs.rna,)), model, opts; steady_state_solver=:augmented)
+        ll_trace, pred_trace = StochasticGene.loglikelihood(θ, StochasticGene.CombinedData((trace=combined.legs.trace,)), model, opts; steady_state_solver=:augmented)
+        @test ll ≈ ll_rna + ll_trace
+        @test pred ≈ vcat(pred_rna, pred_trace)
+
+        ll_legacy, pred_legacy = StochasticGene.loglikelihood(θ, data, model; steady_state_solver=:augmented, hmm_stack=opts.likelihood_executor)
+        @test ll ≈ ll_legacy
+        @test pred ≈ pred_legacy
+
+        ad_opts = StochasticGene.NUTSOptions(n_samples=1, n_adapts=1)
+        ll_ad, pred_ad = StochasticGene.loglikelihood_ad(θ, combined, model, ad_opts; steady_state_solver=:augmented)
+        ll_rna_ad, pred_rna_ad = StochasticGene.loglikelihood_ad(θ, StochasticGene.CombinedData((rna=combined.legs.rna,)), model, ad_opts; steady_state_solver=:augmented)
+        ll_trace_ad, pred_trace_ad = StochasticGene.loglikelihood_ad(θ, StochasticGene.CombinedData((trace=combined.legs.trace,)), model, ad_opts; steady_state_solver=:augmented)
+        @test ll_ad ≈ ll_rna_ad + ll_trace_ad
+        @test pred_ad ≈ vcat(pred_rna_ad, pred_trace_ad)
     end
 
     @testset "inference benchmark (smoke)" begin
