@@ -668,14 +668,10 @@ Return a tuple of decay rates, using the provided values or looking them up if n
 - Used for multi-unit models requiring different decay rates
 """
 function set_decayrate(decayrate::Tuple, gene, cell, root)
-    for i in eachindex(decayrate)
-        if typeof(gene) < Tuple
-            decayrate[i] = set_decayrate(decayrate[i], gene[i], cell, root)
-        else
-            decayrate[i] = set_decayrate(decayrate[i], gene, cell, root)
-        end
+    return ntuple(length(decayrate)) do i
+        decay_gene = gene isa Union{Tuple,AbstractVector} ? gene[i] : gene
+        set_decayrate(decayrate[i], decay_gene, cell, root)
     end
-    return decayrate
 end
 
 """

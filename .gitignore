@@ -5,3 +5,4 @@ scripts/
 
 # local fit/analysis outputs (not part of package)
 results/
+test/fullstack/results/

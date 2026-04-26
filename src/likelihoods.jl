@@ -102,6 +102,7 @@ This function normalizes the RNA histogram data and returns it as one vector. It
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
 datapdf(data::RNAOnOffData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 datapdf(data::AbstractTraceHistogramData) = normalize_histogram(data.histRNA)
+datapdf(data::DwellTimeData) = reduce(vcat, normalize_histogram.(data.DwellTimes))
 
 function datapdf(data::AbstractRNAData{Array{Array,1}})
     v = normalize_histogram(data.histRNA[1])
