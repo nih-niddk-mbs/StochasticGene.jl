@@ -1038,7 +1038,8 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype_context; priorcv=priorcv)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype_context, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    propcv = get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions)
+    proposal_key = _current_name_override[] === nothing ? nothing : _current_name_override[]
+    propcv = get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions; name_override=proposal_key)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
     run = if _current_run_spec[] === nothing
         Dict{Symbol,Any}()
@@ -4181,17 +4182,23 @@ Load or generate proposal coefficient of variation for MCMC sampling.
 - If metadata mismatch, falls back to `abs(propcv)` and prints diagnostic message
 - Scales covariance by `2.38^2 / n_parameters` for optimal MCMC acceptance rate (~23.4% for high-dimensional)
 """
-function get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, fittedparam, Gtransitions)
+function get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, fittedparam, Gtransitions; name_override=nothing)
     if propcv < 0.0
-        # Construct path to proposal covariance file
-        # Strip extension from param-stats path and use proposal-cov.jld2 instead
+        proposal_cov_files = String[]
+        # Prefer the key-based covariance written by fit(; key=...) / writeall(name_override=...).
+        if name_override !== nothing
+            name = string(name_override)
+            name = occursin(r"\.(csv|txt)$", name) ? name : filename(name)
+            push!(proposal_cov_files, joinpath(results_dir, replace("proposal-cov" * name, r"\.(csv|txt)$" => ".jld2")))
+        end
         param_stats_file = get_resultfile("param-stats", results_dir, label, gene, G, R, S, insertstep, nalleles)
-        proposal_cov_file = replace(param_stats_file, "param-stats" => "proposal-cov", r"\.(csv|txt)$" => ".jld2")
-        
-        # Try to load proposal covariance matrix if file exists
-        if isfile(proposal_cov_file)
+        generated_cov_file = replace(param_stats_file, "param-stats" => "proposal-cov", r"\.(csv|txt)$" => ".jld2")
+        generated_cov_file ∉ proposal_cov_files && push!(proposal_cov_files, generated_cov_file)
+
+        for proposal_cov_file in proposal_cov_files
+            isfile(proposal_cov_file) || (println("No proposal covariance file found at: ", proposal_cov_file); continue)
             try
-                jldopen(proposal_cov_file, "r") do f
+                cv = jldopen(proposal_cov_file, "r") do f
                     # Validate metadata matches current parameters
                     if f["metadata/fittedparam"] != fittedparam ||
                        f["metadata/G"] != G ||
@@ -4200,9 +4207,8 @@ function get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalle
                        f["metadata/insertstep"] != insertstep ||
                        f["metadata/Gtransitions"] != Gtransitions ||
                        f["metadata/nalleles"] != nalleles
-                        @debug "Proposal covariance has different model parameters. Starting fresh."
-                        println("Using propcv = ", abs(propcv))
-                        return abs(propcv)
+                        println("Proposal covariance metadata mismatch for ", basename(proposal_cov_file), "; trying next candidate.")
+                        return nothing
                     end
                     
                     covparam = f["covparam"]
@@ -4214,21 +4220,17 @@ function get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalle
                         flush(stdout)
                         return (scaled_cov, abs(propcv))
                     else
-                        @warn "Scaled covariance not positive definite, using default proposal"
-                        println("Using propcv = ", abs(propcv))
-                        return abs(propcv)
+                        @warn "Scaled covariance from $(basename(proposal_cov_file)) is not positive definite; trying next candidate."
+                        return nothing
                     end
                 end
+                cv === nothing || return cv
             catch e
                 @warn "Failed to load proposal covariance from $proposal_cov_file: $e"
-                println("Using propcv = ", abs(propcv))
-                return abs(propcv)
             end
-        else
-            @debug "No proposal covariance file found at: $proposal_cov_file"
-            println("Using propcv = ", abs(propcv))
-            return abs(propcv)
         end
+        println("Using propcv = ", abs(propcv))
+        return abs(propcv)
     else
         println("Using propcv = ", propcv)
         return propcv
