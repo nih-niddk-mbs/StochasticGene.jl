@@ -2174,7 +2174,8 @@ Create DataFrame from trace data for coupled models (Tuple parameters).
   `Reporters` columns (when present) show the rest of the decoded T-state.
 """
 function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling, observed_units=nothing; joint_states=nothing)
-    observed_units = isnothing(observed_units) ? [k for k in coupling[1] if R[k] > 0] : collect(Int, observed_units)
+    model_units = isempty(coupling) ? collect(eachindex(G)) : collect(coupling[1])
+    observed_units = isnothing(observed_units) ? [k for k in model_units if R[k] > 0] : collect(Int, observed_units)
     joint_states = isnothing(joint_states) ? ts : joint_states
     l = maximum(size.(traces, 1))
     cols = Matrix(undef, length(traces), 0)
@@ -2194,10 +2195,10 @@ function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, ins
     end
     if state
         has_joint_indices = !isempty(joint_states) && !isempty(joint_states[1]) && (joint_states[1][1] isa Integer)
-        hidden_units = [k for k in coupling[1] if !(k in observed_units)]
+        hidden_units = [k for k in model_units if !(k in observed_units)]
         for k in hidden_units
             if has_joint_indices
-                dec_per_trace = [[inverse_state(idx, G, R, S, insertstep, coupling[1], any)[k] for idx in t] for t in joint_states]
+                dec_per_trace = [[inverse_state(idx, G, R, S, insertstep, model_units, any)[k] for idx in t] for t in joint_states]
                 g_hidden = [[d[1] for d in dec] for dec in dec_per_trace]
                 gs_hidden = ["Gstate$k" * "_$i" => [g_hidden[i]; fill(missing, l - length(g_hidden[i]))] for i in eachindex(g_hidden)]
                 cols = hcat(cols, gs_hidden)
@@ -2348,8 +2349,13 @@ function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, 
     end
     ts_joint, d = predict_trace(get_param(model), data, model)
     states, observations = make_observation_dist(d, ts_joint, G, R, S, coupling)
-    observed_units = !isempty(data.units) ? data.units : [k for k in coupling[1] if R[k] > 0]
-    make_traces_dataframe(states, observations, data.trace[1], G, R, S, insertstep, state, coupling, observed_units; joint_states=ts_joint)
+    model_units = G isa Tuple ? (isempty(coupling) ? collect(eachindex(G)) : collect(coupling[1])) : Int[1]
+    observed_units = !isempty(data.units) ? data.units : [k for k in model_units if (R isa Tuple ? R[k] : R) > 0]
+    if G isa Tuple
+        make_traces_dataframe(states, observations, data.trace[1], G, R, S, insertstep, state, coupling, observed_units; joint_states=ts_joint)
+    else
+        make_traces_dataframe(states, observations, data.trace[1], G, R, S, insertstep, state, coupling)
+    end
 end
 
 function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false, datacol=3)
@@ -2391,29 +2397,35 @@ function write_traces(folder::String, datapath::String, interval::Float64, ratet
 end
 
 """
-    write_traces_key(folder; ratetype="median", state=true, splicetype="", grid=nothing)
+    write_traces_key(folder; ratetype="median", state=true, splicetype="", grid=nothing, root=".")
 
-New front-end for predicted trace generation. Walks `folder` for `info_*.jld2` files,
-loads each run_spec directly (exact Julia types), and calls the back-end
-`write_trace_dataframe` with all parameters taken from the stored spec.
-No filename parsing, no user-supplied model parameters required.
+Key-based front-end for predicted trace generation. Walks `folder` for `info_*.jld2`
+files, loads each run_spec directly (exact Julia types), and adapts the stored
+spec to the same `write_trace_dataframe` business end used by the legacy trace
+writer.
+
+`root` is the runtime project root for analysis, not the root stored in the fit
+run spec. Data paths are resolved under `joinpath(root, "data")`, while
+`folder` is the results folder to walk.
 """
 function write_traces_key(folder::String;
         ratetype::String="median",
         state::Bool=true,
         splicetype::String="",
         grid=nothing,
+        root::String=".",
         datapath=nothing,
         datacond=nothing,
         datacol=nothing,
         zeromedian=nothing,
         interval=nothing)
     jobs = Tuple{String,String,String}[]
-    for (root, _, files) in walkdir(folder)
+    results_dir = folder_path(folder, root, "results")
+    for (result_root, _, files) in walkdir(results_dir)
         for f in files
             if occursin("info", f) && endswith(f, ".jld2")
                 key = get_key(f)
-                push!(jobs, (joinpath(root, f), joinpath(root, "rates_" * key * ".txt"), joinpath(root, "predictedtraces_" * key * ".csv")))
+                push!(jobs, (joinpath(result_root, f), joinpath(result_root, "rates_" * key * ".txt"), joinpath(result_root, "predictedtraces_" * key * ".csv")))
             end
         end
     end
@@ -2422,7 +2434,6 @@ function write_traces_key(folder::String;
         info     = read_run_spec(info_path)
         r        = readrates(ratefile, get_row(ratetype))
         trace_specs = get(info, :trace_specs, [])
-        dwell_specs = get(info, :dwell_specs, [])
         ti_legacy = get(info, :traceinfo, nothing)
         dt, start, stop = if !isempty(trace_specs)
             s1 = trace_specs[1]
@@ -2436,17 +2447,34 @@ function write_traces_key(folder::String;
         else
             isnothing(interval) ? 1.0 : Float64(interval), 1.0, -1.0
         end
-        dp       = isnothing(datapath)   ? info[:datapath]   : datapath
+        raw_dp   = isnothing(datapath)   ? info[:datapath]   : datapath
+        dp       = _data_folder_path(raw_dp, root)
         dc       = isnothing(datacond)   ? info[:datacond]   : datacond
         col      = isnothing(datacol)    ? info[:datacol]    : datacol
         zm       = isnothing(zeromedian) ? info[:zeromedian] : zeromedian
-        datatype = String(get(info, :datatype, "trace"))
-        dttype = get(info, :dttype, String[])
-        temprna = Float64(get(info, :temprna, 1.0))
-        data = load_data(datatype, dttype, dp, "", "", dc, (dt, start, stop, 1.0, 0.0), temprna, col, zm, 1.0, trace_specs, dwell_specs)
         sp = splicetype == "" ? get(info, :splicetype, "") : splicetype
-        df = make_traces_dataframe_key(data, r, info; state=state, splicetype=sp, grid=grid)
-        CSV.write(outfile, df)
+        G = info[:G]
+        coupling = get(info, :coupling, tuple())
+        probfn_raw = get(info, :probfn, prob_Gaussian)
+        noisepriors = get(info, :noisepriors, 4)
+        probfn_eff, noise_eff = if !isempty(coupling) && G isa Tuple
+            probfn_raw isa Tuple ? probfn_raw : ntuple(_ -> probfn_raw, length(G)),
+            noisepriors
+        else
+            probfn_raw isa Tuple ? first(probfn_raw) : probfn_raw,
+            noisepriors isa Tuple ? (isempty(noisepriors) ? Float64[] : first(noisepriors)) : noisepriors
+        end
+        grid_eff = isnothing(grid) ? get(info, :grid, nothing) : grid
+        write_trace_dataframe(
+            outfile, dp, dc, dt, r, info[:transitions], G, info[:R], info[:S],
+            info[:insertstep], start, stop, probfn_eff, noise_eff, sp;
+            state=state,
+            hierarchical=!isempty(get(info, :hierarchical, ())),
+            coupling=coupling,
+            grid=grid_eff,
+            zeromedian=zm,
+            datacol=col,
+        )
     end
 end
 
