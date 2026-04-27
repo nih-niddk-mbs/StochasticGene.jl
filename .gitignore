@@ -1,4 +1,5 @@
 src/macros.jl
+.DS_Store
 
 # optional local scripts (not part of package)
 scripts/
