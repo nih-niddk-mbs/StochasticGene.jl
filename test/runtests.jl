@@ -144,9 +144,9 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0.0, 0.05, 1.0, 0.05,
         ]
         interval = 1.0
-        trace = StochasticGene.simulate_trace_vector(
-            rtarget, transitions, G, R, S, insertstep, interval, 4.0, 1,
-        )
+        # Fixed trace keeps this assembly test deterministic; short stochastic
+        # simulations can occasionally produce empty traces.
+        trace = [Float64[0.2, 1.1, 0.9, 0.3]]
         nRNA = 8
         h = fill(1 / nRNA, nRNA)
         data = StochasticGene.TraceRNAData(
