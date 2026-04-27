@@ -2279,6 +2279,19 @@ filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(data, model::GRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 
+function _combined_field(data::CombinedData, field::Symbol)
+    vals = [getfield(getfield(data.legs, modality), field) for modality in combined_modalities(data)]
+    unique_vals = unique(vals)
+    return length(unique_vals) == 1 ? first(unique_vals) : join(string.(unique_vals), "+")
+end
+
+_combined_label(data::CombinedData) = _combined_field(data, :label)
+_combined_gene(data::CombinedData) = _combined_field(data, :gene)
+
+filename(data::CombinedData, model::AbstractGRSMmodel) = filename(_combined_label(data), _combined_gene(data), model.G, model.R, model.S, model.insertstep, model.nalleles)
+filename(data::CombinedData, model::AbstractGMmodel) = filename(_combined_label(data), _combined_gene(data), model.G, model.nalleles)
+filename(data::CombinedData, model::GRSMmodel) = filename(_combined_label(data), _combined_gene(data), model.G, model.R, model.S, model.insertstep, model.nalleles)
+
 """
     filename(key::String)
 

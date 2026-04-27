@@ -131,6 +131,24 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test d2.label == d.label && d2.gene == d.gene && d2.interval == d.interval
         @test d2.nRNA == d.nRNA && d2.histRNA == d.histRNA && d2.yield == d.yield
         @test d2.trace == d.trace && d2.units == d.units
+
+        mktempdir() do root
+            mkpath(joinpath(root, "data", "rna"))
+            mkpath(joinpath(root, "data", "dwelltime"))
+            touch(joinpath(root, "data", "dwelltime", "on.csv"))
+            touch(joinpath(root, "data", "dwelltime", "off.csv"))
+            raw = (
+                rna = "rna",
+                dwelltime = ["dwelltime/on.csv", "dwelltime/off.csv"],
+            )
+            resolved = StochasticGene._data_folder_path(raw, root)
+            @test resolved.rna == joinpath(root, "data", "rna")
+            @test resolved.dwelltime == [
+                joinpath(root, "data", "dwelltime", "on.csv"),
+                joinpath(root, "data", "dwelltime", "off.csv"),
+            ]
+            @test raw.dwelltime == ["dwelltime/on.csv", "dwelltime/off.csv"]
+        end
     end
 
     @testset "CombinedData RNA+dwell reporter components" begin
@@ -140,7 +158,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         bins = [collect(0.1:0.1:2.0) for _ in 1:4]
         dwell = [ones(length(bins[1])) for _ in 1:4]
         dwell_data = StochasticGene.DwellTimeData("test", "test", bins, dwell, ["ON", "OFF", "ONG", "OFFG"])
-        rna_data = StochasticGene.RNAData("test", "test", 20, ones(21), 1.0, Int[])
+        rna_data = StochasticGene.RNAData("test", "test", 20, ones(20), 1.0, Int[])
         combined = StochasticGene.CombinedData((rna=rna_data, dwelltime=dwell_data))
 
         reporter, components = StochasticGene.make_reporter_components(
@@ -150,6 +168,22 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.combined_modalities(combined) == (:dwelltime, :rna)
         @test reporter !== nothing
         @test components isa StochasticGene.MTComponents
+
+        r = [0.038, 0.3, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.00231]
+        rmean = StochasticGene.prior_ratemean(
+            transitions, R, S, insertstep, r[end], Float64[],
+            StochasticGene.mean_elongationtime(r, transitions, R),
+        )
+        model = StochasticGene.load_model(
+            combined, r, rmean, collect(1:length(r)-1), tuple(), transitions, G, R, S,
+            insertstep, "", 2, 10.0, onstates, r[end], 0.05, StochasticGene.prob_Gaussian,
+            Float64[], StochasticGene.Tsit5(), tuple(), tuple(), nothing,
+        )
+        θ = StochasticGene.get_param(model)
+        ll, pred = StochasticGene.loglikelihood(θ, combined, model, StochasticGene.MHOptions(1, 0, 1.0, 1.0))
+        @test isfinite(ll)
+        @test length(pred) == length(StochasticGene.datapdf(combined))
+        @test StochasticGene.filename(combined, model) == "_test_test_3221_2.txt"
     end
 
     @testset "CombinedData independent likelihood assembly" begin

@@ -964,11 +964,15 @@ end
 
 function _data_folder_path(datapath::NamedTuple, root::String)
     names = keys(datapath)
-    values = map(v -> _data_folder_path(v, root), values(datapath))
-    return NamedTuple{names}(values)
+    vals = map(v -> _data_folder_path(v, root), Base.values(datapath))
+    return NamedTuple{names}(vals)
 end
 
 function _data_folder_path(datapath::Tuple, root::String)
+    return map(v -> _data_folder_path(v, root), datapath)
+end
+
+function _data_folder_path(datapath::AbstractVector, root::String)
     return map(v -> _data_folder_path(v, root), datapath)
 end
 

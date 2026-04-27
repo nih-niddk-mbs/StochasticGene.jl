@@ -73,6 +73,10 @@ function datahistogram(data::DwellTimeData)
     return v
 end
 
+function datahistogram(data::CombinedData)
+    return reduce(vcat, (datahistogram(getfield(data.legs, modality)) for modality in combined_modalities(data)))
+end
+
 
 """
     datapdf(data)
@@ -103,6 +107,7 @@ datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.hist
 datapdf(data::RNAOnOffData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 datapdf(data::AbstractTraceHistogramData) = normalize_histogram(data.histRNA)
 datapdf(data::DwellTimeData) = reduce(vcat, normalize_histogram.(data.DwellTimes))
+datapdf(data::CombinedData) = reduce(vcat, (datapdf(getfield(data.legs, modality)) for modality in combined_modalities(data)))
 
 function datapdf(data::AbstractRNAData{Array{Array,1}})
     v = normalize_histogram(data.histRNA[1])
@@ -1282,6 +1287,10 @@ end
 function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:default)
     M = make_mat_M(components.mcomponents, r)
     [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
+end
+
+function predictedarray(r, components::MTComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default)
+    predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)
 end
 
 function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt; steady_state_solver::Symbol=:default)
