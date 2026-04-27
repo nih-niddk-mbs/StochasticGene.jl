@@ -13,6 +13,65 @@ include(joinpath(@__DIR__, "generate_data.jl"))
 
 const FULLSTACK_RESULTFOLDER = "results"
 
+function _fullstack_unit(gene::AbstractString)
+    unit = findfirst(==(gene), FULLSTACK_GENES)
+    unit === nothing && throw(ArgumentError("unknown full-stack gene $(repr(gene))"))
+    return unit
+end
+
+function _fullstack_truth(case::Symbol; gene::AbstractString=FULLSTACK_GENES[1])
+    if case === :rna || case === :rnacount || case === :dwelltime
+        unit = _fullstack_unit(gene)
+        return COUPLED_UNIT_RNA_RATES[unit][1:2]
+    elseif case === :trace
+        return COUPLED_RATES[1:2]
+    elseif case === :tracejoint
+        return COUPLED_RATES[19:19]
+    else
+        throw(ArgumentError("no full-stack truth registered for case $(repr(case))"))
+    end
+end
+
+function _rate_recovery_summary(fit_output, truth)
+    _, stats, _, _, _, _ = fit_output
+    estimate = vec(stats.medparam[:, 1])
+    truthv = Float64.(collect(truth))
+    n = min(length(estimate), length(truthv))
+    n == 0 && return (estimate=estimate, truth=truthv, error=Float64[], relative_error=Float64[], max_abs_error=NaN, max_relative_error=NaN)
+    err = estimate[1:n] .- truthv[1:n]
+    rel = abs.(err) ./ max.(abs.(truthv[1:n]), eps(Float64))
+    return (
+        estimate=estimate[1:n],
+        truth=truthv[1:n],
+        error=err,
+        relative_error=rel,
+        max_abs_error=maximum(abs.(err)),
+        max_relative_error=maximum(rel),
+    )
+end
+
+function print_rate_recovery(case::Symbol, fit_output; gene::AbstractString=FULLSTACK_GENES[1], tolerance::Real=0.5)
+    truth = _fullstack_truth(case; gene=gene)
+    summary = _rate_recovery_summary(fit_output, truth)
+    println("Full-stack rate recovery for ", case, ":")
+    println("  truth: ", summary.truth)
+    println("  median estimate: ", summary.estimate)
+    println("  abs error: ", abs.(summary.error))
+    println("  relative error: ", summary.relative_error)
+    println("  max relative error: ", summary.max_relative_error)
+    if isfinite(summary.max_relative_error) && summary.max_relative_error > tolerance
+        @warn "Full-stack fitted rates are outside recovery tolerance" case=case tolerance=tolerance max_relative_error=summary.max_relative_error
+    end
+    return summary
+end
+
+function _fullstack_label(base::AbstractString, label_suffix)
+    label_suffix === nothing && return base
+    suffix = replace(string(label_suffix), r"[^A-Za-z0-9_.-]+" => "-")
+    isempty(suffix) && return base
+    return string(base, "-", suffix)
+end
+
 function _fullstack_common_kwargs(; resultfolder::AbstractString=FULLSTACK_RESULTFOLDER)
     return (
         root=DEFAULT_ROOT,
@@ -108,18 +167,23 @@ end
 
 Run a small full-stack fit against `data/rna/<gene>_COND.txt`.
 """
-function fit_fullstack_rna(; gene::AbstractString=FULLSTACK_GENES[1], kwargs...)
+function fit_fullstack_rna(;
+    gene::AbstractString=FULLSTACK_GENES[1],
+    resultfolder::AbstractString=FULLSTACK_RESULTFOLDER,
+    label_suffix=nothing,
+    kwargs...,
+)
     unit = findfirst(==(gene), FULLSTACK_GENES)
     unit === nothing && throw(ArgumentError("unknown full-stack gene $(repr(gene))"))
     return StochasticGene.fit(;
-        _fullstack_common_kwargs()...,
+        _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _rna_model_kwargs(unit)...,
         datatype="rna",
         datapath="rna",
         gene=gene,
         datacond=FULLSTACK_COND,
-        label="fullstack-rna-$(gene)",
+        label=_fullstack_label("fullstack-rna-$(gene)", label_suffix),
     )
 end
 
@@ -128,18 +192,23 @@ end
 
 Run a small full-stack fit against `data/rnacount/<gene>_COND.txt`.
 """
-function fit_fullstack_rnacount(; gene::AbstractString=FULLSTACK_GENES[1], kwargs...)
+function fit_fullstack_rnacount(;
+    gene::AbstractString=FULLSTACK_GENES[1],
+    resultfolder::AbstractString=FULLSTACK_RESULTFOLDER,
+    label_suffix=nothing,
+    kwargs...,
+)
     unit = findfirst(==(gene), FULLSTACK_GENES)
     unit === nothing && throw(ArgumentError("unknown full-stack gene $(repr(gene))"))
     return StochasticGene.fit(;
-        _fullstack_common_kwargs()...,
+        _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _rna_model_kwargs(unit)...,
         datatype="rnacount",
         datapath="rnacount",
         gene=gene,
         datacond=FULLSTACK_COND,
-        label="fullstack-rnacount-$(gene)",
+        label=_fullstack_label("fullstack-rnacount-$(gene)", label_suffix),
     )
 end
 
@@ -148,10 +217,15 @@ end
 
 Run a small full-stack fit against one gene from the shared `data/trace` folder.
 """
-function fit_fullstack_trace(; gene::AbstractString=FULLSTACK_GENES[1], kwargs...)
+function fit_fullstack_trace(;
+    gene::AbstractString=FULLSTACK_GENES[1],
+    resultfolder::AbstractString=FULLSTACK_RESULTFOLDER,
+    label_suffix=nothing,
+    kwargs...,
+)
     gene in FULLSTACK_GENES || throw(ArgumentError("unknown full-stack gene $(repr(gene))"))
     return StochasticGene.fit(;
-        _fullstack_common_kwargs()...,
+        _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _trace_model_kwargs()...,
         datatype="trace",
@@ -160,7 +234,7 @@ function fit_fullstack_trace(; gene::AbstractString=FULLSTACK_GENES[1], kwargs..
         datacond="$(gene)_$(FULLSTACK_COND)",
         traceinfo=(1.0, 1, -1, 1.0, 0.0),
         datacol=3,
-        label="fullstack-trace-$(gene)",
+        label=_fullstack_label("fullstack-trace-$(gene)", label_suffix),
     )
 end
 
@@ -169,9 +243,13 @@ end
 
 Run a small coupled full-stack fit against paired traces from the shared `data/trace` folder.
 """
-function fit_fullstack_tracejoint(; kwargs...)
+function fit_fullstack_tracejoint(;
+    resultfolder::AbstractString=FULLSTACK_RESULTFOLDER,
+    label_suffix=nothing,
+    kwargs...,
+)
     return StochasticGene.fit(;
-        _fullstack_common_kwargs()...,
+        _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _tracejoint_model_kwargs()...,
         datatype="tracejoint",
@@ -180,7 +258,7 @@ function fit_fullstack_tracejoint(; kwargs...)
         datacond=FULLSTACK_TRACEJOINT_CONDS,
         traceinfo=(1.0, 1, -1, [1.0, 1.0], [0.0, 0.0]),
         datacol=3,
-        label="fullstack-tracejoint",
+        label=_fullstack_label("fullstack-tracejoint", label_suffix),
     )
 end
 
@@ -189,11 +267,16 @@ end
 
 Run a small full-stack fit against one dwell-time histogram file.
 """
-function fit_fullstack_dwelltime(; gene::AbstractString=FULLSTACK_GENES[1], kwargs...)
+function fit_fullstack_dwelltime(;
+    gene::AbstractString=FULLSTACK_GENES[1],
+    resultfolder::AbstractString=FULLSTACK_RESULTFOLDER,
+    label_suffix=nothing,
+    kwargs...,
+)
     unit = findfirst(==(gene), FULLSTACK_GENES)
     unit === nothing && throw(ArgumentError("unknown full-stack gene $(repr(gene))"))
     return StochasticGene.fit(;
-        _fullstack_common_kwargs()...,
+        _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _rna_model_kwargs(unit)...,
         datatype="dwelltime",
@@ -202,7 +285,7 @@ function fit_fullstack_dwelltime(; gene::AbstractString=FULLSTACK_GENES[1], kwar
         datacond=FULLSTACK_COND,
         dttype=["OFF"],
         onstates=[Int[]],
-        label="fullstack-dwelltime-$(gene)",
+        label=_fullstack_label("fullstack-dwelltime-$(gene)", label_suffix),
     )
 end
 
@@ -214,12 +297,107 @@ const FULLSTACK_FIT_CASES = (
     dwelltime=fit_fullstack_dwelltime,
 )
 
-function _selected_cases(selection)
-    selection === nothing && return keys(FULLSTACK_FIT_CASES)
-    names = Symbol.(split(String(selection), ","))
-    unknown = [name for name in names if !haskey(FULLSTACK_FIT_CASES, name)]
-    isempty(unknown) || throw(ArgumentError("unknown full-stack fit cases: $(join(unknown, ", "))"))
+const FULLSTACK_INFERENCE_SPECS = (
+    mh_fast=(
+        inference_method=:mh,
+        gradient=:none,
+        likelihood_executor=:fast,
+    ),
+    nuts_forwarddiff=(
+        inference_method=:nuts,
+        gradient=:ForwardDiff,
+        likelihood_executor=:zygote,
+        nuts_progress=true,
+        nuts_verbose=true,
+    ),
+    nuts_finite=(
+        inference_method=:nuts,
+        gradient=:finite,
+        likelihood_executor=:zygote,
+        nuts_progress=true,
+        nuts_verbose=true,
+    ),
+    nuts_zygote=(
+        inference_method=:nuts,
+        gradient=:Zygote,
+        likelihood_executor=:zygote,
+        nuts_progress=true,
+        nuts_verbose=true,
+    ),
+    advi_zygote=(
+        inference_method=:advi,
+        gradient=:Zygote,
+        likelihood_executor=:zygote,
+        advi_verbose=true,
+        n_mc=4,
+    ),
+    advi_forwarddiff=(
+        inference_method=:advi,
+        gradient=:ForwardDiff,
+        likelihood_executor=:zygote,
+        advi_verbose=true,
+        n_mc=4,
+    ),
+    advi_finite=(
+        inference_method=:advi,
+        gradient=:finite,
+        likelihood_executor=:zygote,
+        advi_verbose=true,
+        n_mc=4,
+    ),
+    advi_zygote_trace=(
+        inference_method=:advi,
+        gradient=:Zygote,
+        likelihood_executor=:zygote,
+        zygote_trace=true,
+        gradient_checkpoint_length=25,
+        advi_verbose=true,
+        n_mc=1,
+    ),
+)
+
+const FULLSTACK_DEFAULT_INFERENCE_MATRIX = (
+    (:rna, :nuts_forwarddiff),
+    (:rna, :advi_zygote),
+    (:rna, :advi_forwarddiff),
+    (:trace, :nuts_forwarddiff),
+    (:trace, :nuts_finite),
+)
+
+const FULLSTACK_INFERENCE_SMOKE_DEFAULTS = (
+    samplesteps=300,
+    warmupsteps=150,
+    maxiter=150,
+    n_mc=4,
+    maxtime=300.0,
+)
+
+function _selected_names(selection, table, kind::AbstractString)
+    selection === nothing && return keys(table)
+    names = if selection isa Symbol
+        (selection,)
+    elseif selection isa AbstractString
+        Tuple(Symbol.(strip.(split(selection, ","))))
+    elseif selection isa AbstractVector || selection isa Tuple
+        Tuple(Symbol.(selection))
+    else
+        throw(ArgumentError("unsupported $(kind) selection $(repr(selection))"))
+    end
+    unknown = [name for name in names if !haskey(table, name)]
+    isempty(unknown) || throw(ArgumentError("unknown full-stack $(kind): $(join(unknown, ", "))"))
     return names
+end
+
+_selected_cases(selection) = _selected_names(selection, FULLSTACK_FIT_CASES, "fit cases")
+_selected_inference_specs(selection) = _selected_names(selection, FULLSTACK_INFERENCE_SPECS, "inference specs")
+
+function _selected_inference_pairs(cases, specs)
+    if cases === nothing && specs === nothing
+        return FULLSTACK_DEFAULT_INFERENCE_MATRIX
+    end
+    selected_cases = Tuple(_selected_cases(cases === nothing ? "rna,trace" : cases))
+    selected_specs = Tuple(_selected_inference_specs(specs))
+    return Tuple((case, spec) for spec in selected_specs for case in selected_cases)
 end
 
 """
@@ -235,13 +413,57 @@ function run_fullstack_fits!(; cases=nothing, regenerate::Bool=true, kwargs...)
     for case in _selected_cases(cases)
         println("Running full-stack fit case: ", case)
         outputs[case] = FULLSTACK_FIT_CASES[case](; kwargs...)
+        print_rate_recovery(case, outputs[case])
     end
     println("Full-stack results written to: ", joinpath(DEFAULT_ROOT, FULLSTACK_RESULTFOLDER))
+    return outputs
+end
+
+"""
+    run_fullstack_inference_matrix!(; cases=nothing, specs=nothing, regenerate=true, kwargs...)
+
+Run selected full-stack cases across named inference/gradient specs. With no
+`cases` or `specs`, runs an expected-recovery matrix. When either is supplied,
+runs the Cartesian product of selected cases/specs, including experimental
+ADVI-trace combinations.
+"""
+function run_fullstack_inference_matrix!(;
+    cases=nothing,
+    specs=nothing,
+    regenerate::Bool=true,
+    resultfolder::AbstractString=joinpath(FULLSTACK_RESULTFOLDER, "inference-matrix"),
+    kwargs...,
+)
+    regenerate && generate_fullstack_data!()
+    outputs = Dict{Tuple{Symbol,Symbol},Any}()
+    selected_pairs = _selected_inference_pairs(cases, specs)
+    println("Full-stack inference matrix pairs: ", join(["$(case):$(spec)" for (case, spec) in selected_pairs], ", "))
+    println("Smoke defaults: ", FULLSTACK_INFERENCE_SMOKE_DEFAULTS)
+    for (case, spec_name) in selected_pairs
+        spec_kwargs = FULLSTACK_INFERENCE_SPECS[spec_name]
+        spec_folder = joinpath(resultfolder, string(spec_name))
+        println("Running full-stack inference spec: ", spec_name, ", case: ", case)
+        outputs[(spec_name, case)] = FULLSTACK_FIT_CASES[case](;
+            FULLSTACK_INFERENCE_SMOKE_DEFAULTS...,
+            spec_kwargs...,
+            kwargs...,
+            resultfolder=spec_folder,
+            label_suffix=spec_name,
+        )
+        print_rate_recovery(case, outputs[(spec_name, case)])
+    end
+    println("Full-stack inference matrix results written to: ", joinpath(DEFAULT_ROOT, resultfolder))
     return outputs
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     cases_env = get(ENV, "SG_FULLSTACK_CASES", "")
     cases = isempty(cases_env) ? nothing : cases_env
-    run_fullstack_fits!(; cases=cases)
+    specs_env = get(ENV, "SG_FULLSTACK_INFERENCE_SPECS", "")
+    specs = isempty(specs_env) ? nothing : specs_env
+    if haskey(ENV, "SG_FULLSTACK_INFERENCE_MATRIX")
+        run_fullstack_inference_matrix!(; cases=cases, specs=specs)
+    else
+        run_fullstack_fits!(; cases=cases)
+    end
 end

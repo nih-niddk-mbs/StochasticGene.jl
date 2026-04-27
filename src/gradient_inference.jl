@@ -312,7 +312,8 @@ function run_advi(
     options.n_mc >= 1 || throw(ArgumentError("ADVIOptions.n_mc must be ≥ 1, got $(options.n_mc)"))
     options.maxiter >= 1 || throw(ArgumentError("ADVIOptions.maxiter must be ≥ 1, got $(options.maxiter)"))
 
-    options_eff = if !zygote_trace && _trace_or_combined_for_hmm(data) && options.gradient === :Zygote
+    used_trace_gradient_fallback = !zygote_trace && _trace_or_combined_for_hmm(data) && options.gradient === :Zygote
+    options_eff = if used_trace_gradient_fallback
         @info "ADVI: using finite-difference gradients for trace data (Zygote through long HMM likelihoods is not supported; set `zygote_trace=true` to try)."
         ADVIOptions(;
             maxiter=options.maxiter,
@@ -322,6 +323,7 @@ function run_advi(
             verbose=options.verbose,
             gradient=:finite,
             time_limit=options.time_limit,
+            zygote_trace=options.zygote_trace,
             device=options.device,
             parallel=options.parallel,
             likelihood_executor=options.likelihood_executor,
@@ -390,7 +392,16 @@ function run_advi(
         μ = xmin[1:D]
         s_raw = xmin[D+1:2D]
         σ = _softplus.(s_raw) .+ options_eff.σ_floor
-        return (μ=μ, σ=σ, optimization=result, initial_θ=θ0)
+        return (
+            μ=μ,
+            σ=σ,
+            optimization=result,
+            initial_θ=θ0,
+            requested_gradient=options.gradient,
+            effective_gradient=options_eff.gradient,
+            zygote_trace=zygote_trace,
+            trace_gradient_fallback=used_trace_gradient_fallback,
+        )
     end
 end
 
@@ -702,6 +713,10 @@ function run_advi_fit(
         initial_θ=vb_out.initial_θ,
         vb_elbo=vb_elbo,
         posterior_samples=posterior_samples,
+        requested_gradient=vb_out.requested_gradient,
+        effective_gradient=vb_out.effective_gradient,
+        zygote_trace=vb_out.zygote_trace,
+        trace_gradient_fallback=vb_out.trace_gradient_fallback,
     )
     
     return fits, stats, measures, advi_info

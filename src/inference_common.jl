@@ -126,7 +126,7 @@ function _run_advi_inference(data, model, options::ADVIOptions, rng, nchains::In
     elseif nchains > 1 && options.parallel === :distributed
         @info "Running ADVI inference with Distributed parallelism ($(nchains) repeats)."
         chain_rows = Distributed.pmap(1:nchains) do _
-            run_advi_fit(data, model, options; rng=Random.default_rng())
+            run_advi_fit(data, model, options; rng=Random.default_rng(), zygote_trace=options.zygote_trace)
         end
         return _merge_advi_chains(data, model, chain_rows)
     elseif nchains > 1 && options.parallel === :threaded
@@ -137,18 +137,18 @@ function _run_advi_inference(data, model, options::ADVIOptions, rng, nchains::In
         chain_rows = Vector{Any}(undef, nchains)
         Threads.@threads for i in 1:nchains
             s = seeds[i]
-            chain_rows[i] = run_advi_fit(data, model, options; rng=Random.Xoshiro(s[1], s[2], s[3], s[4]))
+            chain_rows[i] = run_advi_fit(data, model, options; rng=Random.Xoshiro(s[1], s[2], s[3], s[4]), zygote_trace=options.zygote_trace)
         end
         return _merge_advi_chains(data, model, chain_rows)
     elseif nchains > 1
         @info "Running ADVI inference serially ($(nchains) repeats); set options.parallel=:threaded or :distributed for parallel runs."
         chain_rows = Vector{Any}(undef, nchains)
         for i in 1:nchains
-            chain_rows[i] = run_advi_fit(data, model, options; rng=Random.Xoshiro(rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64)))
+            chain_rows[i] = run_advi_fit(data, model, options; rng=Random.Xoshiro(rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64)), zygote_trace=options.zygote_trace)
         end
         return _merge_advi_chains(data, model, chain_rows)
     else
-        fits, stats, measures, _ = run_advi_fit(data, model, options; rng=rng)
+        fits, stats, measures, _ = run_advi_fit(data, model, options; rng=rng, zygote_trace=options.zygote_trace)
         return fits, stats, measures
     end
 end

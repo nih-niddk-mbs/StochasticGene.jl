@@ -387,7 +387,18 @@ end
 """
 function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
     print_ll(data, model)
-    fits, stats, measures = run_inference(data, model, options; rng=Random.default_rng(), nchains=nchains)
+    inference_info = nothing
+    if options isa ADVIOptions && nchains == 1
+        fits, stats, measures, inference_info = run_advi_fit(
+            data,
+            model,
+            options;
+            rng=Random.default_rng(),
+            zygote_trace=options.zygote_trace,
+        )
+    else
+        fits, stats, measures = run_inference(data, model, options; rng=Random.default_rng(), nchains=nchains)
+    end
     optimized = 0
     if optimize
         try
@@ -401,7 +412,7 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
     else
         bs = 0
     end
-    finalize(data, model, fits, stats, measures, _inference_temp(options), resultfolder, optimized, bs, writesamples)
+    finalize(data, model, fits, stats, measures, _inference_temp(options), resultfolder, optimized, bs, writesamples; inference_info=inference_info)
     println(now())
     # get_rates(stats.medparam, model, false)
     return fits, stats, measures, data, model, options
@@ -1198,6 +1209,7 @@ function load_options(run0::AbstractDict)
         time_limit = let t = get(run, :time_limit, get(run, :advi_time_limit, nothing))
             t === nothing ? nothing : Float64(t)
         end
+        zygote_trace = Bool(get(run, :zygote_trace, false))
         g = if gradient === nothing
             :Zygote
         elseif gradient === :forward
@@ -1223,6 +1235,7 @@ function load_options(run0::AbstractDict)
             verbose=verbose_advi,
             gradient=g,
             time_limit=time_limit,
+            zygote_trace=zygote_trace,
             device=device,
             parallel=parallel,
             likelihood_executor=lik_advi,
@@ -4116,7 +4129,7 @@ function print_inference_options_info(options::ADVIOptions)
     println("inference: mean-field ADVI (Optim LBFGS)")
     println("  maxiter: ", options.maxiter, ", n_mc: ", options.n_mc, ", σ_floor: ", options.σ_floor, ", gradient: ", options.gradient,
         ", time_limit: ", options.time_limit === nothing ? "none" : options.time_limit)
-    println("  verbose: ", options.verbose, ", device: ", options.device, ", parallel: ", options.parallel,
+    println("  verbose: ", options.verbose, ", zygote_trace: ", options.zygote_trace, ", device: ", options.device, ", parallel: ", options.parallel,
         ", likelihood_executor: ", options.likelihood_executor,
         ", gradient_checkpoint_length: ", options.gradient_checkpoint_length === nothing ? "default" : options.gradient_checkpoint_length)
     return nothing
@@ -4129,7 +4142,7 @@ end
 
 Write out run results and print final loglikelihood and deviance. When invoked from the top-level `fit(; key=..., ...)`, writes info_<stem>.toml for reproducibility (run_spec/name_override are taken from internal refs).
 """
-function finalize(data, model, fits, stats, measures, temp, writefolder, optimized, burst, writesamples)
+function finalize(data, model, fits, stats, measures, temp, writefolder, optimized, burst, writesamples; inference_info=nothing)
     run_spec = _current_run_spec[]
     name_override = _current_name_override[]
     println("final max ll: ", fits.llml)
@@ -4151,7 +4164,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
         println("Optimized ML: ", Optim.minimum(optimized))
         println("Optimized rates: ", exp.(Optim.minimizer(optimized)))
     end
-    writeall(writefolder, fits, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples, name_override=name_override, run_spec=run_spec)
+    writeall(writefolder, fits, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples, name_override=name_override, run_spec=run_spec, inference_info=inference_info)
 end
 
 """

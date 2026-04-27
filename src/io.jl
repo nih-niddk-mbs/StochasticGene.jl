@@ -2629,7 +2629,7 @@ Write all model fitting results to files.
 - If `name_override` is set (e.g. from `fit(; key=\"id\", ...)`), use that suffix for all files (rates_id.txt, info_id.toml).
 - Always writes info_<stem>.toml with [output], [model_info], [environment]; if `run_spec` is set, also includes [run].
 """
-function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false, name_override=nothing, run_spec=nothing)
+function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false, name_override=nothing, run_spec=nothing, inference_info=nothing)
     if !isdir(path)
         mkpath(path)
     end
@@ -2637,6 +2637,9 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     labels = rlabels(model)
     write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp, data, model)
+    if inference_info !== nothing
+        write_advi_measures(joinpath(path, "advi-measures" * name), fits, stats, measures, deviance(fits, data, model), data, model, labels, inference_info, run_spec)
+    end
     write_param_stats(joinpath(path, "param-stats" * name), stats, model, labels)
     proposal_cov_file = joinpath(path, replace("proposal-cov" * name, r"\.(csv|txt)$" => ".jld2"))
     save_proposal_covariance(proposal_cov_file, stats.covparam, model, name)
@@ -2654,6 +2657,98 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
     end
     write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec)
+end
+
+function _run_spec_get(run_spec, key::Symbol, default=nothing)
+    run_spec === nothing && return default
+    if run_spec isa AbstractDict
+        haskey(run_spec, key) && return run_spec[key]
+        sk = string(key)
+        haskey(run_spec, sk) && return run_spec[sk]
+        return default
+    end
+    return key in propertynames(run_spec) ? getproperty(run_spec, key) : default
+end
+
+function _optim_get(f, opt, default=nothing)
+    try
+        return f(opt)
+    catch
+        return default
+    end
+end
+
+function _fitted_rate_labels(labels, model)
+    try
+        return vec(String.(labels[1:1, model.fittedparam]))
+    catch
+        return ["param_$i" for i in eachindex(model.fittedparam)]
+    end
+end
+
+"""
+    write_advi_measures(file, fits, stats, measures, dev, data, model, labels, advi_info, run_spec)
+
+Write ADVI-specific diagnostics as labeled CSV rows. This intentionally avoids
+MCMC-only diagnostics such as R-hat/ESS as primary measures.
+"""
+function write_advi_measures(file::String, fits::Fit, stats::Stats, measures::Measures, dev, data, model, labels, advi_info, run_spec)
+    f = open(file, "w")
+    try
+        opt = advi_info.optimization
+        μ = vec(advi_info.μ)
+        σ = vec(advi_info.σ)
+        n_obs = if is_histogram_compatible(data)
+            Int(sum(datahistogram(data)))
+        elseif typeof(data) <: RNACountData
+            length(data.countsRNA)
+        elseif typeof(data) <: AbstractTraceData
+            length(data.trace[1])
+        else
+            1
+        end
+        normalized_ll = fits.llml / n_obs
+        writedlm(f, ["metric" "value"], ',')
+        writedlm(f, ["inference_method" "advi"], ',')
+        requested_gradient = hasproperty(advi_info, :requested_gradient) ? advi_info.requested_gradient : _run_spec_get(run_spec, :gradient, "")
+        effective_gradient = hasproperty(advi_info, :effective_gradient) ? advi_info.effective_gradient : requested_gradient
+        zygote_trace = hasproperty(advi_info, :zygote_trace) ? advi_info.zygote_trace : _run_spec_get(run_spec, :zygote_trace, false)
+        trace_gradient_fallback = hasproperty(advi_info, :trace_gradient_fallback) ? advi_info.trace_gradient_fallback : false
+        writedlm(f, ["requested_gradient" string(requested_gradient)], ',')
+        writedlm(f, ["effective_gradient" string(effective_gradient)], ',')
+        writedlm(f, ["likelihood_executor" string(_run_spec_get(run_spec, :likelihood_executor, ""))], ',')
+        writedlm(f, ["zygote_trace" string(zygote_trace)], ',')
+        writedlm(f, ["trace_gradient_fallback" string(trace_gradient_fallback)], ',')
+        writedlm(f, ["maxiter" string(_run_spec_get(run_spec, :maxiter, _run_spec_get(run_spec, :samplesteps, "")))], ',')
+        writedlm(f, ["n_mc" string(_run_spec_get(run_spec, :n_mc, _run_spec_get(run_spec, :advi_n_mc, "")))], ',')
+        writedlm(f, ["gradient_checkpoint_length" string(_run_spec_get(run_spec, :gradient_checkpoint_length, ""))], ',')
+        writedlm(f, ["ll_at_variational_mean" fits.llml], ',')
+        writedlm(f, ["normalized_ll_at_variational_mean" normalized_ll], ',')
+        writedlm(f, ["deviance" dev], ',')
+        writedlm(f, ["waic" measures.waic[1]], ',')
+        writedlm(f, ["waic_se" measures.waic[2]], ',')
+        writedlm(f, ["aic" aic(fits)], ',')
+        writedlm(f, ["vb_elbo" advi_info.vb_elbo], ',')
+        writedlm(f, ["neg_elbo_minimum" _optim_get(Optim.minimum, opt, NaN)], ',')
+        writedlm(f, ["optimizer_converged" string(_optim_get(Optim.converged, opt, missing))], ',')
+        writedlm(f, ["optimizer_iterations" string(_optim_get(Optim.iterations, opt, missing))], ',')
+        writedlm(f, ["optimizer_f_calls" string(_optim_get(Optim.f_calls, opt, missing))], ',')
+        writedlm(f, ["optimizer_g_calls" string(_optim_get(Optim.g_calls, opt, missing))], ',')
+        writedlm(f, ["posterior_samples_for_stats" advi_info.posterior_samples], ',')
+        writedlm(f, [], ',')
+        writedlm(f, ["parameter" "mu_transformed" "sigma_transformed" "median_rate" "mean_rate"], ',')
+        rate_labels = _fitted_rate_labels(labels, model)
+        median_rates = vec(get_rates(stats.medparam, model, false))[model.fittedparam]
+        mean_rates = vec(get_rates(stats.meanparam, model, false))[model.fittedparam]
+        for i in eachindex(μ)
+            label = i <= length(rate_labels) ? rate_labels[i] : "param_$i"
+            med = i <= length(median_rates) ? median_rates[i] : NaN
+            mean = i <= length(mean_rates) ? mean_rates[i] : NaN
+            writedlm(f, [label μ[i] σ[i] med mean], ',')
+        end
+    finally
+        close(f)
+    end
 end
 
 """

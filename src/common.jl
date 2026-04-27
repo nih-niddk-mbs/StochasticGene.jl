@@ -802,6 +802,7 @@ struct ADVIOptions <: Options
     verbose::Bool
     gradient::Symbol
     time_limit::Union{Nothing,Float64}
+    zygote_trace::Bool
     device::Symbol  # :cpu, :gpu
     parallel::Symbol  # :single, :threaded, :distributed
     likelihood_executor::Symbol
@@ -810,6 +811,7 @@ end
 
 function ADVIOptions(;
     maxiter=500, n_mc=8, σ_floor=1e-4, init_s_raw=-4.0, verbose=false, gradient=:Zygote, time_limit=nothing,
+    zygote_trace::Bool=false,
     device::Symbol=:cpu, parallel::Symbol=:single,
     likelihood_executor::Symbol=HMM_STACK_AD,
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
@@ -817,7 +819,7 @@ function ADVIOptions(;
     gck = gradient_checkpoint_length === nothing ? nothing : Int(gradient_checkpoint_length)
     ADVIOptions(
         Int(maxiter), Int(n_mc), Float64(σ_floor), Float64(init_s_raw), verbose, gradient,
-        time_limit === nothing ? nothing : Float64(time_limit), device, parallel,
+        time_limit === nothing ? nothing : Float64(time_limit), zygote_trace, device, parallel,
         likelihood_executor, gck,
     )
 end
