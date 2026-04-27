@@ -962,6 +962,20 @@ function _coalesce_dttype(legacy_dttype, dwell_specs, datatype)
     return String[]
 end
 
+function _data_folder_path(datapath::NamedTuple, root::String)
+    names = keys(datapath)
+    values = map(v -> _data_folder_path(v, root), values(datapath))
+    return NamedTuple{names}(values)
+end
+
+function _data_folder_path(datapath::Tuple, root::String)
+    return map(v -> _data_folder_path(v, root), datapath)
+end
+
+function _data_folder_path(datapath, root::String)
+    return folder_path(datapath, root, "data")
+end
+
 """
     make_structures(rinit, datatype::String, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, ...; trace_specs=[], dwell_specs=[], legacy_traceinfo=nothing, legacy_dttype=nothing)
 
@@ -1030,7 +1044,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     end
     nalleles = reset_nalleles(nalleles, coupling)
     results_dir = folder_path(resultfolder, root, "results")
-    datapath = folder_path(datapath, root, "data")
+    datapath = _data_folder_path(datapath, root)
     datatype_context = legacy_datatype_context(datatype)
     dttype = _coalesce_dttype(legacy_dttype, dwell_specs, datatype_context)
     traceinfo = _coalesce_traceinfo(legacy_traceinfo, trace_specs, datatype_context)
@@ -2358,6 +2372,15 @@ end
 
 function make_reporter_components(data::CombinedData{NT}, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full) where {NT<:NamedTuple{(:rna, :trace)}}
     reporter, tcomponents = make_reporter_components(data.legs.trace, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
+    nRNA_size = get_nRNA_true(data.legs.rna.yield, data.legs.rna.nRNA)
+    mcomponents = MComponents(transitions, G, R, nRNA_size, decayrate, splicetype, ejectnumber)
+    return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
+end
+
+function make_reporter_components(data::CombinedData{NT}, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full) where {NT<:NamedTuple{(:dwelltime, :rna)}}
+    # `coupled_stack` is accepted for API symmetry; RNA+dwell reporter assembly
+    # follows the legacy RNADwellTimeData component structure.
+    reporter, tcomponents = make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates, data.legs.dwelltime.DTtypes, coupling)
     nRNA_size = get_nRNA_true(data.legs.rna.yield, data.legs.rna.nRNA)
     mcomponents = MComponents(transitions, G, R, nRNA_size, decayrate, splicetype, ejectnumber)
     return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)

@@ -133,6 +133,25 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test d2.trace == d.trace && d2.units == d.units
     end
 
+    @testset "CombinedData RNA+dwell reporter components" begin
+        transitions = ([1, 2], [2, 1], [2, 3], [3, 2])
+        G, R, S, insertstep = 3, 2, 2, 1
+        onstates = [Int[], Int[], [2, 3], [2, 3]]
+        bins = [collect(0.1:0.1:2.0) for _ in 1:4]
+        dwell = [ones(length(bins[1])) for _ in 1:4]
+        dwell_data = StochasticGene.DwellTimeData("test", "test", bins, dwell, ["ON", "OFF", "ONG", "OFFG"])
+        rna_data = StochasticGene.RNAData("test", "test", 20, ones(21), 1.0, Int[])
+        combined = StochasticGene.CombinedData((rna=rna_data, dwelltime=dwell_data))
+
+        reporter, components = StochasticGene.make_reporter_components(
+            combined, transitions, G, R, S, insertstep, "", onstates, 0.01,
+            StochasticGene.prob_Gaussian, Float64[], tuple(), 1,
+        )
+        @test StochasticGene.combined_modalities(combined) == (:dwelltime, :rna)
+        @test reporter !== nothing
+        @test components isa StochasticGene.MTComponents
+    end
+
     @testset "CombinedData independent likelihood assembly" begin
         coupling = tuple()
         transitions = ([1, 2], [2, 1])
