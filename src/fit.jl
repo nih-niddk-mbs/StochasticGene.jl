@@ -27,9 +27,9 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `cell::String=""`: cell type for halflives and allele numbers
 - `coupling=tuple()`: if nonempty, a 2- or 3-tuple: `(unit_model, connections::Vector{ConnectionSpec}[, sign_modes])`. Each connection is `(β, s, α, t) = (source unit, source state, target unit, target transition)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. For **three units** with a **hidden latent** third unit (G=3, fully connected G-only dynamics) modulating observed units 1–2 from hidden states **1** and **3**, use `make_coupling_hidden_latent(t1, t2)` or `make_coupling_hidden_latent("H3#t1-t2")` and `transitions_hidden_g3_all_pairs()` for unit 3; see docs *Units and models — hidden latent unit*. Empty `connections` is valid (uncoupled T is still built). Optional third element `sign_modes` constrains the sign of each coupling parameter γ: use a single `Symbol` for all connections, or a vector/tuple of one per connection. Canonical symbols: `:free` (γ ∈ (-1, ∞)), `:activate` (γ ∈ (0, ∞)), `:inhibit` (γ ∈ (-1, 0)). Aliases `:positive` and `:negative` are normalized to `:activate` and `:inhibit`. See `coupling_ranges`.
 - `datacol=3`: column of data to use, default is 3 for rna data
-- `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid". A tuple/vector such as `(:rna, :trace)` requests a [`CombinedData`](@ref) payload; modality order is ignored and canonicalized.
+- `datatype=""`: String or Symbol that describes a single data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid". A tuple/vector such as `(:rna, :trace)` or `(:rna, :dwelltime)` requests a [`CombinedData`](@ref) payload; modality order is ignored and canonicalized.
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
-- `datapath=""`: path to data file or folder or array of files or folders
+- `datapath=""`: path to data file or folder or array of files or folders. For [`CombinedData`](@ref), prefer a `NamedTuple` keyed by modality, e.g. `(rna="smFISH", dwelltime=["ON.csv", "OFF.csv"])`.
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `ejectnumber=1`: number of mRNAs produced per burst, default is 1, if Int then deterministic, if Tuple = (r, p) then stochastic obeying NegativeBinomial(r, p)
 - `elongationtime=6.0`: average time for elongation, vector of times for coupled model
@@ -90,6 +90,7 @@ fits, stats, measures, data, model, options = fit(; kwargs...)
 - If `propcv < 0`, proposal covariance is loaded from previous run if available during [`make_structures`](@ref), after model parameters (including fittedparam) are determined. Validation occurs against stored metadata to ensure compatibility.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
 - File and folder conventions: see the package manual (*Package overview*, *Cluster and batch workflows*) and the [GitHub README](https://github.com/nih-niddk-mbs/StochasticGene.jl#readme).
+- v1.10 migration: `infolder` and `inlabel` are retired. Use `datapath` for input locations, `label` for output/data labels, `resultfolder` for output routing, and `root` for the project root. Existing key-based run specs containing `infolder` are accepted for migration and ignored.
 
 # Example
 If you are in the folder where data/HCT116_testdata is installed, you can fit the mock RNA histogram running 4 MH chains with:
@@ -264,10 +265,12 @@ function fit(; key=nothing, kwargs...)
         end
     end
     delete!(merged, :infolder)  # legacy key from old info TOMLs; ignored
+    delete!(merged, :inlabel)   # legacy key from old info TOMLs; ignored
     leg_ti = pop!(merged, :traceinfo, nothing)  # legacy TOML / one-off overrides; not persisted in run_spec
     leg_dt = pop!(merged, :dttype, nothing)
     run_spec = Dict{Symbol, Any}(merged)
     delete!(run_spec, :infolder)
+    delete!(run_spec, :inlabel)
     if key !== nothing
         run_spec[:key] = key
     end

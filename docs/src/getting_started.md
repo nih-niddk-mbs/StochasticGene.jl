@@ -86,7 +86,7 @@ fits, stats, measures, data, model, options = fit(
     datapath = "data/testtraces",
     gene = "MS2",            # Gene name
     datacond = "testtrace",   # Experimental condition
-    traceinfo = (1.0, 1., -1, 1.),  # Frame interval, start, end, active fraction
+    trace_specs = [(unit = 1, interval = 1.0, start = 1.0, t_end = -1.0, zeromedian = true, active_fraction = 1.0, background = 0.0)],
     noisepriors = [40., 20., 200., 10.],  # Noise parameters
     nchains = 4              # Number of parallel chains (pooling for MH; see `run_inference` for NUTS/ADVI)
 )
@@ -204,9 +204,17 @@ The package can handle:
 - RNA counts with dwell times
 - Example:
   ```julia
-  datatype = "rnadwelltime"
-  datapath = ["data/rna_counts/", "data/dwell_times/"]
+  datatype = (:rna, :dwelltime)
+  datapath = (
+      rna = "data/rna_counts/",
+      dwelltime = ["data/dwell_times/on.csv", "data/dwell_times/off.csv"],
+  )
+  dwell_specs = [(unit = 1, onstates = [[2], Int[]], dttype = ["ON", "OFF"])]
   ```
+
+Use tuple/vector `datatype` values for new multimodal fits. StochasticGene builds a `CombinedData` object with independent modality legs, evaluates likelihoods separately, and combines the results for total likelihood and WAIC. Legacy strings such as `"rnadwelltime"` and `"tracerna"` remain available for older scripts.
+
+Older `infolder` and `inlabel` inputs have been retired. Use `datapath` for inputs, `label` for output/data labels, `resultfolder` for outputs, and `root` for the project root.
 
 ## Next Steps
 

@@ -1,6 +1,6 @@
 # RNA Dwell Time Analysis
 
-This example demonstrates how to analyze RNA dwell time data to understand transcriptional dynamics.
+This example demonstrates how to analyze RNA dwell-time data together with RNA histograms. For new code, use the v1.10 `CombinedData` API with `datatype = (:rna, :dwelltime)`. The older `"rnadwelltime"` datatype remains available for legacy scripts.
 
 ## Setup
 
@@ -78,21 +78,35 @@ transcription_rates = [0.0, 1.0]  # No transcription in OFF state
 
 ## Fitting the Model
 
-Now we can fit the model to our dwell time data:
+Now we can fit the model to RNA and dwell-time data:
 
 ```julia
-# Fit the model
 fits, stats, measures, data, model, options = fit(
     G = G,
     R = R,
     transitions = transitions,
-    transcription_rates = transcription_rates,
-    datatype = "dwell_time",
-    datapath = "data/",
+    datatype = (:rna, :dwelltime),
+    datapath = (
+        rna = "rna_counts/",
+        dwelltime = [
+            "dwell_times/MYC_ON.csv",
+            "dwell_times/MYC_OFF.csv",
+        ],
+    ),
     gene = "MYC",
-    datacond = "CONTROL"
+    datacond = "CONTROL",
+    resultfolder = "MYC_combined",
+    dwell_specs = [
+        (
+            unit = 1,
+            onstates = [[2], Int[]],
+            dttype = ["ON", "OFF"],
+        ),
+    ],
 )
 ```
+
+`data` is a `CombinedData` object. The RNA leg is available as `data.legs.rna`; the dwell-time leg is available as `data.legs.dwelltime`.
 
 ## Analyzing Results
 

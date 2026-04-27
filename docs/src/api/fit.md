@@ -47,8 +47,9 @@ Other cross-method options stored on `MHOptions`, `NUTSOptions`, and `ADVIOption
 
 ### Data parameters
 
-- **`datatype::String`**: e.g. `"rna"`, `"trace"`, `"rnadwelltime"`, `"tracejoint"`, …
-- **`datapath`**, **`datacond`**, **`cell`**, **`gene`**, **`nalleles`**, **`trace_specs`**, **`dwell_specs`**, …
+- **`datatype`**: String or symbol for a single legacy datatype, e.g. `"rna"`, `:trace`, `"rnadwelltime"`, `"tracejoint"`. A tuple or vector such as `(:rna, :dwelltime)` requests the v1.10 [`CombinedData`](combined_data.md) path.
+- **`datapath`**: Path, vector/tuple of paths, or for `CombinedData` preferably a modality-keyed `NamedTuple`, e.g. `(rna = "smFISH", dwelltime = ["ON.csv", "OFF.csv"])`.
+- **`datacond`**, **`cell`**, **`gene`**, **`nalleles`**, **`trace_specs`**, **`dwell_specs`**, …
 
 ### Fitting / inference parameters
 
@@ -61,6 +62,12 @@ Other cross-method options stored on `MHOptions`, `NUTSOptions`, and `ADVIOption
 
 - **`priormean`**, **`priorcv`**, **`noisepriors`**, **`fittedparam`**, **`fixedeffects`**, **`onstates`**, **`decayrate`**, …
 - **`resultfolder`**, **`label`**, **`writesamples`**, **`burst`**, **`optimize`**, …
+
+### v1.10 API changes
+
+- **`CombinedData`**: New multimodal fits use `datatype = (:rna, :trace)` or `datatype = (:rna, :dwelltime)`. The order is canonicalized, likelihoods are evaluated per modality, scalar likelihoods are summed, and WAIC pointwise predictions are concatenated in canonical modality order.
+- **Retired legacy input keywords**: `infolder` and `inlabel` are no longer part of the public API. Use `root`, `datapath`, `label`, and `resultfolder`. Older key-based run specs may still contain `infolder`; `fit(; key=...)` ignores it during migration.
+- **Trace and dwell metadata**: Prefer `trace_specs` and `dwell_specs`. Legacy `traceinfo` and `dttype` entries may be consumed from old run specs, then are dropped from newly written run specs.
 
 ### Run specification and key-based naming
 
@@ -113,6 +120,35 @@ fits, stats, measures, data, model, options = fit(
 )
 ```
 
+### Combined RNA + dwell-time data
+
+```julia
+fits, stats, measures, data, model, options = fit(
+    datatype = (:rna, :dwelltime),
+    datapath = (
+        rna = "HBEC_smFISH",
+        dwelltime = [
+            "dwelltime/CANX_ON.csv",
+            "dwelltime/CANX_OFF.csv",
+            "dwelltime/CANX_ONG.csv",
+        ],
+    ),
+    gene = "CANX",
+    cell = "HBEC",
+    datacond = "",
+    resultfolder = "FISH",
+    dwell_specs = [
+        (
+            unit = 1,
+            onstates = [Int[], Int[], [2, 3]],
+            dttype = ["ON", "OFF", "ONG"],
+        ),
+    ],
+)
+```
+
+For new scripts, the keyed `datapath` form is preferred over the legacy positional `"rnadwelltime"` layout. See [v1.10 CombinedData API](combined_data.md).
+
 ### Trace fit with multiple MH chains
 
 ```julia
@@ -144,3 +180,5 @@ fits, stats, measures, data, model, options = fit(
 4. **Key-based workflows** — Use `key="..."` for reproducible cluster runs and `write_run_spec_preset` / `makeswarmfiles`; include `inference_method` / `parallel` / `gradient` in the saved dict when needed.
 
 5. **Cluster scripts** — `makeswarm` and related helpers can emit `fit(; key=..., inference_method=:nuts, …)` overrides; positional gene/coupled scripts append `; kw=...` suffixes for the same keywords. See [Cluster and batch workflows](../cluster_batch_workflows.md).
+
+6. **Migration from older inputs** — Replace `infolder` with `datapath`; replace `inlabel` usage with `label`; keep output routing in `resultfolder`. Prefer `trace_specs` / `dwell_specs` over `traceinfo` / `dttype`.

@@ -50,7 +50,21 @@ Common values for [fit](api/fit.md):
 | `"tracejoint"` | Coupled / joint traces between units |
 | `"tracegrid"` | Grid-based trace likelihood |
 
-`datapath` may be a file, folder, or vector of paths depending on type. **`traceinfo`** encodes frame interval, time window, active fraction, and background handling for traces.
+For v1.10 and later, `datatype` may also be a tuple or vector of elementary modalities to request `CombinedData`:
+
+```julia
+datatype = (:rna, :dwelltime)
+datapath = (
+    rna = "HBEC_smFISH",
+    dwelltime = ["dwelltime/CANX_ON.csv", "dwelltime/CANX_OFF.csv"],
+)
+```
+
+The tuple order is canonicalized, so `(:dwelltime, :rna)` is equivalent to `(:rna, :dwelltime)`. Each modality is loaded independently; likelihoods are evaluated per modality and combined for total likelihood and WAIC.
+
+`datapath` may be a file, folder, vector/tuple of paths, or for `CombinedData` a modality-keyed `NamedTuple`. **`trace_specs`** and **`dwell_specs`** are the preferred metadata containers for trace and dwell-time observations. Legacy `traceinfo` / `dttype` values can be read from old run specs during migration.
+
+`infolder` and `inlabel` are retired. Use **`root`** + **`datapath`** for inputs and **`label`** + **`resultfolder`** for output naming/routing.
 
 ## Output file families
 

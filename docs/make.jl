@@ -45,6 +45,7 @@ makedocs(
             "API Reference" => "api/index.md",
             "Core Functions" => [
                 "Model Fitting" => "api/fit.md",
+                "v1.10 CombinedData API" => "api/combined_data.md",
                 "Model Simulation" => "api/simulator.md",
                 "Data Loading" => "api/load_data.md",
             ],

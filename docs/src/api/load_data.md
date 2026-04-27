@@ -8,13 +8,15 @@ Load experimental data from files into StochasticGene.jl data structures.
 load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
 ```
 
+`fit` is the usual public entry point. It normalizes `datatype`, resolves `datapath` under `root/data`, derives dwell-time labels from `dwell_specs`, and then calls `load_data`.
+
 ## Arguments
 
 ### Required Arguments
 
-- `datatype::String`: Type of data to load
+- `datatype`: Type of data to load. Use a string or symbol for a single datatype; use a tuple/vector such as `(:rna, :dwelltime)` for v1.10 `CombinedData`.
 - `dttype::Vector`: Dwell time types (for dwell time data)
-- `datapath::String`: Path to data file(s)
+- `datapath`: Path to data file(s). For combined data, prefer a `NamedTuple` keyed by modality, e.g. `(rna = "smFISH", dwelltime = ["ON.csv", "OFF.csv"])`.
 - `label::String`: Label for the dataset
 - `gene::String`: Gene name
 - `datacond::String`: Experimental condition
@@ -30,6 +32,43 @@ load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna,
 - `dwell_specs`: Per-unit dwell-time specs
 
 ## Supported Data Types
+
+## v1.10 CombinedData Loading
+
+New multimodal workflows should prefer tuple/vector `datatype` values. The modalities are sorted into a canonical order and loaded as independent elementary legs inside `CombinedData`.
+
+```julia
+data = load_data(
+    (:rna, :dwelltime),
+    ["ON", "OFF", "ONG"],
+    (
+        rna = "data/HBEC_smFISH",
+        dwelltime = [
+            "data/dwelltime/CANX_ON.csv",
+            "data/dwelltime/CANX_OFF.csv",
+            "data/dwelltime/CANX_ONG.csv",
+        ],
+    ),
+    "FISH",
+    "CANX",
+    "",
+    (),
+    1.0,
+    3,
+    true,
+    1.0,
+    Any[],
+    [
+        (
+            unit = 1,
+            onstates = [Int[], Int[], [2, 3]],
+            dttype = ["ON", "OFF", "ONG"],
+        ),
+    ],
+)
+```
+
+Supported v1.10 modality names are `:rna`, `:trace`, and `:dwelltime`; `:grid` is reserved. The most developed combinations are `(:rna, :trace)` and `(:rna, :dwelltime)`. Legacy strings such as `"tracerna"` and `"rnadwelltime"` still load their legacy combined structs for compatibility.
 
 ### RNA Data Types
 
@@ -94,7 +133,7 @@ data = load_data(
 ```
 
 #### "rnadwelltime" - RNA + Dwell Times
-Load RNA counts with dwell time distributions.
+Load RNA counts with dwell time distributions using the legacy combined structure.
 
 **File Format**: Multiple files - RNA histogram and dwell time data
 **Returns**: `RNADwellTimeData` structure
@@ -311,11 +350,11 @@ println("Total counts: ", sum(rna_data.histRNA))
 ### Multi-Modal Data Loading
 
 ```julia
-# Load combined RNA and trace data
+# Load combined RNA and trace data with the v1.10 split representation
 combined_data = load_data(
-    "tracerna",
+    (:rna, :trace),
     String[],
-    ["data/traces/MYC_traces/", "data/rna/MYC_histogram.txt"],
+    (trace = "data/traces/MYC_traces/", rna = "data/rna/MYC_histogram.txt"),
     "multimodal",
     "MYC",
     "control",
@@ -326,8 +365,8 @@ combined_data = load_data(
 )
 
 # Access both data types
-traces = combined_data.trace
-rna_hist = combined_data.histRNA
+traces = combined_data.legs.trace.trace
+rna_hist = combined_data.legs.rna.histRNA
 ```
 
 ### Hierarchical Data Loading

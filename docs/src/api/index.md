@@ -4,6 +4,7 @@
 
 ### Model Fitting
 - [`fit`](fit.md): Main function for fitting models to data (MH, NUTS, ADVI via `inference_method`)
+- [v1.10 CombinedData API](combined_data.md): Tuple/vector `datatype`, modality-keyed `datapath`, and migration notes for retired legacy input keywords
 - `load_options`: Build `MHOptions` / `NUTSOptions` / `ADVIOptions` from a run-spec dict
 - `run_inference`: Unified entry point used by `fit(nchains, data, model, …)`
 - `run_mh`: Metropolis–Hastings MCMC sampling
@@ -21,6 +22,7 @@
 
 ### Data Loading and Management
 - [`load_data`](load_data.md): Load experimental data from files
+- [`CombinedData`](@ref): Container for independent elementary modality legs such as `:rna`, `:trace`, and `:dwelltime`
 - [`load_model`](@ref): Load model parameters from files
 - [`rna_setup`](@ref): Set up project directory structure
 - [`readrates`](@ref): Read rate parameters from files

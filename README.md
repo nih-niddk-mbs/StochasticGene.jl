@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-**Version 1.8.9**
+**Version 1.10.0**
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/)
@@ -38,7 +38,7 @@ Julia **≥ 1.9.3** is required (see `Project.toml`). For development, clone the
 
 - **Models:** Generalized telegraph / GRSM dynamics — arbitrary **G** (gene) states, **R** pre-RNA steps, **S** splice sites, reporter **insertstep**, multiple alleles, **coupled** transcribing units (e.g. enhancer–gene, hidden latent units).
 - **Inference:** `fit` selects **MH**, **NUTS**, or **ADVI** via `inference_method`; shared budgets (`samplesteps`, `warmupsteps`, …) map through `load_options` to method-specific structs. MH uses adaptive proposals and multi-chain `Distributed` pooling; cluster helpers emit compatible `fit(; …)` overrides (see **Cluster & batch workflows** in the manual).
-- **Data:** Stationary RNA histograms, ON/OFF and dwell-time histograms, intensity traces (`.trk` etc.), joint traces, grids — alone or in combination.
+- **Data:** Stationary RNA histograms, ON/OFF and dwell-time histograms, intensity traces (`.trk` etc.), joint traces, grids — alone or in combination. In v1.10, new multimodal fits use `CombinedData` via tuple/vector `datatype` values such as `(:rna, :dwelltime)`.
 - **Batch & HPC:** Helpers in `biowulf.jl` write **swarm** files and **fit scripts** for NIH Biowulf or any scheduler; run specs can be saved as `info_<key>.toml` + `info_<key>.jld2` for reproducible `fit(; key=...)`.
 
 ---
@@ -73,11 +73,29 @@ fits, stats, measures, data, model, options = fit(
     cell = "HCT116",
     datacond = "MOCK",
     resultfolder = "HCT116_test",
-    infolder = "HCT116_test",
 )
 ```
 
 Defaults in `fit()` point at bundled mock data if paths match the package examples.
+
+For multimodal data, prefer the v1.10 `CombinedData` API:
+
+```julia
+fits, stats, measures, data, model, options = fit(
+    datatype = (:rna, :dwelltime),
+    datapath = (
+        rna = "HCT116_smFISH",
+        dwelltime = ["dwell/MYC_ON.csv", "dwell/MYC_OFF.csv"],
+    ),
+    gene = "MYC",
+    cell = "HCT116",
+    datacond = "MOCK",
+    resultfolder = "HCT116_test",
+    dwell_specs = [(unit = 1, onstates = [[2], Int[]], dttype = ["ON", "OFF"])],
+)
+```
+
+Legacy `infolder` / `inlabel` style inputs have been retired. Use `root`, `datapath`, `label`, and `resultfolder` directly; `datapath` entries are resolved under `root/data` when needed, and outputs are written under `root/results/<resultfolder>`.
 
 ---
 
