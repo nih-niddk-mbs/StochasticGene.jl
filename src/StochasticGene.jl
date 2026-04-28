@@ -90,7 +90,8 @@ fits = fit(
 - `simulator_coupled.jl`: Stochastic simulation algorithms
 - `fit.jl`: Model fitting functions
 - `analysis.jl`: Post-fit analysis tools
-- `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarm_folder`, `makeswarm_genes`, `batch_grsm_models`, `emit_fitscripts`, …)
+- `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarmfiles`, `makeswarm_models`, …)
+- `stage.jl`: results staging (`stage_label_to_key`, legacy → key-based filenames)
 - `coupled_csv.jl`: `Coupled_models_to_test.csv` → coupling specs (`csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, …)
 - `hmm.jl`: Hidden Markov model functions
 - `test.jl`, `test_features.jl`, `benchmarks.jl`: full-stack tests, feature/regression checks, and benchmarking helpers
@@ -199,9 +200,6 @@ export
     make_dataframes,
     make_mat,
     makeswarm,
-    makeswarm_keys,
-    makeswarm_folder,
-    batch_grsm_models,
     makeswarm_models,
     csv_row_to_connections_simple,
     build_coupled_fit_spec_from_csv_cells,
@@ -274,6 +272,12 @@ export
     simulator,
     simulator_dwell_specs,
     source_states,
+    stage_combine_rates,
+    stage_combine_rates_spec,
+    stage_combine_rates_batch,
+    stage_label_to_key,
+    label_to_key,
+    staging_key_segment,
     sparse,
     summarize_model_scores,
     joint_residence_prob_onoff,
@@ -376,19 +380,6 @@ export
     create_combined_files_h3_latent,
     write_run_spec_preset,
     write_fitscript_tracejoint_key,
-    write_fitscript_fit_keyword_dict,
-    emit_fitscript,
-    emit_fitscripts,
-    emit_swarm,
-    emit_swarm_batch,
-    stage_run,
-    setup,
-    load_stochasticgene_toml_layers,
-    model_grid,
-    default_priors,
-    coupling_grid,
-    fit_specs,
-    FITSCRIPT_GENE_FROM_ARGS,
     default_model_key,
     zero_median
 
@@ -445,6 +436,9 @@ include("coupled_csv.jl")
 
 # functions for use on NIH cluster Biowulf
 include("biowulf.jl")
+
+# staged run directories and companion file writers (batch / reproducibility)
+include("stage.jl")
 
 # test functions
 include("test.jl")

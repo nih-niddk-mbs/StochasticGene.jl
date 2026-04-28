@@ -35,13 +35,15 @@ end
 """
     Summary_Fields
 
-Structure for defining fields in summary files
+Structure for fields in **aggregate summary** filenames — typically four-part `*.csv` basenames parsed by [`fields`](@ref). These files summarize many runs (often across genes); they **do not** encode a single gene name like [`Result_Fields`](@ref).
 
 Fields:
 - `name`: File name
 - `label`: Run label
 - `cond`: Condition identifier
 - `model`: Model type
+
+Staging keys for such CSVs are derived in `stage.jl` from raw underscore tokens (see [`stage_label_to_key`](@ref)); [`staging_key_segment`](@ref) applies only to [`Result_Fields`](@ref).
 """
 struct Summary_Fields <: Fields
     name::String
@@ -510,7 +512,7 @@ Parse a filename to extract structured field information.
 - `Result_Fields` or `Summary_Fields` or `Tuple{String, String}`: Structured field information
 
 # Notes
-- For CSV files: expects 4 fields (name, label, cond, model)
+- For CSV files: expects 4 underscore-separated stem fields `(name, label, cond, model)` → [`Summary_Fields`](@ref) (aggregate summaries, not per-gene fits)
 - For TXT files: expects 6 fields (name, label, cond, gene, model, nalleles) or 5 fields (name, label, "", gene, model, nalleles)
 - Throws ArgumentError for unknown file name formats
 - Does not account for CSV files with less than 4 fields
@@ -540,6 +542,45 @@ function fields(file::String)
             throw(ArgumentError("Unknown file name format"))
         end
     end
+end
+
+const _STAGING_RESULT_SLOTS = (:name, :label, :cond, :gene, :model, :nalleles)
+
+_staging_norm_seg(s::AbstractString)::String = replace(replace(String(s), " " => "-"), "_" => "-")
+
+"""Map `key_fields` symbols onto [`Result_Fields`](@ref) by **explicit** property names (not unchecked `getfield`)."""
+function _stage_result_key_segment(parts::Result_Fields, slot::Symbol)::Union{Nothing,String}
+    v = if slot === :name
+        parts.name
+    elseif slot === :label
+        parts.label
+    elseif slot === :cond
+        parts.cond
+    elseif slot === :gene
+        parts.gene
+    elseif slot === :model
+        parts.model
+    elseif slot === :nalleles
+        parts.nalleles
+    else
+        throw(ArgumentError(
+            "unknown key_fields slot $(repr(slot)) for Result_Fields-based artifacts; use one of $(join(map(string, _STAGING_RESULT_SLOTS), ", "))",
+        ))
+    end
+    v = String(v)
+    isempty(v) && return nothing
+    return _staging_norm_seg(v)
+end
+
+"""
+    staging_key_segment(parts::Result_Fields, slot::Symbol) -> Union{Nothing,String}
+
+Resolve a symbolic slot from [`Result_Fields`](@ref) into one hyphen-normalized key segment (or `nothing` to skip), for [`stage_label_to_key`](@ref) on per-run artifacts. `slot` must be one of ``$(repr(_STAGING_RESULT_SLOTS))``.
+
+Aggregate summary **`*.csv`** names (rolled-up batch summaries — **no per-gene slot**) are keyed in `stage.jl` by splitting four underscore tokens; [`Summary_Fields`](@ref) is only what [`fields`](@ref) returns for those files.
+"""
+function staging_key_segment(parts::Result_Fields, slot::Symbol)::Union{Nothing,String}
+    _stage_result_key_segment(parts, slot)
 end
 
 """

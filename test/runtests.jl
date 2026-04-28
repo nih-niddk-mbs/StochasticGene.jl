@@ -300,4 +300,126 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test length(StochasticGene.get_param(cjh.model)) > 0
     end
 
+    @testset "staging_key_segment (Result_Fields only)" begin
+        r = Result_Fields("rates", "scRNA", "", "CANX", "3331", "2")
+        @test staging_key_segment(r, :gene) == "CANX"
+    end
+
+    @testset "stage_label_to_key key_mode=:fields (Summary vs Result)" begin
+        mktempdir() do dir
+            src = joinpath(dir, "in")
+            mkpath(src)
+            write(joinpath(src, "measures_scRNA__3331.csv"), "x\n")
+            write(joinpath(src, "rates_scRNA_CANX_3331_2.txt"), "y\n")
+            dst = joinpath(dir, "out")
+            r = stage_label_to_key(
+                src, dst;
+                root=dir,
+                root_dst=dir,
+                key_mode=:fields,
+                key_fields=(:label, :model),
+                dry_run=true,
+            )
+            @test r.n == 2
+            km = Dict(basename(row.dst) => row.key for row in r.rows)
+            @test km["measures_scRNA-3331.csv"] == "scRNA-3331"
+            @test km["rates_scRNA-3331.txt"] == "scRNA-3331"
+            # (:label, :gene): aggregate CSV uses third stem token only for tuple compatibility with per-run files — not a gene.
+            r2 = stage_label_to_key(
+                src, dst;
+                root=dir,
+                root_dst=dir,
+                key_mode=:fields,
+                key_fields=(:label, :gene),
+                dry_run=true,
+            )
+            @test r2.n == 2
+            km2 = Dict(basename(row.dst) => row.key for row in r2.rows)
+            @test km2["measures_scRNA.csv"] == "scRNA"
+            @test km2["rates_scRNA-CANX.txt"] == "scRNA-CANX"
+            # Default keyword `key_fields` for `:fields` (discriminating per-gene + batch CSV friendly).
+            rdef = stage_label_to_key(
+                src, dst;
+                root=dir,
+                root_dst=dir,
+                key_mode=:fields,
+                dry_run=true,
+            )
+            @test rdef.n == 2
+            kmdef = Dict(basename(row.dst) => row.key for row in rdef.rows)
+            @test kmdef["measures_scRNA-3331.csv"] == "scRNA-3331"
+            @test kmdef["rates_scRNA-CANX-3331-2.txt"] == "scRNA-CANX-3331-2"
+        end
+    end
+
+    @testset "stage_combine_rates (set-wise merge with hidden/coupling)" begin
+        mktempdir() do dir
+            f1 = joinpath(dir, "u1")
+            f2 = joinpath(dir, "u2")
+            mkpath(f1)
+            mkpath(f2)
+            out = joinpath(dir, "out")
+            d1 = [1.0 2.0 3.0 4.0; 10.0 20.0 30.0 40.0] # two sets of width 2
+            h1 = ["u1_a1", "u1_a2", "u1_a3", "u1_a4"]
+            d2 = [5.0 6.0; 50.0 60.0] # two sets of width 1
+            h2 = ["u2_b1", "u2_b2"]
+            write_rates_table(joinpath(f1, "rates_k1.txt"), d1, h1)
+            write_rates_table(joinpath(f2, "rates_k1.txt"), d2, h2)
+
+            res = stage_combine_rates(
+                [f1, f2], out;
+                grsm=[2, 1],
+                noise=[0, 0],
+                hidden_per_set=1,
+                hidden_values=[9.0],
+                ncoupling=2,
+                coupling_values=[0.5, 0.6],
+            )
+            @test res.n == 1
+            @test endswith(res.rows[1].dst, "rates_k1.txt")
+            @test res.rows[1].nsets == 2
+
+            dout, hout = read_rates_table(res.rows[1].dst)
+            @test size(dout) == (2, 12)
+            @test dout[1, :] == [1.0, 2.0, 5.0, 9.0, 0.5, 0.6, 3.0, 4.0, 6.0, 9.0, 0.5, 0.6]
+            @test hout == [
+                "u1_a1", "u1_a2", "u2_b1", "Hidden_1_1", "Coupling_1_1", "Coupling_2_1",
+                "u1_a3", "u1_a4", "u2_b2", "Hidden_1_2", "Coupling_1_2", "Coupling_2_2",
+            ]
+            @test all(startswith(fn, "rates_") for fn in readdir(out))
+        end
+    end
+
+    @testset "stage_combine_rates_spec + stage_combine_rates_batch" begin
+        mktempdir() do dir
+            f1 = joinpath(dir, "u1")
+            f2 = joinpath(dir, "u2")
+            mkpath(f1)
+            mkpath(f2)
+            write_rates_table(joinpath(f1, "rates_k1.txt"), [1.0 2.0; 3.0 4.0], ["a1", "a2"])
+            write_rates_table(joinpath(f2, "rates_k1.txt"), [5.0; 6.0;;], ["b1"])
+            out = joinpath(dir, "out")
+
+            spec = (
+                units=[(folder=f1, grsm=2, noise=0), (folder=f2, grsm=1, noise=0)],
+                hidden_per_set=1,
+                hidden_values=[0.25],
+                ncoupling=1,
+                coupling_values=[0.75],
+                subfolder="combinedA",
+            )
+            resolved = stage_combine_rates_spec(spec; outfolder=out)
+            @test resolved.grsm == [2, 1]
+            @test endswith(resolved.outfolder, "combinedA")
+
+            batch = stage_combine_rates_batch([spec], out)
+            @test batch.n == 1
+            @test batch.specs[1].result.n == 1
+            dst = batch.specs[1].result.rows[1].dst
+            @test endswith(dst, "rates_k1.txt")
+            dout, _ = read_rates_table(dst)
+            @test size(dout, 2) == 4
+        end
+    end
+
 end

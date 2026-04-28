@@ -86,7 +86,7 @@ fits, stats, measures, data, model, options = fit(; kwargs...)
 - `options`: [`MHOptions`](@ref), [`NUTSOptions`](@ref), or [`ADVIOptions`](@ref) depending on `inference_method`.
 
 # Notes
-- When `label` is empty, `create_label` (in `biowulf.jl`) builds `datatype * "-" * cell * "_" * datacond`; set `label` explicitly if result filenames must include extra tokens (for example topology tags formerly carried in a separate keyword).
+- When `label` is empty, `create_label` (see `biowulf.jl`) builds a default stem from normalized `datatype` (`datatype_label`), `cell`, and `datacond`; set `label` explicitly for a custom stem. For Biowulf gene swarms, optional topology text is passed as `transition_type` into `create_label`, not as a second label field.
 - If `propcv < 0`, proposal covariance is loaded from previous run if available during [`make_structures`](@ref), after model parameters (including fittedparam) are determined. Validation occurs against stored metadata to ensure compatibility.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
 - File and folder conventions: see the package manual (*Package overview*, *Cluster and batch workflows*) and the [GitHub README](https://github.com/nih-niddk-mbs/StochasticGene.jl#readme).

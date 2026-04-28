@@ -75,7 +75,6 @@ end
 function _fullstack_common_kwargs(; resultfolder::AbstractString=FULLSTACK_RESULTFOLDER)
     return (
         root=DEFAULT_ROOT,
-        infolder="data",
         resultfolder=resultfolder,
         cell=FULLSTACK_CELL,
         writesamples=false,
