@@ -1,8 +1,11 @@
 # This file is part of StochasticGene.jl  
 
 # biowulf.jl
-# NIH Biowulf helpers: swarm files, fit scripts, run-spec presets (`makeswarm`, `makeswarm_models`,
-# `makeswarmfiles`, `makeswarmfiles_h3_latent`, `write_run_spec_preset`, …). Run specs and emitted scripts
+# NIH Biowulf helpers: swarm files, fit scripts, run-spec presets.
+# **Generic surface:** [`makeswarm`](@ref) (one fit script + one swarm line), [`makeswarm_folder`](@ref)
+# (many `fitscript_<key>.jl` + one swarm from a results folder or explicit keys), [`makeswarm_genes`](@ref)
+# (gene panels). **Batch / coupled / CSV / full specs:** [`emit_fitscripts`](@ref), [`makeswarmfiles`](@ref)
+# (deprecated), [`batch_grsm_models`](@ref) (GRSM model-grid presets — replaces `makeswarmfiles_driver`).
 # align with [`fit`](@ref) / [`make_structures`](@ref) / [`load_options`](@ref) (MH, NUTS, ADVI): include
 # `inference_method`, `device`, `parallel`, `gradient`, and shared budgets like `samplesteps` / `warmupsteps`.
 
@@ -59,6 +62,28 @@ const COUPLING_MODE_RECIPROCAL_DEFAULT = Dict{String,Union{Symbol,Tuple{Vararg{S
 )
 
 const _SWARM_ONLY_KEYS = (:nthreads, :nchains, :swarmfile, :juliafile, :filedir, :project, :sysimage, :src)
+
+"""Emitted as `gene=ARGS[1]` in batch scripts when swarm lines pass the gene name as a trailing argument."""
+struct FitScriptGeneFromArgs end
+
+const FITSCRIPT_GENE_FROM_ARGS = FitScriptGeneFromArgs()
+
+const _FITSCRIPT_OMIT_KEYS = (:infolder, :inlabel, :traceinfo, :dttype)
+
+function _swarm_row_matrix(nthreads::Integer, nchains::Integer, juliafile::AbstractString, project::AbstractString, sysimage::AbstractString, trailing::Union{Nothing,AbstractString}=nothing)
+    prefix = if isempty(project)
+        "julia -t $nthreads -p"
+    elseif isempty(sysimage)
+        "julia --project=$project -t $nthreads -p"
+    else
+        "julia --project=$project --sysimage=$sysimage -t $nthreads -p"
+    end
+    if trailing === nothing || isempty(strip(string(trailing)))
+        return [prefix nchains juliafile]
+    else
+        return [prefix nchains juliafile trailing]
+    end
+end
 
 function _split_swarm_fit_kwargs(kwargs::Dict{Symbol,Any})
     swarm = Dict{Symbol,Any}()
@@ -131,7 +156,7 @@ options consumed by [`load_options`](@ref) (`inference_method`, `device`, `paral
 For slow coupled fits, fit single units first, combine rates with [`create_combined_file`](@ref), then
 run coupled models using those starts (see README Workflow 2).
 """
-function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=nothing, unique_model_keys::Bool=false, kwargs...)
+function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=nothing, unique_model_keys::Bool=false, write_swarm::Bool=true, kwargs...)
     swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
     base = merge(fit_default_spec(), fit_kw)
     if transitions !== nothing && !haskey(base, :transitions)
@@ -168,7 +193,7 @@ function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=noth
         :sysimage => get(swarm_kw, :sysimage, ""),
         :src => get(swarm_kw, :src, ""),
     ), swarm_kw)
-    _makeswarm_with_run_specs(keys_out, swarm_out, specs_by_key)
+    _makeswarm_with_run_specs(keys_out, swarm_out, specs_by_key; write_swarm=write_swarm)
 end
 
 function makeswarm_models(
@@ -212,49 +237,153 @@ function makeswarm_models(
 end
 
 """
-    makeswarm(keys::Vector{String}; <keyword arguments>)
-    makeswarm(; key::String, <keyword arguments>)
+    makeswarm(; filedir=".", juliafile="fitscript.jl", swarmfile="fit", key=nothing, spec=nothing, nchains=2, nthreads=1, project="", sysimage="", src="", kwargs...)
 
-Write a swarm file and one fit script per key for Biowulf. Each swarm line runs one script:
-`julia -t nthreads -p nchains fitscript_<key>.jl`. Each script calls `fit(; key=key, ...)` so the
-run is defined by `info_<key>.jld2` (if present) plus any overrides.
+**Minimal generic helper:** write **one** Julia fit script and **one** swarm file with **one** scheduler line
+that runs that script. Aligned with keyword [`fit`](@ref).
 
-# Arguments
-- `keys` or `key`: run key(s); each key gets one swarm line and one script `fitscript_<key>.jl`.
-- `nthreads=1`: Julia threads per process.
-- `nchains=2`: number of parallel chains (passed to `-p`).
-- `swarmfile="fit"`: base name for the swarm file (writes `swarmfile.swarm`).
-- `juliafile="fitscript"`: base name for scripts (writes `juliafile_<key>.jl`).
-- `filedir="."`: directory for swarm and script files.
-- `project=""`, `sysimage=""`: optional `--project` and `--sysimage` for the julia command.
-- `src=""`: path to StochasticGene src (for script prolog; empty if package is installed).
-- Overrides (optional): `resultfolder`, `root`, `maxtime`, `samplesteps`, `warmupsteps`, `inference_method`,
-  `device`, `parallel` / `parallelism`, `gradient`, etc. are written into each script so
-  `fit(; key=key, resultfolder=..., ...)` uses them. Serializable types: `String`, `Number`, `Bool`, and `Symbol`
-  (symbols are emitted as `repr`, e.g. `inference_method=:nuts`).
+Pass **exactly one** of:
+
+- **`key`**: compact script calling `fit(; key=..., ...)` ([`write_fitfile_key`](@ref)); optional **`kwargs`** after
+  splitting by [`_split_swarm_fit_kwargs`](@ref) supply extra `fit` overrides.
+- **`spec`**: `Dict{Symbol,Any}` for a full multi-line `fit(; …)` ([`write_fitscript_fit_keyword_dict`](@ref));
+
+`kwargs` may also include swarm-only keywords (`nchains`, `nthreads`, `project`, `sysimage`, `swarmfile`, …),
+which override the positional defaults.
 
 # Examples
 ```julia
-makeswarm(["33il", "44il"]; filedir="swarm", resultfolder="HCT116_test", root=".")
-makeswarm(; key="33il", resultfolder="HCT116_test", maxtime="120m")
+makeswarm(; filedir="run1", key="33il", juliafile="myfit.jl", resultfolder="HCT116_test", root=".")
+
+using StochasticGene
+d = merge(fit_default_spec(), Dict(:G=>2, :R=>0, :datatype=>"rna", :gene=>"MYC"))
+makeswarm(; filedir="run1", spec=d, juliafile="once.jl", nchains=4)
 ```
+
+For **several keys** (one script per key + one swarm), use [`makeswarm_folder`](@ref) or [`makeswarm_keys`](@ref) (deprecated).
+For **gene panels** (one shared script, `gene=ARGS[1]`), use [`makeswarm_genes`](@ref). For **CSV / coupled / full
+tracejoint specs**, use [`makeswarmfiles`](@ref) / [`emit_fitscripts`](@ref).
 """
-function makeswarm(keys::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", filedir=".", project="", sysimage="", src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, warmupsteps=nothing, kwargs...)
+function makeswarm(; filedir::AbstractString=".",
+    juliafile::AbstractString="fitscript.jl",
+    swarmfile::AbstractString="fit",
+    nchains::Int=2,
+    nthreads::Int=1,
+    project::AbstractString="",
+    sysimage::AbstractString="",
+    src::AbstractString="",
+    key::Union{Nothing,AbstractString}=nothing,
+    spec::Union{Nothing,AbstractDict{Symbol,<:Any}}=nothing,
+    kwargs...,
+)
+    (key === nothing) == (spec === nothing) && throw(ArgumentError("makeswarm: pass exactly one of key= or spec= (not both, not neither)"))
+    mkpath(filedir)
+    kw = Dict{Symbol,Any}(kwargs)
+    swarm_kw, fit_kw = _split_swarm_fit_kwargs(kw)
+    nc = Int(get(swarm_kw, :nchains, nchains))
+    nt = Int(get(swarm_kw, :nthreads, nthreads))
+    proj = string(get(swarm_kw, :project, project))
+    sim = string(get(swarm_kw, :sysimage, sysimage))
+    sbase = string(get(swarm_kw, :swarmfile, swarmfile))
+    script_name = basename(string(juliafile))
+    script_path = joinpath(filedir, script_name)
+    if spec !== nothing
+        sp = merge(Dict{Symbol,Any}(spec), fit_kw)
+        write_fitscript_fit_keyword_dict(script_path, sp; src=src)
+    else
+        write_fitfile_key(script_path, String(key); src=src, pairs(fit_kw)...)
+    end
+    sfn = endswith(sbase, ".swarm") ? sbase : sbase * ".swarm"
+    emit_swarm(joinpath(filedir, sfn), nc, nt, script_name; project=proj, sysimage=sim)
+    return (script=script_path, swarm=joinpath(filedir, sfn))
+end
+
+"""
+    makeswarm_keys(keys::Vector{String}; ...)
+    makeswarm_keys(; key::String, ...)
+
+**Legacy multi-key naming:** same as the old `makeswarm(keys)` — one compact `fit(; key=...)` script per key and
+one `.swarm` with one line per key. Deprecated in favor of [`makeswarm_folder`](@ref) (discover keys from
+`results/`) or [`emit_fitscripts`](@ref) (when you already have full run-spec dicts).
+"""
+function makeswarm_keys(keys::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", filedir=".", project="", sysimage="", src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, warmupsteps=nothing, kwargs...)
+    Base.depwarn("`makeswarm_keys` (legacy multi-key `makeswarm`) is deprecated; use `makeswarm_folder` or `emit_fitscripts`.", :makeswarm_keys)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
-    isempty(keys) && return
+    isempty(keys) && return String[]
     sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
     write_swarmfile_keys(joinpath(filedir, sfile), nchains, nthreads, juliafile, keys, project, sysimage)
     for k in keys
         scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
         write_fitfile_key(scriptpath, k; src=src, resultfolder=resultfolder, root=root, maxtime=maxtime, samplesteps=samplesteps, warmupsteps=warmupsteps, kwargs...)
     end
+    return keys
 end
 
-function makeswarm(; key::String, kwargs...)
-    isempty(key) && error("makeswarm(; key=...) requires a non-empty key")
-    makeswarm([key]; kwargs...)
+function makeswarm_keys(; key::String, kwargs...)
+    isempty(key) && error("makeswarm_keys(; key=...) requires a non-empty key")
+    makeswarm_keys([key]; kwargs...)
+end
+
+"""
+    makeswarm_folder(resultfolder; root=".", filedir=".", keys=nothing, juliafile="fitscript", swarmfile="fit", src="", kwargs...)
+
+Driver for **key-based** batching when each job is `fit(; key=...)` driven by existing `info_<key>.jld2` under
+`results/<resultfolder>/` (see [`folder_path`](@ref)).
+
+- If **`keys=nothing`** (default), discover keys from `info_*.jld2` filenames in that results directory.
+- Otherwise use the given **`keys`** vector (no filesystem scan).
+
+Writes `fitscript_<key>.jl` per key and **one** swarm file (same layout as legacy [`makeswarm_keys`](@ref)).
+Remaining **`kwargs`** are split by [`_split_swarm_fit_kwargs`](@ref) and fit kwargs are passed to each
+[`write_fitfile_key`](@ref). **`resultfolder`** and **`root`** are merged into those overrides unless already in `kwargs`.
+
+This is the generic “loop a folder → many scripts + one swarm” entry point; CSV / coupled / full multi-line
+specs remain on [`makeswarmfiles`](@ref) / [`emit_fitscripts`](@ref).
+"""
+function makeswarm_folder(resultfolder::AbstractString;
+    root::AbstractString=".",
+    filedir::AbstractString=".",
+    keys::Union{Nothing,AbstractVector{<:AbstractString}}=nothing,
+    juliafile::AbstractString="fitscript",
+    swarmfile::AbstractString="fit",
+    src::AbstractString="",
+    kwargs...,
+)
+    mkpath(filedir)
+    kw = Dict{Symbol,Any}(kwargs)
+    swarm_kw, fit_kw = _split_swarm_fit_kwargs(kw)
+    for (k, v) in (:resultfolder => resultfolder, :root => root)
+        !haskey(fit_kw, k) && (fit_kw[k] = v)
+    end
+    nchains = Int(get(swarm_kw, :nchains, 2))
+    nthreads = Int(get(swarm_kw, :nthreads, 1))
+    proj = string(get(swarm_kw, :project, ""))
+    sim = string(get(swarm_kw, :sysimage, ""))
+    sname = string(get(swarm_kw, :swarmfile, swarmfile))
+    keylist = if keys === nothing
+        resdir = folder_path(resultfolder, root, "results")
+        !ispath(resdir) && throw(ArgumentError("makeswarm_folder: results path not found (tried folder_path(resultfolder, root, \"results\")): $(repr(resdir))"))
+        kacc = String[]
+        for fn in readdir(resdir)
+            m = match(r"^info_(.+)\.jld2$", fn)
+            m !== nothing && push!(kacc, String(m.captures[1]))
+        end
+        sort!(unique!(kacc))
+        isempty(kacc) && @warn "makeswarm_folder: no info_<key>.jld2 files under $(repr(resdir))"
+        kacc
+    else
+        String[string(x) for x in keys]
+    end
+    isempty(keylist) && return keylist
+    sfile = endswith(sname, ".swarm") ? sname : sname * ".swarm"
+    emit_swarm_batch(joinpath(filedir, sfile), nchains, nthreads, juliafile, keylist; project=proj, sysimage=sim, per_key_scripts=true)
+    for k in keylist
+        scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
+        write_fitfile_key(scriptpath, k; src=src, pairs(fit_kw)...)
+    end
+    return keylist
 end
 
 """Like [`folder_path`](@ref) but never prints to stdout (used when probing many candidate paths)."""
@@ -329,6 +458,7 @@ function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::D
         warn_missing_info::Bool=true,
         apply_h3_latent_overlay::Bool=false,
         h3_coupling_ranges::Tuple=(:activate, :activate),
+        write_swarm::Bool=true,
     )
     n_missing = 0
     specs_by_key = Dict{String, Dict{Symbol,Any}}()
@@ -374,7 +504,7 @@ function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::D
     if merge_existing_info && n_missing > 0 && warn_missing_info
         @warn "makeswarmfiles: no info_<key>.jld2 found for $n_missing of $(length(run_keys)) keys under resultfolder; run specs use merged defaults only — add prior `info_<key>.jld2` next to those fits or pass full model kwargs. Silence when expected: `warn_missing_info=false`." n_missing=n_missing nkeys=length(run_keys)
     end
-    _makeswarm_with_run_specs(run_keys, swarm_kw, specs_by_key)
+    _makeswarm_with_run_specs(run_keys, swarm_kw, specs_by_key; write_swarm=write_swarm)
     return run_keys
 end
 
@@ -426,6 +556,7 @@ function _makeswarmfiles_coupled_models_csv(
     transitions::Tuple,
     merged::Dict{Symbol,Any},
     swarm_kw::Dict{Symbol,Any},
+    write_swarm::Bool=true,
 )
     df = DataFrame(CSV.File(csv_path))
     key_col in names(df) || throw(ArgumentError("missing key column '$key_col' in $csv_path"))
@@ -524,30 +655,40 @@ function _makeswarmfiles_coupled_models_csv(
         end
     end
     isempty(keys_ordered) && throw(ArgumentError("coupled_models_csv: no runnable rows (empty coupling for all rows?)"))
-    _makeswarm_with_run_specs(keys_ordered, swarm_kw, specs_by_key)
+    _makeswarm_with_run_specs(keys_ordered, swarm_kw, specs_by_key; write_swarm=write_swarm)
     return keys_ordered
 end
 
 """
-    makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), transitionsvec=nothing, Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine=:product, models=nothing, kwargs...)
+    batch_grsm_models(; transitions=([1, 2], [2, 1]), transitionsvec=nothing, Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine=:product, models=nothing, kwargs...)
 
-Developer driver for **single-unit** GRSM batches using [`makeswarm_models`](@ref): define model
-layouts, write `info_<key>.jld2/.toml`, and generate swarm + fit scripts. For **coupled key-first**
-workflows (CSV / explicit keys / H3 grid), use [`makeswarmfiles`](@ref) instead.
+Single-unit **GRSM model-grid** driver: forwards to [`makeswarm_models`](@ref) after building the model list from
+`models=` or from `Gvec` / `Rvec` / `Svec` / `insertvec` (same rules as the former `makeswarmfiles_driver`).
 
-Use `models` (vector of NamedTuples with `G,R,S,insertstep` and optional `key`) for explicit
-control, or leave `models=nothing` to generate from `Gvec/Rvec/Svec/insertvec`.
-All `kwargs...` are forwarded to [`makeswarm_models`](@ref) (e.g. data paths, fit options,
-`swarmfile`, `juliafile`, `filedir`, `project`, `sysimage`, etc.).
+Use this for “many uncoupled layouts + `write_run_spec_preset` + full `fit(; …)` scripts”; use [`makeswarmfiles`](@ref)
+for coupled / CSV / key-list workflows with merged specs, or [`makeswarm_folder`](@ref) when you only need compact
+`fit(; key=...)` scripts from existing `info_<key>.jld2` files.
+
+[`makeswarmfiles_driver`](@ref) is a deprecated alias.
 """
-function makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), transitionsvec=nothing, Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine::Symbol=:product, models=nothing, unique_model_keys::Bool=false, kwargs...)
+function batch_grsm_models(; transitions=([1, 2], [2, 1]), transitionsvec=nothing, Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine::Symbol=:product, models=nothing, unique_model_keys::Bool=false, kwargs...)
     if models === nothing
         return makeswarm_models(Gvec, Rvec, Svec, insertvec; combine=combine, transitions=transitions, transitionsvec=transitionsvec, unique_model_keys=unique_model_keys, kwargs...)
     else
         transitionsvec !== nothing &&
-            throw(ArgumentError("makeswarmfiles_driver: transitionsvec only applies to Gvec/Rvec/Svec/insertvec grids, not models="))
+            throw(ArgumentError("batch_grsm_models: transitionsvec only applies to Gvec/Rvec/Svec/insertvec grids, not models="))
         return makeswarm_models(models; transitions=transitions, unique_model_keys=unique_model_keys, kwargs...)
     end
+end
+
+"""
+    makeswarmfiles_driver(; kwargs...)
+
+Deprecated — use [`batch_grsm_models`](@ref) (identical keywords).
+"""
+function makeswarmfiles_driver(; kwargs...)
+    Base.depwarn("`makeswarmfiles_driver` is deprecated; use `batch_grsm_models` (same keywords).", :makeswarmfiles_driver)
+    batch_grsm_models(; kwargs...)
 end
 
 """
@@ -556,8 +697,8 @@ end
 Unified entry for [`write_run_spec_preset`](@ref) plus swarm and `fitscript_<key>.jl` under `filedir`
 (one `info_<key>.jld2` and marker TOML per key). Single-unit `Gvec`…`insertvec` / `models` batches use
 [`write_fitscript_tracejoint_key`](@ref) so each script contains the **full** default-merged `fit(;
-…)`; string-key / coupled-CSV paths do the same. Direct [`makeswarm`](@ref) with a vector of keys
-still writes a compact one-line `fit(; key=…)` when used alone (no presets).
+…)`; string-key / coupled-CSV paths do the same. For **only** compact `fit(; key=…)` scripts (no merged
+[`write_run_spec_preset`](@ref) here), use [`makeswarm_folder`](@ref) or legacy [`makeswarm_keys`](@ref).
 
 Pick **exactly one** workflow below (mutually exclusive sources).
 
@@ -609,7 +750,7 @@ or per-row `key`:
   **`transitionsvec[i]`** for **`Gvec[i]`**; otherwise one shared **`transitions`** applies to every row.
   Not used with **`models=`** (put **`transitions`** in each named tuple instead).
 
-Delegates to [`makeswarmfiles_driver`](@ref) → [`makeswarm_models`](@ref), which always uses
+Delegates to [`batch_grsm_models`](@ref) → [`makeswarm_models`](@ref), which always uses
 [`fit_default_spec`](@ref) as the batch baseline (**single-unit**). **Do not** combine with
 `csv_file`, `base_keys`, or `h3_transition_range`. Do not pass **`coupled=true`** here.
 
@@ -628,7 +769,7 @@ Delegates to [`makeswarmfiles_driver`](@ref) → [`makeswarm_models`](@ref), whi
   hint that this API does not parse `Coupled_models_to_test.csv`-style coupling columns; set to `false` to
   silence when your file is wide for other reasons.
 - **`kwargs...`**: forwarded; swarm-only keys (`nthreads`, `nchains`, `project`, `juliafile`, …) go to
-  [`makeswarm`](@ref), the rest merge into each run spec (see [`_split_swarm_fit_kwargs`](@ref)).
+  the emitted swarm writers (see [`emit_fitscripts`](@ref) / internal batch helpers), the rest merge into each run spec (see [`_split_swarm_fit_kwargs`](@ref)).
   If you omit **`nchains`** in **`kwargs`**, the swarm file’s **`-p`** is set from each run spec’s **`nchains`**
   (e.g. **16** from [`fit_coupled_default_spec`](@ref)), matching the generated **`fit(; …)`** scripts.
 
@@ -643,7 +784,7 @@ Legacy **`coupled_models_csv=path`** is still accepted (same as **`coupled_csv=t
 
 # Uncoupled grids and unique keys (`makeswarm_models`)
 
-For **`models=`** or **`Gvec`…`insertvec`**, pass **`unique_model_keys=true`** on [`makeswarm_models`](@ref) / [`makeswarmfiles_driver`](@ref) to append a random suffix so keys stay unique when layouts repeat. For **`Gvec`** grids only, **`transitionsvec`** (same length as **`Gvec`**, **`Gvec`** unique) sets per-**`G`** transitions; otherwise use one shared **`transitions`**.
+For **`models=`** or **`Gvec`…`insertvec`**, pass **`unique_model_keys=true`** on [`makeswarm_models`](@ref) / [`batch_grsm_models`](@ref) to append a random suffix so keys stay unique when layouts repeat. For **`Gvec`** grids only, **`transitionsvec`** (same length as **`Gvec`**, **`Gvec`** unique) sets per-**`G`** transitions; otherwise use one shared **`transitions`**.
 """
 function _resolve_csv_kw(csv_file::AbstractString, csv::Union{Nothing,AbstractString})
     f = strip(csv_file)
@@ -691,9 +832,11 @@ function makeswarmfiles(;
         coupled_S::Tuple=(0, 0),
         coupled_insertstep::Tuple=(1, 1),
         coupled_transitions::Tuple=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+        write_swarm::Bool=true,
         kwargs...,
     )
     path_csv = _resolve_csv_kw(csv_file, csv)
+    Base.depwarn("`makeswarmfiles` is deprecated; use `emit_fitscripts` (set `write_swarm=true` for `.swarm` output), `stage_run`, or `emit_swarm` / `emit_swarm_batch`.", :makeswarmfiles)
     if csv_path !== nothing
         !isempty(path_csv) &&
             throw(ArgumentError("makeswarmfiles: pass only one of csv_file/csv or csv_path"))
@@ -740,6 +883,7 @@ function makeswarmfiles(;
             transitions=coupled_transitions,
             merged=merged,
             swarm_kw=swarm_kw,
+            write_swarm=write_swarm,
         )
     end
 
@@ -754,7 +898,7 @@ function makeswarmfiles(;
             throw(ArgumentError("makeswarmfiles: h3_transition_range cannot be used together with single-unit model sweep"))
         base_keys !== nothing &&
             throw(ArgumentError("makeswarmfiles: base_keys cannot be used together with single-unit model sweep"))
-        return makeswarmfiles_driver(; transitions=transitions, transitionsvec=transitionsvec, Gvec=Gvec, Rvec=Rvec, Svec=Svec, insertvec=insertvec,
+        return batch_grsm_models(; transitions=transitions, transitionsvec=transitionsvec, Gvec=Gvec, Rvec=Rvec, Svec=Svec, insertvec=insertvec,
             combine=combine, models=models, datapath=datapath, resultfolder=folder, maxtime=maxtime,
             filedir=filedir, kwargs...)
     end
@@ -810,7 +954,7 @@ function makeswarmfiles(;
     swarm_kw[:filedir] = filedir
     apply_h3 = h3_latent || (h3_transition_range !== nothing)
     _driver_write_specs_and_makeswarm(keys, fit_base, swarm_kw; merge_existing_info=merge_existing_info, fit_kw=fit_kw, warn_missing_info=warn_missing_info,
-        apply_h3_latent_overlay=apply_h3, h3_coupling_ranges=h3_coupling_ranges)
+        apply_h3_latent_overlay=apply_h3, h3_coupling_ranges=h3_coupling_ranges, write_swarm=write_swarm)
 end
 
 function makeswarmfiles(csv_path::AbstractString, filedir::AbstractString; kwargs...)
@@ -890,7 +1034,7 @@ execution). Allocate wall time and CPUs so `maxtime` and `nchains` are feasible.
 makeswarm_genes(["MYC", "SOX9"]; cell="HBEC", datatype="rna", datapath="data/", resultfolder="out")
 ```
 """
-function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", datapath="", cell::String="HCT116", datacond="MOCK", resultfolder::String="HCT116_test", label::String="",
+function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype="rna", datapath="", cell::String="HCT116", datacond="MOCK", resultfolder::String="HCT116_test", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", kwargs...)
     if !isempty(filedir) && !isdir(filedir)
@@ -934,13 +1078,7 @@ This function writes a swarmfile that specifies how to run a single Julia file w
 """
 function write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="", sysimage = "")
     f = open(sfile, "w")
-    if isempty(project)
-        writedlm(f, ["julia -t $nthreads -p" nchains juliafile])
-    elseif isempty(sysimage)
-        writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile])
-    else
-        writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains juliafile])
-    end
+    writedlm(f, _swarm_row_matrix(nthreads, nchains, juliafile, string(project), string(sysimage), nothing))
     close(f)
 end
 
@@ -951,15 +1089,11 @@ Writes a swarm file with one line per gene. Each line runs: `julia ... juliafile
 """
 function write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="", sysimage="")
     f = open(sfile, "w")
+    proj = string(project)
+    sim = string(sysimage)
     for gene in genes
         gene_safe = check_genename(gene, "(")
-        if isempty(project)
-            writedlm(f, ["julia -t $nthreads -p" nchains juliafile gene_safe])
-        elseif isempty(sysimage)
-            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile gene_safe])
-        else
-            writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains juliafile gene_safe])
-        end
+        writedlm(f, _swarm_row_matrix(nthreads, nchains, juliafile, proj, sim, gene_safe))
     end
     close(f)
 end
@@ -972,15 +1106,11 @@ Writes a swarm file with one line per key. Each line runs: `julia -t nthreads -p
 function write_swarmfile_keys(sfile, nchains, nthreads, juliafile_base::String, keys::Vector{String}, project="", sysimage="")
     f = open(sfile, "w")
     base = isempty(juliafile_base) ? "fitscript" : juliafile_base
+    proj = string(project)
+    sim = string(sysimage)
     for k in keys
         scriptname = base * "_" * sanitize_for_filename(k) * ".jl"
-        if isempty(project)
-            writedlm(f, ["julia -t $nthreads -p" nchains scriptname])
-        elseif isempty(sysimage)
-            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains scriptname])
-        else
-            writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains scriptname])
-        end
+        writedlm(f, _swarm_row_matrix(nthreads, nchains, scriptname, proj, sim, nothing))
     end
     close(f)
 end
@@ -1031,7 +1161,7 @@ function write_fitscript_tracejoint_key(scriptpath::AbstractString, key::String,
     f = open(scriptpath, "w")
     write_prolog(f, src)
     write(f, "@time fit(; key=$(repr(key))")
-    ks = sort!(collect(setdiff(keys(sp), (:key, :infolder, :traceinfo, :dttype))), by = x -> String(x))
+    ks = sort!(collect(setdiff(keys(sp), (:key, :infolder, :inlabel, :traceinfo, :dttype))), by = x -> String(x))
     for sym in ks
         line = _fit_kw_value_for_fitscript_line(sym, sp[sym])
         line === nothing && continue
@@ -1072,6 +1202,10 @@ end
 
 function _fit_kw_value_for_fitscript_line(k::Symbol, v)::Union{String,Nothing}
     v === nothing && return nothing
+    if v isa FitScriptGeneFromArgs
+        k === :gene || throw(ArgumentError("FitScriptGeneFromArgs is only valid for keyword :gene"))
+        return "ARGS[1]"
+    end
     if k === :method
         return _method_value_string_for_fitscript(v)
     end
@@ -1079,6 +1213,37 @@ function _fit_kw_value_for_fitscript_line(k::Symbol, v)::Union{String,Nothing}
         return _probfn_value_string_for_fitscript(v)
     end
     return repr(v)
+end
+
+"""
+    write_fitscript_fit_keyword_dict(scriptpath, spec::Dict{Symbol,Any}; src="")
+
+Emit a multi-line `fit(; …)` script. Keywords with value `nothing` are omitted; legacy keys
+`infolder`, `inlabel`, `traceinfo`, `dttype` are skipped. Set `spec[:gene] = FITSCRIPT_GENE_FROM_ARGS`
+to write `gene=ARGS[1]` when each swarm line passes the gene name as a trailing argument.
+"""
+function write_fitscript_fit_keyword_dict(scriptpath::AbstractString, spec::Dict{Symbol,Any}; src::AbstractString="")
+    sp = Dict{Symbol,Any}()
+    for (k, v) in spec
+        k in _FITSCRIPT_OMIT_KEYS && continue
+        sp[k] = v
+    end
+    f = open(scriptpath, "w")
+    write_prolog(f, src)
+    write(f, "@time fit(;")
+    first = true
+    for sym in sort!(collect(keys(sp)), by = x -> String(x))
+        line = _fit_kw_value_for_fitscript_line(sym, sp[sym])
+        line === nothing && continue
+        if first
+            write(f, "\n    $(sym)=$(line)")
+            first = false
+        else
+            write(f, ",\n    $(sym)=$(line)")
+        end
+    end
+    write(f, "\n)\n")
+    close(f)
 end
 
 """
@@ -1101,7 +1266,68 @@ function _nchains_for_swarm_line(swarm_kw::Dict{Symbol,Any}, keys::Vector{String
     return 2
 end
 
-function _makeswarm_with_run_specs(keys::Vector{String}, swarm_kw::Dict{Symbol,Any}, specs_by_key::Dict{String, Dict{Symbol,Any}})
+function emit_swarm(sfile::AbstractString, nchains::Integer, nthreads::Integer, juliafile::AbstractString; project::AbstractString="", sysimage::AbstractString="")
+    write_swarmfile(sfile, Int(nchains), Int(nthreads), string(juliafile), string(project), string(sysimage))
+end
+
+"""
+    emit_swarm_batch(sfile, nchains, nthreads, juliafile, items; project="", sysimage="", per_key_scripts=false)
+
+Write a `.swarm` file. With `per_key_scripts=false` (default), each line runs `juliafile` with one trailing
+argument from `items` (gene-style batching). With `per_key_scripts=true`, each line runs `juliafile_<item>.jl`
+(key-style batching).
+"""
+function emit_swarm_batch(sfile::AbstractString, nchains::Integer, nthreads::Integer, juliafile::AbstractString, items::Vector{String}; project::AbstractString="", sysimage::AbstractString="", per_key_scripts::Bool=false)
+    if per_key_scripts
+        write_swarmfile_keys(sfile, Int(nchains), Int(nthreads), string(juliafile), items, string(project), string(sysimage))
+    else
+        write_swarmfile(sfile, Int(nchains), Int(nthreads), string(juliafile), items, string(project), string(sysimage))
+    end
+end
+
+"""
+    emit_fitscript(path, key; src="", kwargs...)
+
+Write a compact `fit(; key=..., ...)` script (same as [`write_fitfile_key`](@ref)).
+"""
+function emit_fitscript(scriptpath::AbstractString, key::AbstractString; src::AbstractString="", kwargs...)
+    write_fitfile_key(scriptpath, String(key); src=src, kwargs...)
+end
+
+"""
+    emit_fitscript(path, key, spec::Dict{Symbol,Any}; src="")
+
+Write a full multi-line `fit(; key=..., ...)` script from a run-spec dict (same as [`write_fitscript_tracejoint_key`](@ref)).
+"""
+function emit_fitscript(scriptpath::AbstractString, key::AbstractString, spec::Dict{Symbol,Any}; src::AbstractString="")
+    write_fitscript_tracejoint_key(scriptpath, String(key), spec; src=src)
+end
+
+"""
+    emit_fitscripts(keys, specs_by_key; filedir=".", juliafile="fitscript", src="", write_swarm=false, nchains=2, nthreads=1, swarmfile="fit", project="", sysimage="")
+
+For each key in `keys`, write `fitscript_<key>.jl` using [`write_fitscript_tracejoint_key`](@ref). If `write_swarm=true`,
+also write a `.swarm` with one line per key ([`emit_swarm_batch`](@ref) with `per_key_scripts=true`).
+"""
+function emit_fitscripts(keys::Vector{String}, specs_by_key::Dict{String,Dict{Symbol,Any}};
+        filedir::AbstractString=".", juliafile::AbstractString="fitscript", src::AbstractString="",
+        write_swarm::Bool=false, nchains::Int=2, nthreads::Int=1, swarmfile::AbstractString="fit",
+        project::AbstractString="", sysimage::AbstractString="")
+    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
+    isempty(keys) && return keys
+    if write_swarm
+        sfn = endswith(swarmfile, ".swarm") ? string(swarmfile) : string(swarmfile) * ".swarm"
+        emit_swarm_batch(joinpath(filedir, sfn), nchains, nthreads, juliafile, keys; project=project, sysimage=sysimage, per_key_scripts=true)
+    end
+    for k in keys
+        haskey(specs_by_key, k) || throw(ArgumentError("emit_fitscripts: missing run spec dict for key $(repr(k))"))
+        scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
+        write_fitscript_tracejoint_key(scriptpath, k, specs_by_key[k]; src=src)
+    end
+    return keys
+end
+
+function _makeswarm_with_run_specs(keys::Vector{String}, swarm_kw::Dict{Symbol,Any}, specs_by_key::Dict{String, Dict{Symbol,Any}}; write_swarm::Bool=true)
     filedir = get(swarm_kw, :filedir, ".")
     !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
     isempty(keys) && return
@@ -1112,13 +1338,7 @@ function _makeswarm_with_run_specs(keys::Vector{String}, swarm_kw::Dict{Symbol,A
     project = get(swarm_kw, :project, "")
     sysimage = get(swarm_kw, :sysimage, "")
     src = get(swarm_kw, :src, "")
-    sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
-    write_swarmfile_keys(joinpath(filedir, sfile), nchains, nthreads, juliafile, keys, project, sysimage)
-    for k in keys
-        haskey(specs_by_key, k) || throw(ArgumentError("missing run spec dict for key $(repr(k))"))
-        scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
-        write_fitscript_tracejoint_key(scriptpath, k, specs_by_key[k]; src=src)
-    end
+    emit_fitscripts(keys, specs_by_key; filedir=filedir, juliafile=juliafile, src=src, write_swarm=write_swarm, nchains=nchains, nthreads=nthreads, swarmfile=swarmfile, project=project, sysimage=sysimage)
 end
 
 """
@@ -1155,19 +1375,65 @@ end
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
 
-Writes a fit script that takes the gene as `ARGS[1]` and calls `fit(nchains, datatype, datapath, ARGS[1], cell, datacond, resultfolder, …)` (no legacy `dttype` / `traceinfo` positionals). Optional **`kwargs`** append as `; kw=…` in the emitted line (e.g. `inference_method=:nuts`).
+Writes a fit script that passes the gene as `ARGS[1]` (one shared script; swarm lines append the gene name)
+and calls keyword [`fit`](@ref): `@time fit(; nchains=…, gene=ARGS[1], datatype=…, …)`. Optional **`kwargs`** are merged
+into the emitted keyword list (e.g. `inference_method=:nuts`).
 """
 function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
-    s = '"'
     transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
-    f = open(fitfile, "w")
-    write_prolog(f, src)
-    typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
-    typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
-    write(f, "@time fit($nchains, $s$datatype$s, $datapath, ARGS[1], $s$cell$s, $datacond, $s$resultfolder$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)" * _fit_positional_script_kw_suffix(; kwargs...) * "\n")
-    close(f)
+    spec = Dict{Symbol,Any}(
+        :nchains => nchains,
+        :datatype => datatype,
+        :datapath => datapath,
+        :gene => FITSCRIPT_GENE_FROM_ARGS,
+        :cell => cell,
+        :datacond => datacond,
+        :resultfolder => resultfolder,
+        :label => label,
+        :fittedparam => fittedparam,
+        :fixedeffects => fixedeffects,
+        :transitions => transitions,
+        :G => G,
+        :R => R,
+        :S => S,
+        :insertstep => insertstep,
+        :coupling => coupling,
+        :grid => grid,
+        :root => root,
+        :maxtime => maxtime,
+        :elongationtime => elongationtime,
+        :priormean => priormean,
+        :nalleles => nalleles,
+        :priorcv => priorcv,
+        :onstates => onstates,
+        :decayrate => decayrate,
+        :splicetype => splicetype,
+        :probfn => probfn,
+        :noisepriors => noisepriors,
+        :hierarchical => hierarchical,
+        :ratetype => ratetype,
+        :propcv => propcv,
+        :samplesteps => samplesteps,
+        :warmupsteps => warmupsteps,
+        :temp => temp,
+        :temprna => temprna,
+        :burst => burst,
+        :optimize => optimize,
+        :writesamples => writesamples,
+        :method => method,
+        :zeromedian => zeromedian,
+        :datacol => datacol,
+        :ejectnumber => ejectnumber,
+        :yieldfactor => yieldfactor,
+        :trace_specs => trace_specs,
+        :dwell_specs => dwell_specs,
+    )
+    for (k, v) in pairs(kwargs)
+        spec[Symbol(k)] = v
+    end
+    write_fitscript_fit_keyword_dict(fitfile, spec; src=src)
 end
 
 """
@@ -1175,21 +1441,63 @@ end
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
 
-Like `write_fitfile_genes` but with `gene` hard-coded in the script instead of `ARGS[1]`.
-Used for coupled-model scripts where one gene is fixed per script.
-`trace_specs` and `dwell_specs` are interpolated into the emitted `fit(nchains, datatype, datapath, gene, …)` call; additional **`kwargs`** become trailing `fit(...; …)` keywords in the script (same as `write_fitfile_genes`).
+Like [`write_fitfile_genes`](@ref) but with `gene` fixed in the script (keyword `fit`, not positional args).
 """
 function write_fitfile_coupled(fitfile, gene::String, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
-    s = '"'
     transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
-    f = open(fitfile, "w")
-    write_prolog(f, src)
-    typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
-    typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
-    write(f, "@time fit($nchains, $s$datatype$s, $datapath, $s$gene$s, $s$cell$s, $datacond, $s$resultfolder$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)" * _fit_positional_script_kw_suffix(; kwargs...) * "\n")
-    close(f)
+    spec = Dict{Symbol,Any}(
+        :nchains => nchains,
+        :datatype => datatype,
+        :datapath => datapath,
+        :gene => gene,
+        :cell => cell,
+        :datacond => datacond,
+        :resultfolder => resultfolder,
+        :label => label,
+        :fittedparam => fittedparam,
+        :fixedeffects => fixedeffects,
+        :transitions => transitions,
+        :G => G,
+        :R => R,
+        :S => S,
+        :insertstep => insertstep,
+        :coupling => coupling,
+        :grid => grid,
+        :root => root,
+        :maxtime => maxtime,
+        :elongationtime => elongationtime,
+        :priormean => priormean,
+        :nalleles => nalleles,
+        :priorcv => priorcv,
+        :onstates => onstates,
+        :decayrate => decayrate,
+        :splicetype => splicetype,
+        :probfn => probfn,
+        :noisepriors => noisepriors,
+        :hierarchical => hierarchical,
+        :ratetype => ratetype,
+        :propcv => propcv,
+        :samplesteps => samplesteps,
+        :warmupsteps => warmupsteps,
+        :temp => temp,
+        :temprna => temprna,
+        :burst => burst,
+        :optimize => optimize,
+        :writesamples => writesamples,
+        :method => method,
+        :zeromedian => zeromedian,
+        :datacol => datacol,
+        :ejectnumber => ejectnumber,
+        :yieldfactor => yieldfactor,
+        :trace_specs => trace_specs,
+        :dwell_specs => dwell_specs,
+    )
+    for (k, v) in pairs(kwargs)
+        spec[Symbol(k)] = v
+    end
+    write_fitscript_fit_keyword_dict(fitfile, spec; src=src)
 end
 
 """
@@ -1202,7 +1510,7 @@ swarm line. Intended for coupled models where each label/coupling gets its own s
 function makeswarm_coupled(; gene::String, label::String,
     nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript",
     filedir=".", project="", sysimage="", src="",
-    datatype::String="tracejoint", datapath="", cell::String="HBEC",
+    datatype="tracejoint", datapath="", cell::String="HBEC",
     datacond=[], resultfolder::String="",
     fittedparam=Int[], fixedeffects=tuple(), transitions=tuple(), G=2, R=0, S=0, insertstep=1,
     coupling=tuple(), grid=nothing, root=".", maxtime=60.0, elongationtime=6.0,
@@ -1221,13 +1529,9 @@ function makeswarm_coupled(; gene::String, label::String,
     scriptpath = joinpath(filedir, scriptfile)
     sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
     open(joinpath(filedir, sfile), "a") do f
-        if isempty(project)
-            writedlm(f, ["julia -t $nthreads -p" nchains scriptfile])
-        elseif isempty(sysimage)
-            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains scriptfile])
-        else
-            writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains scriptfile])
-        end
+        proj = string(project)
+        sim = string(sysimage)
+        writedlm(f, _swarm_row_matrix(nthreads, nchains, scriptfile, proj, sim, nothing))
     end
     write_fitfile_coupled(scriptpath, gene, nchains, datatype, datapath, cell,
         datacond, resultfolder, label, fittedparam, fixedeffects,
@@ -2123,3 +2427,154 @@ function find_highly_nonconverged_genes(measures_file::String;
     end
     return bad_genes
 end
+
+# --- TOML profiles, model grids, staging ------------------------------------------
+
+const _STAGE_SUBDIRS = ("specs", "scripts", "swarm", "inputs")
+
+function load_stochasticgene_toml_layers(; root::AbstractString=".", profile::Union{Nothing,AbstractString}=nothing)
+    merged = Dict{String,Any}()
+    userpath = joinpath(homedir(), ".stochasticgene.toml")
+    if isfile(userpath)
+        merge!(merged, TOML.parsefile(userpath))
+    end
+    projpath = joinpath(root, ".stochasticgene.toml")
+    if isfile(projpath)
+        merge!(merged, TOML.parsefile(projpath))
+    end
+    prof_name = profile === nothing ? "" : strip(string(profile))
+    if !isempty(prof_name)
+        profs = get(merged, "profiles", nothing)
+        if profs isa AbstractDict && haskey(profs, prof_name)
+            sub = profs[prof_name]
+            if sub isa AbstractDict
+                merge!(merged, Dict{String,Any}(String(k) => v for (k, v) in pairs(sub)))
+            end
+        end
+    end
+    biowulf_tbl = get(merged, "biowulf", nothing)
+    fit_tbl = get(merged, "fit", nothing)
+    biowulf_d = biowulf_tbl isa AbstractDict ? Dict{String,Any}(biowulf_tbl) : Dict{String,Any}()
+    fit_d = fit_tbl isa AbstractDict ? Dict{String,Any}(fit_tbl) : Dict{String,Any}()
+    return (biowulf=biowulf_d, fit=fit_d, raw=merged)
+end
+
+function model_grid(; transitions=([1, 2], [2, 1]), Gset, Rset, Sset, insertset, modes::Symbol=:product)
+    (Gset !== nothing && Rset !== nothing && Sset !== nothing && insertset !== nothing) ||
+        throw(ArgumentError("model_grid requires keyword arguments Gset, Rset, Sset, insertset"))
+    if modes === :product
+        return [(G=gs[1], R=gs[2], S=gs[3], insertstep=gs[4], transitions=transitions) for gs in Base.product(Gset, Rset, Sset, insertset)]
+    elseif modes === :zip
+        n = length(Gset)
+        length(Rset) == length(Sset) == length(insertset) == n ||
+            throw(ArgumentError("model_grid modes=:zip requires equal-length Gset, Rset, Sset, insertset"))
+        return [(G=Gset[i], R=Rset[i], S=Sset[i], insertstep=insertset[i], transitions=transitions) for i in 1:n]
+    else
+        throw(ArgumentError("model_grid modes must be :product or :zip"))
+    end
+end
+
+function default_priors(; kwargs...)
+    merge(fit_default_spec(), Dict{Symbol,Any}(kwargs))
+end
+
+function coupling_grid(; coupling_strings, modes=:activate)
+    s = coupling_strings
+    s isa AbstractVector || throw(ArgumentError("coupling_grid: coupling_strings must be a vector of strings"))
+    if modes isa Symbol
+        return [(field=String(s[i]), mode=modes) for i in eachindex(s)]
+    end
+    modes isa AbstractVector || throw(ArgumentError("coupling_grid: modes must be a Symbol or vector"))
+    return [(field=String(s[i]), mode=modes[mod1(i, length(modes))]) for i in eachindex(s)]
+end
+
+function fit_specs(base::AbstractDict{Symbol,<:Any}; models=nothing, priors=:auto, couplings=nothing)
+    out = Dict{String,Dict{Symbol,Any}}()
+    models === nothing && return out
+    b = Dict{Symbol,Any}(base)
+    if couplings !== nothing
+        @warn "fit_specs: couplings= is reserved for future use; ignoring" maxlog=1
+    end
+    if priors !== :auto && priors !== nothing
+        @warn "fit_specs: only priors=:auto is implemented; merging base as-is" maxlog=1
+    end
+    for m in models
+        mrow = m isa NamedTuple ? Dict{Symbol,Any}(pairs(m)) : Dict{Symbol,Any}(m)
+        spec = merge(b, mrow)
+        !haskey(spec, :transitions) && throw(ArgumentError("fit_specs: each model row must include transitions= or provide transitions in base"))
+        key = if get(spec, :key, nothing) !== nothing
+            string(spec[:key])
+        else
+            default_model_key(spec[:G], spec[:R], spec[:S], spec[:insertstep])
+        end
+        spec[:key] = key
+        out[key] = spec
+    end
+    return out
+end
+
+function stage_run(originalfolders, newfolder::AbstractString;
+        profile=nothing,
+        root::AbstractString=".",
+        copy_specs::Bool=true,
+        combined::Union{Nothing,NamedTuple}=nothing)
+    isempty(strip(string(newfolder))) && throw(ArgumentError("stage_run: newfolder must be non-empty"))
+    orig = if originalfolders isa AbstractString || originalfolders isa AbstractChar
+        [string(originalfolders)]
+    else
+        String[string(x) for x in originalfolders]
+    end
+    mkpath(newfolder)
+    for sd in _STAGE_SUBDIRS
+        mkpath(joinpath(newfolder, sd))
+    end
+    layers = load_stochasticgene_toml_layers(; root=root, profile=profile)
+    manifest = joinpath(newfolder, "inputs", "manifest.toml")
+    verstr = try
+        string(Base.pkgversion(StochasticGene))
+    catch
+        "unknown"
+    end
+    open(manifest, "w") do io
+        println(io, "sources = ", repr(orig))
+        println(io, "profile = ", repr(profile))
+        println(io, "stochasticgene_version = ", repr(verstr))
+    end
+    open(joinpath(newfolder, "inputs", "toml_layers_meta.toml"), "w") do io
+        println(io, "# Resolved TOML slice keys (see load_stochasticgene_toml_layers)")
+        println(io, "biowulf_keys = ", repr(collect(keys(layers.biowulf))))
+        println(io, "fit_keys = ", repr(collect(keys(layers.fit))))
+    end
+    if copy_specs
+        for folder in orig
+            for c in (joinpath(folder, "results"), folder)
+                isdir(c) || continue
+                for fn in readdir(c)
+                    if startswith(fn, "info_") && endswith(fn, ".jld2")
+                        try
+                            cp(joinpath(c, fn), joinpath(newfolder, "specs", fn); force=true)
+                        catch e
+                            @warn "stage_run: could not copy spec file" path=joinpath(c, fn) exception=(e, catch_backtrace())
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if combined !== nothing
+        enh = get(combined, :enhancer_file, get(combined, :unit1, nothing))
+        gen = get(combined, :gene_file, get(combined, :unit2, nothing))
+        (enh !== nothing && gen !== nothing) || throw(ArgumentError("stage_run: combined NamedTuple must include enhancer_file and gene_file (aliases unit1, unit2)"))
+        outnm = get(combined, :output_name, "combined_rates.txt")
+        outf = joinpath(newfolder, "inputs", string(outnm))
+        Nenh = Int(get(combined, :Nenh, get(combined, :ncols_enhancer, 10)))
+        Ngene = Int(get(combined, :Ngene, get(combined, :ncols_gene, 10)))
+        create_combined_file(string(enh), string(gen), outf, Nenh, Ngene;
+            ncoupling=Int(get(combined, :ncoupling, 1)),
+            default_coupling=get(combined, :default_coupling, nothing),
+        )
+    end
+    return newfolder
+end
+
+const setup = stage_run

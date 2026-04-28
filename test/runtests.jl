@@ -30,6 +30,53 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
+    @testset "Biowulf script / swarm emission" begin
+        mktempdir() do dir
+            script = joinpath(dir, "gene_fit.jl")
+            trace_row = (unit=1, interval=1.0, start=1.0, t_end=-1.0, zeromedian=true, background=0.0, active_fraction=1.0)
+            StochasticGene.write_fitfile_genes(
+                script, 2, (:rna, :rnadwelltime), (rna="data/rna/", dwelltime=("ON.csv", "OFF.csv")),
+                "CELL", "MOCK", "res", "lb",
+                Int[], tuple(), ([1, 2], [2, 1]), 2, 0, 0, 1, tuple(), nothing, ".", 60.0, 6.0,
+                Float64[], 1, 10.0, Int[], -1.0, "", StochasticGene.prob_Gaussian, [], tuple(), "median", 0.01,
+                1000, 0, 1.0, 1.0, false, false, false, "Tsit5()", "", true, 3, 1, 0.05,
+                [trace_row], [];
+                inference_method=:mh,
+            )
+            s = read(script, String)
+            @test occursin("@time fit(;", s)
+            @test occursin("gene=ARGS[1]", s)
+            @test !occursin("fit(2,", s)
+            @test !occursin("infolder", s) && !occursin("inlabel", s)
+            @test occursin(":rna", s) && occursin(":rnadwelltime", s)
+            swarmf = joinpath(dir, "batch.swarm")
+            StochasticGene.emit_swarm_batch(swarmf, 2, 1, "gene_fit.jl", ["GENE1", "GENE2"])
+            sw = read(swarmf, String)
+            @test occursin("gene_fit.jl", sw) && occursin("GENE1", sw) && occursin("GENE2", sw)
+            staged = joinpath(dir, "staged")
+            StochasticGene.stage_run(joinpath(dir, "src"), staged; copy_specs=false)
+            @test isdir(joinpath(staged, "specs"))
+            @test isfile(joinpath(staged, "inputs", "manifest.toml"))
+            mg = StochasticGene.model_grid(Gset=[2], Rset=[0], Sset=[0], insertset=[1])
+            @test length(mg) == 1 && mg[1].G == 2
+            outm = joinpath(dir, "minimal")
+            mkpath(outm)
+            StochasticGene.makeswarm(; filedir=outm, key="k1", juliafile="once.jl", resultfolder="rf", root=".", nchains=3)
+            ms = read(joinpath(outm, "once.jl"), String)
+            @test occursin("key=", ms) && occursin("\"k1\"", ms)
+            sw1 = read(joinpath(outm, "fit.swarm"), String)
+            @test occursin("once.jl", sw1)
+            rb = joinpath(dir, "results", "batchres")
+            mkpath(rb)
+            touch(joinpath(rb, "info_mykey.jld2"))
+            bout = joinpath(dir, "batchout")
+            kfound = StochasticGene.makeswarm_folder("batchres"; root=dir, filedir=bout)
+            @test kfound == ["mykey"] || sort(kfound) == ["mykey"]
+            @test isfile(joinpath(bout, "fitscript_mykey.jl"))
+            @test isfile(joinpath(bout, "fit.swarm"))
+        end
+    end
+
     @testset "RNA + ON/OFF + dwell" begin
         h1, h2 = StochasticGene.test_fit_rnaonoff()
         @test isapprox(h1, h2, rtol=0.05)

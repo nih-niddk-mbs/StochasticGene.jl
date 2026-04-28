@@ -90,7 +90,7 @@ fits = fit(
 - `simulator_coupled.jl`: Stochastic simulation algorithms
 - `fit.jl`: Model fitting functions
 - `analysis.jl`: Post-fit analysis tools
-- `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarmfiles`, `makeswarm_models`, …)
+- `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarm_folder`, `makeswarm_genes`, `batch_grsm_models`, `emit_fitscripts`, …)
 - `coupled_csv.jl`: `Coupled_models_to_test.csv` → coupling specs (`csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, …)
 - `hmm.jl`: Hidden Markov model functions
 - `test.jl`, `test_features.jl`, `benchmarks.jl`: full-stack tests, feature/regression checks, and benchmarking helpers
@@ -199,6 +199,9 @@ export
     make_dataframes,
     make_mat,
     makeswarm,
+    makeswarm_keys,
+    makeswarm_folder,
+    batch_grsm_models,
     makeswarm_models,
     csv_row_to_connections_simple,
     build_coupled_fit_spec_from_csv_cells,
@@ -373,6 +376,19 @@ export
     create_combined_files_h3_latent,
     write_run_spec_preset,
     write_fitscript_tracejoint_key,
+    write_fitscript_fit_keyword_dict,
+    emit_fitscript,
+    emit_fitscripts,
+    emit_swarm,
+    emit_swarm_batch,
+    stage_run,
+    setup,
+    load_stochasticgene_toml_layers,
+    model_grid,
+    default_priors,
+    coupling_grid,
+    fit_specs,
+    FITSCRIPT_GENE_FROM_ARGS,
     default_model_key,
     zero_median
 

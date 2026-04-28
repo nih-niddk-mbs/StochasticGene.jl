@@ -2,10 +2,24 @@
 
 This chapter is for **everyone who installs StochasticGene.jl** (`Pkg.add("StochasticGene")`) and needs to:
 
-- run many `fit` jobs on a cluster (**including NIH Biowulf**) using **swarm files** and [`makeswarm`](@ref);
+- run many `fit` jobs on a cluster (**including NIH Biowulf**) using **swarm files** and the composable helpers [`emit_fitscript`](@ref) / [`emit_fitscripts`](@ref) + [`emit_swarm_batch`](@ref) (legacy [`makeswarm`](@ref) / [`makeswarmfiles`](@ref) are deprecated but still work);
 - follow the **recommended coupled-model workflow**: fit **individual units first**, then **merge** those fitted rates into **one initial rate file** for the **coupled** model.
 
 The implementations live in **`biowulf.jl`** (swarms, run-spec presets) and **`io.jl`** (merging rate tables). Function signatures and defaults are in the **docstrings**; this page is the **narrative** guide published with the [GitHub-hosted documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/).
+
+## Composable API (preferred)
+
+Use these in new code; legacy names remain for compatibility but emit `Base.depwarn`:
+
+| Step | Functions |
+|------|-----------|
+| Write fit scripts | [`emit_fitscript`](@ref), [`emit_fitscripts`](@ref) (set `write_swarm=true` to also emit a `.swarm`) |
+| Write swarm files only | [`emit_swarm`](@ref), [`emit_swarm_batch`](@ref) (`per_key_scripts=true` matches “one `.jl` per key”) |
+| Stage / migrate folders | [`stage_run`](@ref) (alias [`setup`](@ref)): `specs/`, `scripts/`, `swarm/`, `inputs/`, optional [`create_combined_file`](@ref) via `combined=` |
+| Defaults / profiles | [`load_stochasticgene_toml_layers`](@ref) reads `~/.stochasticgene.toml` and `root/.stochasticgene.toml`, then optional `[profiles.NAME]` |
+| Model grids / specs | [`model_grid`](@ref), [`fit_specs`](@ref), [`default_priors`](@ref), [`coupling_grid`](@ref) |
+
+**Gene panels:** [`write_fitfile_genes`](@ref) and [`makeswarm_genes`](@ref) produce **one** shared script with `gene=ARGS[1]` and one swarm line per gene (still the recommended pattern for many genes, one model).
 
 ---
 
@@ -23,19 +37,19 @@ For **coupled** transcriptional units (e.g. enhancer + gene, with or without a h
    For **many keys** (e.g. from a CSV of model names), use [`create_combined_files`](@ref) or [`create_combined_files_driver`](@ref), which call `create_combined_file` once per key and name outputs with [`combined_rates_key`](@ref).
 
 3. **Run the coupled fit using the combined file as the starting rates**  
-   Point **`infolder`** / **`inlabel`** (or your run spec) at that merged file so the coupled MCMC **warm-starts** from the stacked single-unit posteriors.  
+   Point **`datapath`** / **`resultfolder`** / **`label`** (or your run spec) at that merged file so the coupled MCMC **warm-starts** from the stacked single-unit posteriors.  
    The coupled [`fit`](@ref) uses tuple **`G`**, **`R`**, **`coupling`**, joint datatype (e.g. **`tracejoint`**), etc. Coupling strengths are then **estimated** in the coupled run (the placeholder columns from step 2 get updated).
 
 4. **Optional: batch everything on the cluster**  
-   Use [`makeswarm`](@ref) or [`makeswarmfiles`](@ref) so each job runs `fit(; key=..., ...)` from prewritten **`info_<key>`** specs (see [Run specification (info TOML)](run_spec_toml.md)).
+   Use [`emit_fitscripts`](@ref) (with `write_swarm=true`) or legacy [`makeswarm`](@ref) / [`makeswarmfiles`](@ref) so each job runs `fit(; key=..., ...)` from prewritten **`info_<key>`** specs (see [Run specification (info TOML)](run_spec_toml.md)).
 
 This order—**individual fits → merge → coupled fit**—is the standard way to get a sensible **initial** combined rate file for coupled models without fitting all parameters cold.
 
 ---
 
-## NIH Biowulf: using [`makeswarm`](@ref)
+## NIH Biowulf: key-based jobs ([`emit_fitscripts`](@ref) / legacy [`makeswarm`](@ref))
 
-[`makeswarm`](@ref) does **not** submit jobs to the scheduler by itself. It **writes files** you submit with Biowulf’s **`swarm`** (or your own `sbatch` wrappers):
+[`emit_fitscripts`](@ref) and legacy [`makeswarm`](@ref) **do not** submit jobs to the scheduler by themselves. They **write files** you submit with Biowulf’s **`swarm`** (or your own `sbatch` wrappers):
 
 - **`<swarmfile>.swarm`** — one command line per run key (each line runs `julia` with your project and one fit script).
 - **`fitscript_<key>.jl`** per key — typically calls `fit(; key="<key>", ...)` with shared options (`resultfolder`, `maxtime`, `samplesteps`, `warmupsteps`, `inference_method`, `device`, `parallel`, `gradient`, etc.). Symbol-valued overrides (e.g. `inference_method=:nuts`) are supported in minimal scripts; full key-based specs store the same keys in **`info_<key>.jld2`** (see [Run specification](run_spec_toml.md)).
@@ -48,22 +62,21 @@ This order—**individual fits → merge → coupled fit**—is the standard way
 ```julia
 using StochasticGene
 
+# Legacy one-liner (still works; emits depwarn):
 makeswarm(
-    ["runA", "runB"];           # keys; must match info_<key> / rates_<key> naming you use
-    filedir      = "my_swarm",  # directory where .swarm and .jl files are written
+    ["runA", "runB"];
+    filedir      = "my_swarm",
     resultfolder = "my_results",
     root         = ".",
-    project      = "/path/to/your/StochasticGene.jl",  # or "" if using the default environment
+    project      = "/path/to/your/StochasticGene.jl",
     nchains      = 4,
     nthreads     = 1,
     maxtime      = 72000.0,
     samplesteps  = 1_000_000,
-    # Optional: same keywords as `fit(; ...)` overrides, e.g.:
-    # warmupsteps = 50_000,
-    # inference_method = :mh,
-    # parallel = :distributed,
-    # gradient = :finite,
 )
+
+# Preferred split: write scripts with `emit_fitscript(path, key; ...)` then
+# `emit_swarm_batch(...; per_key_scripts=true)` — see docstrings.
 ```
 
 3. Submit the swarm from the shell (example):
