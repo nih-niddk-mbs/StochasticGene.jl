@@ -312,117 +312,74 @@ function label_to_key(src::AbstractString, dst::AbstractString; kwargs...)
     stage_label_to_key(src, dst; kwargs...)
 end
 
-_stage_rates_key(fn::AbstractString) =
-    startswith(fn, "rates_") && endswith(fn, ".txt") ? String(chopprefix(chopsuffix(fn, ".txt"), "rates_")) : nothing
+function _stage_resolve_rate_file(path::AbstractString, root::AbstractString)::String
+    s = String(strip(path))
+    isempty(s) && throw(ArgumentError("rate file path must be non-empty"))
+    isfile(s) && return abspath(s)
+    p1 = joinpath(root, s)
+    isfile(p1) && return abspath(p1)
+    tail = _strip_optional_results_prefix(s)
+    p2 = joinpath(root, "results", tail)
+    isfile(p2) && return abspath(p2)
+    throw(ArgumentError("rates file does not exist: $(repr(s)) under root $(repr(root))"))
+end
 
-function _stage_rates_map(folder::AbstractString)::Dict{String,String}
-    out = Dict{String,String}()
-    for fn in readdir(folder)
-        k = _stage_rates_key(fn)
-        k === nothing && continue
-        full = joinpath(folder, fn)
-        isfile(full) || continue
-        haskey(out, k) && throw(ArgumentError("duplicate rates key $(repr(k)) in folder $(repr(folder))"))
-        out[k] = full
-    end
-    out
+function _stage_resolve_output_file(path::AbstractString, root_out::AbstractString; write_out::Bool)::String
+    d = String(strip(path))
+    isempty(d) && throw(ArgumentError("output file path must be non-empty"))
+    out_abs = isabspath(d) ? abspath(d) : abspath(joinpath(root_out, d))
+    write_out && mkpath(dirname(out_abs))
+    return out_abs
 end
 
 """
-    stage_combine_rates(folders, outfolder; grsm, noise, hidden_per_set=0, hidden_values=nothing,
-                        ncoupling=1, coupling_values=nothing, key_select=:intersection,
-                        root=".", root_out=root, dry_run=false, force=true) -> (; n, rows)
+Merge rate matrices (one per unit) set-wise.
 
-Combine key-matched `rates_<key>.txt` files across multiple input folders and write only combined
-`rates_*.txt` files into `outfolder`.
+**Stride:** each unit’s table is sliced in blocks of width `set_widths[i]` (= `number_of_parameters[i]` from
+the caller), i.e. the same “columns per set” role as `Nenh` / `Ngene` in [`merge_coupled_two_unit_rates`](@ref)
+(`io.jl`). That walk `(set-1)*sw+1:set*sw` is the stride logic; there is no separate hidden stride parameter.
 
-`folders` is a list of rate folders (one per unit). For each folder `i`, provide:
-- `grsm[i]`: number of GRSM rate columns per set
-- `noise[i]`: number of noise columns per set
+**`hierarchical` here (insert layout only):** this flag is **not** the same as `fit(; hierarchical=...)` or the
+`hierarchical` argument in external swarm builders (e.g. `makescriptcoupled.jl` → `makeswarm_coupled`): those
+choose priors / hierarchy tuples / labels for **fitting**. Here it only chooses how `new_params` are laid
+out after strided unit columns:
 
-Per unit, one set width is `grsm[i] + noise[i]`. Each source rates table width must be divisible by
-its set width; the inferred number of sets must match across all units for a given key (this is what
-makes hierarchical stride insertion deterministic).
+- `false`: after **each** set’s unit blocks, append `new_params` (labels suffixed with `_<set>` when
+  `nset > 1`). This matches the **per-set** coupling tail pattern of [`merge_coupled_two_unit_rates`](@ref).
+- `true`: append `new_params` **once** after **all** sets (shared tail); labels unchanged.
 
-For each set `s`, output column order is:
-1. unit 1 block for set `s`
-2. unit 2 block for set `s`
-3. ...
-4. hidden block (`hidden_per_set` columns, optional)
-5. coupling block (`ncoupling` columns)
-
-So hidden/coupling are inserted per set (not only once at file end).
+For combined starts that should mirror `create_combined_file` / `merge_coupled_two_unit_rates`, use
+`hierarchical=false` and set `number_of_parameters` to the same per-unit widths you would pass as `Nenh`,
+`Ngene` (often **larger** when each set already bundles hierarchical hyper + individual columns — see the
+docstring of [`create_combined_file`](@ref)).
 """
-function stage_combine_rates(
-    folders::AbstractVector{<:AbstractString},
-    outfolder::AbstractString;
-    grsm::AbstractVector{<:Integer},
-    noise::AbstractVector{<:Integer},
-    hidden_per_set::Integer=0,
-    hidden_values=nothing,
-    ncoupling::Integer=1,
-    coupling_values=nothing,
-    key_select::Symbol=:intersection,
-    root::AbstractString=".",
-    root_out::AbstractString=root,
-    dry_run::Bool=false,
-    force::Bool=true,
-)
-    n_units = length(folders)
-    n_units > 0 || throw(ArgumentError("folders must be non-empty"))
-    length(grsm) == n_units || throw(ArgumentError("grsm length must match folders length"))
-    length(noise) == n_units || throw(ArgumentError("noise length must match folders length"))
-    key_select in (:intersection, :first) || throw(ArgumentError("key_select must be :intersection or :first"))
-    hidden_per_set >= 0 || throw(ArgumentError("hidden_per_set must be >= 0"))
-    ncoupling >= 0 || throw(ArgumentError("ncoupling must be >= 0"))
-
-    src_abs = [_stage_resolve_src(f, String(root)) for f in folders]
-    dst_abs = _stage_resolve_dst(outfolder, String(root_out); dry_run=dry_run, make=true)
-    set_widths = Int.(grsm) .+ Int.(noise)
-    any(set_widths .<= 0) && throw(ArgumentError("each grsm[i] + noise[i] must be > 0"))
-
-    maps = [_stage_rates_map(f) for f in src_abs]
-    matched_keys = if key_select === :intersection
-        ks = isempty(maps) ? String[] : collect(Base.keys(maps[1]))
-        for m in maps[2:end]
-            ks = [k for k in ks if haskey(m, k)]
-        end
-        sort(ks)
-    else
-        sort(collect(Base.keys(maps[1])))
+function _stage_hcat_rate_units(
+    data::Vector{Matrix{Float64}},
+    hdrs::Vector{Vector{String}},
+    set_widths::Vector{Int},
+    new_params::Vector{Float64},
+    new_labels::Vector{String},
+    hierarchical::Bool,
+    key::AbstractString,
+)::Tuple{Matrix{Float64},Vector{String},Int}
+    nrows = size(data[1], 1)
+    nsets = Int[]
+    for i in eachindex(data)
+        size(data[i], 1) == nrows || throw(ArgumentError("row count mismatch for $(repr(key)) across units"))
+        w = size(data[i], 2)
+        sw = set_widths[i]
+        w % sw == 0 || throw(ArgumentError(
+            "$(repr(key)) unit $(i): width $w not divisible by set width $sw (number_of_parameters for this unit)",
+        ))
+        length(hdrs[i]) == w || throw(ArgumentError("$(repr(key)) unit $(i): header length mismatch"))
+        push!(nsets, div(w, sw))
     end
-    isempty(matched_keys) && throw(ArgumentError("no matching rates_<key>.txt files found for requested key_select=$(repr(key_select))"))
+    all(==(nsets[1]), nsets) || throw(ArgumentError("$(repr(key)): inconsistent set counts across units: $(nsets)"))
+    nset = nsets[1]
 
-    hidden_vals = hidden_values === nothing ? fill(0.01, Int(hidden_per_set)) : collect(Float64, hidden_values)
-    length(hidden_vals) == Int(hidden_per_set) || throw(ArgumentError("hidden_values length must equal hidden_per_set"))
-    coupling_vals = coupling_values === nothing ? fill(0.0, Int(ncoupling)) : collect(Float64, coupling_values)
-    length(coupling_vals) == Int(ncoupling) || throw(ArgumentError("coupling_values length must equal ncoupling"))
-
-    rows = NamedTuple{(:key, :srcs, :dst, :nsets), Tuple{String,Vector{String},String,Int}}[]
-    for key in matched_keys
-        srcs = [haskey(m, key) ? m[key] : throw(ArgumentError("missing key $(repr(key)) in folder $(repr(src_abs[i]))")) for (i, m) in enumerate(maps)]
-        data = Matrix{Float64}[]
-        hdrs = Vector{String}[]
-        for fp in srcs
-            d, h = read_rates_table(fp)
-            push!(data, d)
-            push!(hdrs, h)
-        end
-        nrows = size(data[1], 1)
-        nsets = Int[]
-        for i in eachindex(data)
-            size(data[i], 1) == nrows || throw(ArgumentError("row count mismatch for key $(repr(key)) across units"))
-            w = size(data[i], 2)
-            sw = set_widths[i]
-            w % sw == 0 || throw(ArgumentError("key $(repr(key)) unit $(i): width $w not divisible by set width $sw (grsm=$(grsm[i]), noise=$(noise[i]))"))
-            length(hdrs[i]) == w || throw(ArgumentError("key $(repr(key)) unit $(i): header length mismatch"))
-            push!(nsets, div(w, sw))
-        end
-        all(==(nsets[1]), nsets) || throw(ArgumentError("key $(repr(key)) has inconsistent set counts across units: $(nsets)"))
-        nset = nsets[1]
-
-        out = zeros(Float64, nrows, 0)
-        outh = String[]
+    out = zeros(Float64, nrows, 0)
+    outh = String[]
+    if hierarchical
         for s in 1:nset
             for i in eachindex(data)
                 sw = set_widths[i]
@@ -430,107 +387,118 @@ function stage_combine_rates(
                 out = hcat(out, data[i][:, cols])
                 append!(outh, hdrs[i][cols])
             end
-            if hidden_per_set > 0
-                out = hcat(out, repeat(reshape(hidden_vals, 1, :), nrows, 1))
-                append!(outh, ["Hidden_$(j)_$s" for j in 1:Int(hidden_per_set)])
+        end
+        if !isempty(new_params)
+            out = hcat(out, repeat(reshape(new_params, 1, :), nrows, 1))
+            append!(outh, new_labels)
+        end
+    else
+        for s in 1:nset
+            for i in eachindex(data)
+                sw = set_widths[i]
+                cols = (s - 1) * sw + 1:s * sw
+                out = hcat(out, data[i][:, cols])
+                append!(outh, hdrs[i][cols])
             end
-            if ncoupling > 0
-                out = hcat(out, repeat(reshape(coupling_vals, 1, :), nrows, 1))
-                append!(outh, Int(ncoupling) == 1 ? ["Coupling_$s"] : ["Coupling_$(j)_$s" for j in 1:Int(ncoupling)])
+            if !isempty(new_params)
+                out = hcat(out, repeat(reshape(new_params, 1, :), nrows, 1))
+                for j in eachindex(new_params)
+                    base = new_labels[j]
+                    push!(outh, nset == 1 ? base : string(base, "_", s))
+                end
             end
         end
-        dst = joinpath(dst_abs, "rates_" * key * ".txt")
-        if !dry_run
-            !force && isfile(dst) && throw(ArgumentError("destination exists: $(repr(dst))"))
-            write_rates_table(dst, out, outh)
-        end
-        push!(rows, (; key=key, srcs=srcs, dst=dst, nsets=nset))
     end
-    (; n=length(rows), rows=rows)
+    return (out, outh, nset)
 end
 
-function _stage_unit_from_spec(u)::NamedTuple{(:folder, :grsm, :noise), Tuple{String, Int, Int}}
-    (u isa NamedTuple && haskey(u, :folder) && haskey(u, :grsm) && haskey(u, :noise)) ||
-        throw(ArgumentError("each unit spec must provide :folder, :grsm, :noise"))
-    (folder=String(u.folder), grsm=Int(u.grsm), noise=Int(u.noise))
-end
-
-"""
-    stage_combine_rates_spec(spec; outfolder, root=".", root_out=root) -> NamedTuple
-
-Resolve an abstract combine spec into the concrete arguments consumed by
-[`stage_combine_rates`](@ref).
-
-`spec` must include `units`, where each unit is a named tuple with:
-- `folder` (String)
-- `grsm` (Int)
-- `noise` (Int)
-
-Optional spec fields are forwarded when present:
-`hidden_per_set`, `hidden_values`, `ncoupling`, `coupling_values`, `key_select`, `subfolder`.
-"""
-function stage_combine_rates_spec(
-    spec::NamedTuple;
-    outfolder::AbstractString,
-    root::AbstractString=".",
-    root_out::AbstractString=root,
-)
-    haskey(spec, :units) || throw(ArgumentError("combine spec must include :units"))
-    units_raw = collect(spec.units)
-    isempty(units_raw) && throw(ArgumentError("spec.units must be non-empty"))
-    units = [_stage_unit_from_spec(u) for u in units_raw]
-    folders = [u.folder for u in units]
-    grsm = [u.grsm for u in units]
-    noise = [u.noise for u in units]
-    dst = haskey(spec, :subfolder) ? joinpath(String(outfolder), String(spec.subfolder)) : String(outfolder)
-    (
-        folders=folders,
-        outfolder=dst,
-        grsm=grsm,
-        noise=noise,
-        hidden_per_set=haskey(spec, :hidden_per_set) ? Int(spec.hidden_per_set) : 0,
-        hidden_values=haskey(spec, :hidden_values) ? spec.hidden_values : nothing,
-        ncoupling=haskey(spec, :ncoupling) ? Int(spec.ncoupling) : 1,
-        coupling_values=haskey(spec, :coupling_values) ? spec.coupling_values : nothing,
-        key_select=haskey(spec, :key_select) ? Symbol(spec.key_select) : :intersection,
-        root=String(root),
-        root_out=String(root_out),
-    )
+"""Columns per set for each unit; `number_of_parameters` is always a vector of length `n_units`."""
+function _stage_set_widths_per_unit(
+    number_of_parameters::AbstractVector{<:Integer},
+    n_units::Int,
+)::Vector{Int}
+    n_units > 0 || throw(ArgumentError("n_units must be positive"))
+    v = collect(Int, number_of_parameters)
+    length(v) == n_units || throw(ArgumentError(
+        "number_of_parameters must have length $(n_units) (one per rate file), got $(length(v))",
+    ))
+    all(>(0), v) || throw(ArgumentError("each number_of_parameters entry must be > 0"))
+    return v
 end
 
 """
-    stage_combine_rates_batch(specs, outfolder; root=".", root_out=root, dry_run=false, force=true) -> (; n, specs)
+    stage_combine_rates(rate_files, output_file, number_of_parameters, new_params=Float64[],
+                        new_param_labels=String[], hierarchical=false, write_out=true, force=true, root=".", root_out=root) -> (; srcs, dst, nsets)
 
-Loop over abstract combine specs, resolve each with [`stage_combine_rates_spec`](@ref), and invoke
-[`stage_combine_rates`](@ref). Returns one result block per spec.
+Merge the tables at `rate_files` (one path per unit) into a single `output_file`. **All arguments are
+positional** (optional trailing arguments use defaults as shown).
+
+`number_of_parameters` is a vector of length `length(rate_files)`: entry `i` is the number of rate columns
+**per set** in `rate_files[i]` (e.g. `[13, 13]`). This is the **stride** through that file’s columns (same idea
+as `Nenh` / `Ngene` in [`merge_coupled_two_unit_rates`](@ref)). Compute from your model / transitions / `G`,
+`R`, `S`, noise counts so widths divide evenly.
+
+`new_params` / `new_param_labels`: extra columns (same value on every row). The boolean `hierarchical` only
+controls **per-set vs single tail** placement (see the internal `_stage_hcat_rate_units` docstring); it does
+not change stride. External scripts such as `makescriptcoupled.jl` use a different notion of “hierarchical”
+for **swarms and fits**; for rate **merging**, align `number_of_parameters` with your on-disk template.
+
+Examples:
+
+```julia
+# Match coupled two-unit per-set layout (like merge_coupled_two_unit_rates + coupling columns):
+stage_combine_rates(rate_files, out, [13, 13], [0.1, 0.2], ["coupling_a", "coupling_b"], false)
+
+# Shared tail once after all strided sets:
+stage_combine_rates(rate_files, out, [13, 13], [0.1, 0.2], ["coupling_a", "coupling_b"], true)
+```
+
+If `write_out` is false, nothing is written. If `force` is false, an existing output file causes an error.
+Relative paths resolve under `root` / `root_out`.
 """
-function stage_combine_rates_batch(
-    specs::AbstractVector{<:NamedTuple},
-    outfolder::AbstractString;
-    root::AbstractString=".",
-    root_out::AbstractString=root,
-    dry_run::Bool=false,
+function stage_combine_rates(
+    rate_files::AbstractVector{<:AbstractString},
+    output_file::AbstractString,
+    number_of_parameters::AbstractVector{<:Integer},
+    new_params::AbstractVector{<:Real}=Float64[],
+    new_param_labels::AbstractVector{<:AbstractString}=String[],
+    hierarchical::Bool=false,
+    write_out::Bool=true,
     force::Bool=true,
+    root::AbstractString=".",
+    root_out::AbstractString=root,
 )
-    rows = NamedTuple[]
-    for (i, s) in enumerate(specs)
-        resolved = stage_combine_rates_spec(s; outfolder=outfolder, root=root, root_out=root_out)
-        res = stage_combine_rates(
-            resolved.folders,
-            resolved.outfolder;
-            grsm=resolved.grsm,
-            noise=resolved.noise,
-            hidden_per_set=resolved.hidden_per_set,
-            hidden_values=resolved.hidden_values,
-            ncoupling=resolved.ncoupling,
-            coupling_values=resolved.coupling_values,
-            key_select=resolved.key_select,
-            root=resolved.root,
-            root_out=resolved.root_out,
-            dry_run=dry_run,
-            force=force,
-        )
-        push!(rows, (; index=i, result=res))
+    n_units = length(rate_files)
+    n_units > 0 || throw(ArgumentError("rate_files must be non-empty"))
+
+    set_widths = _stage_set_widths_per_unit(number_of_parameters, n_units)
+
+    np = isempty(new_params) ? Float64[] : collect(Float64, new_params)
+    nl = isempty(new_param_labels) ? String[] : [String(strip(x)) for x in new_param_labels]
+    if isempty(np)
+        isempty(nl) || throw(ArgumentError("new_param_labels must be empty when new_params is empty"))
+    else
+        length(nl) == length(np) || throw(ArgumentError(
+            "new_param_labels must have the same length as new_params ($(length(np))), got $(length(nl))",
+        ))
+        any(isempty, nl) && throw(ArgumentError("new_param_labels must be non-empty strings"))
     end
-    (; n=length(rows), specs=rows)
+
+    srcs = [_stage_resolve_rate_file(f, String(root)) for f in rate_files]
+    dst = _stage_resolve_output_file(output_file, String(root_out); write_out=write_out)
+    key_label = basename(dst)
+
+    data = Matrix{Float64}[]
+    hdrs = Vector{String}[]
+    for fp in srcs
+        d, h = read_rates_table(fp)
+        push!(data, d)
+        push!(hdrs, h)
+    end
+    out, outh, nset = _stage_hcat_rate_units(data, hdrs, set_widths, np, nl, hierarchical, key_label)
+    if write_out
+        !force && isfile(dst) && throw(ArgumentError("destination exists: $(repr(dst))"))
+        write_rates_table(dst, out, outh)
+    end
+    return (; srcs=srcs, dst=dst, nsets=nset)
 end

@@ -91,7 +91,7 @@ fits = fit(
 - `fit.jl`: Model fitting functions
 - `analysis.jl`: Post-fit analysis tools
 - `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarmfiles`, `makeswarm_models`, …)
-- `stage.jl`: results staging (`stage_label_to_key`, legacy → key-based filenames)
+- `stage.jl`: results staging (`stage_label_to_key`, legacy → key-based filenames; `stage_combine_rates` merges rate files)
 - `coupled_csv.jl`: `Coupled_models_to_test.csv` → coupling specs (`csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, …)
 - `hmm.jl`: Hidden Markov model functions
 - `test.jl`, `test_features.jl`, `benchmarks.jl`: full-stack tests, feature/regression checks, and benchmarking helpers
@@ -273,8 +273,6 @@ export
     simulator_dwell_specs,
     source_states,
     stage_combine_rates,
-    stage_combine_rates_spec,
-    stage_combine_rates_batch,
     stage_label_to_key,
     label_to_key,
     staging_key_segment,

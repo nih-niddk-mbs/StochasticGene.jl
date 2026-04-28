@@ -352,73 +352,61 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         end
     end
 
-    @testset "stage_combine_rates (set-wise merge with hidden/coupling)" begin
+    @testset "stage_combine_rates (number_of_parameters, new_params, write_out, force)" begin
         mktempdir() do dir
-            f1 = joinpath(dir, "u1")
-            f2 = joinpath(dir, "u2")
-            mkpath(f1)
-            mkpath(f2)
-            out = joinpath(dir, "out")
-            d1 = [1.0 2.0 3.0 4.0; 10.0 20.0 30.0 40.0] # two sets of width 2
+            p1 = joinpath(dir, "a.txt")
+            p2 = joinpath(dir, "b.txt")
+            d1 = [1.0 2.0 3.0 4.0; 10.0 20.0 30.0 40.0]
             h1 = ["u1_a1", "u1_a2", "u1_a3", "u1_a4"]
-            d2 = [5.0 6.0; 50.0 60.0] # two sets of width 1
+            d2 = [5.0 6.0; 50.0 60.0]
             h2 = ["u2_b1", "u2_b2"]
-            write_rates_table(joinpath(f1, "rates_k1.txt"), d1, h1)
-            write_rates_table(joinpath(f2, "rates_k1.txt"), d2, h2)
-
-            res = stage_combine_rates(
-                [f1, f2], out;
-                grsm=[2, 1],
-                noise=[0, 0],
-                hidden_per_set=1,
-                hidden_values=[9.0],
-                ncoupling=2,
-                coupling_values=[0.5, 0.6],
+            write_rates_table(p1, d1, h1)
+            write_rates_table(p2, d2, h2)
+            outpath = joinpath(dir, "merged_custom.txt")
+            r = stage_combine_rates(
+                [p1, p2],
+                outpath,
+                [2, 1],
+                [9.0, 0.5, 0.6],
+                ["Hidden_1", "Coupling_1", "Coupling_2"],
             )
-            @test res.n == 1
-            @test endswith(res.rows[1].dst, "rates_k1.txt")
-            @test res.rows[1].nsets == 2
-
-            dout, hout = read_rates_table(res.rows[1].dst)
+            @test r.nsets == 2
+            @test r.dst == abspath(outpath)
+            dout, hout = read_rates_table(r.dst)
             @test size(dout) == (2, 12)
             @test dout[1, :] == [1.0, 2.0, 5.0, 9.0, 0.5, 0.6, 3.0, 4.0, 6.0, 9.0, 0.5, 0.6]
             @test hout == [
                 "u1_a1", "u1_a2", "u2_b1", "Hidden_1_1", "Coupling_1_1", "Coupling_2_1",
                 "u1_a3", "u1_a4", "u2_b2", "Hidden_1_2", "Coupling_1_2", "Coupling_2_2",
             ]
-            @test all(startswith(fn, "rates_") for fn in readdir(out))
-        end
-    end
 
-    @testset "stage_combine_rates_spec + stage_combine_rates_batch" begin
-        mktempdir() do dir
-            f1 = joinpath(dir, "u1")
-            f2 = joinpath(dir, "u2")
-            mkpath(f1)
-            mkpath(f2)
-            write_rates_table(joinpath(f1, "rates_k1.txt"), [1.0 2.0; 3.0 4.0], ["a1", "a2"])
-            write_rates_table(joinpath(f2, "rates_k1.txt"), [5.0; 6.0;;], ["b1"])
-            out = joinpath(dir, "out")
+            out2 = joinpath(dir, "no_extra.txt")
+            stage_combine_rates([p1, p2], out2, [2, 1], Float64[])
+            d2only, h2only = read_rates_table(out2)
+            @test size(d2only) == (2, 6)
+            @test h2only == ["u1_a1", "u1_a2", "u2_b1", "u1_a3", "u1_a4", "u2_b2"]
 
-            spec = (
-                units=[(folder=f1, grsm=2, noise=0), (folder=f2, grsm=1, noise=0)],
-                hidden_per_set=1,
-                hidden_values=[0.25],
-                ncoupling=1,
-                coupling_values=[0.75],
-                subfolder="combinedA",
+            out3 = joinpath(dir, "dry.txt")
+            r3 = stage_combine_rates([p1, p2], out3, [2, 1], Float64[], String[], false, false)
+            @test !isfile(out3)
+            @test r3.dst == abspath(out3)
+
+            outhier = joinpath(dir, "merged_hier.txt")
+            stage_combine_rates(
+                [p1, p2],
+                outhier,
+                [2, 1],
+                [9.0, 0.5, 0.6],
+                ["Hidden_1", "Coupling_1", "Coupling_2"],
+                true,
             )
-            resolved = stage_combine_rates_spec(spec; outfolder=out)
-            @test resolved.grsm == [2, 1]
-            @test endswith(resolved.outfolder, "combinedA")
-
-            batch = stage_combine_rates_batch([spec], out)
-            @test batch.n == 1
-            @test batch.specs[1].result.n == 1
-            dst = batch.specs[1].result.rows[1].dst
-            @test endswith(dst, "rates_k1.txt")
-            dout, _ = read_rates_table(dst)
-            @test size(dout, 2) == 4
+            dh, hh = read_rates_table(outhier)
+            @test size(dh) == (2, 9)
+            @test dh[1, :] == [1.0, 2.0, 5.0, 3.0, 4.0, 6.0, 9.0, 0.5, 0.6]
+            @test hh == [
+                "u1_a1", "u1_a2", "u2_b1", "u1_a3", "u1_a4", "u2_b2",
+                "Hidden_1", "Coupling_1", "Coupling_2",
+            ]
         end
     end
 
