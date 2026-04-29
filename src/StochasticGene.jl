@@ -273,6 +273,8 @@ export
     simulator_dwell_specs,
     source_states,
     stage_combine_rates,
+    stage_combine_rates_specs_from_csv,
+    stage_combine_rates_from_csv,
     stage_label_to_key,
     label_to_key,
     staging_key_segment,

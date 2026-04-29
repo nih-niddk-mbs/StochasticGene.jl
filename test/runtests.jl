@@ -410,4 +410,48 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         end
     end
 
+    @testset "stage_combine_rates_from_csv convenience driver" begin
+        mktempdir() do dir
+            p1 = joinpath(dir, "u1_rates.txt")
+            p2 = joinpath(dir, "u2_rates.txt")
+            write_rates_table(p1, [1.0 2.0; 10.0 20.0], ["u1_a1", "u1_a2"])
+            write_rates_table(p2, [5.0; 50.0;;], ["u2_b1"])
+
+            csv_path = joinpath(dir, "couplings.csv")
+            df = DataFrame(
+                Model_name=["k_free", "k_act", "k_inh"],
+                c12=["free", ">0", "<0"],
+            )
+            CSV.write(csv_path, df)
+
+            specs = stage_combine_rates_specs_from_csv(
+                csv_path,
+                ["c12"],
+                ["Coupling_1"];
+                coupling_mode_values=Dict(:free => 0.0, :activate => 0.2, :inhibit => -0.2),
+                base_new_params=[9.0],
+                base_new_labels=["Hidden_1"],
+            )
+            @test length(specs) == 3
+            @test specs[1].new_params == [9.0, 0.0]
+            @test specs[2].new_params == [9.0, 0.2]
+            @test specs[3].new_params == [9.0, -0.2]
+
+            out = joinpath(dir, "out")
+            res = stage_combine_rates_from_csv(
+                csv_path,
+                [p1, p2],
+                [2, 1],
+                out;
+                coupling_mode_values=Dict(:free => 0.0, :activate => 0.2, :inhibit => -0.2),
+                base_new_params=[9.0],
+                base_new_labels=["Hidden_1"],
+            )
+            @test res.n == 3
+            d_act, h_act = read_rates_table(joinpath(out, "rates_k_act.txt"))
+            @test d_act[1, :] == [1.0, 2.0, 5.0, 9.0, 0.2]
+            @test h_act == ["u1_a1", "u1_a2", "u2_b1", "Hidden_1", "Coupling_1"]
+        end
+    end
+
 end

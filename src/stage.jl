@@ -502,3 +502,222 @@ function stage_combine_rates(
     end
     return (; srcs=srcs, dst=dst, nsets=nset)
 end
+
+"""Normalize coupling mode text (`:activate`, `>0`, etc.) to `:activate`/`:inhibit`/`:free`."""
+function _stage_parse_coupling_mode(x)::Symbol
+    x === missing && return :free
+    if x isa Symbol
+        s = lowercase(String(x))
+        s == "activate" && return :activate
+        s == "inhibit" && return :inhibit
+        s == "free" && return :free
+    elseif x isa Number
+        v = Float64(x)
+        v > 0 && return :activate
+        v < 0 && return :inhibit
+        return :free
+    end
+    s = lowercase(strip(String(x)))
+    isempty(s) && return :free
+    s in ("activate", ":activate", "+", "+1", "positive", "pos", ">0") && return :activate
+    s in ("inhibit", ":inhibit", "-", "-1", "negative", "neg", "<0") && return :inhibit
+    s in ("free", ":free", "0", "none", "neutral") && return :free
+    return parse_coupling_sign_csv(s)
+end
+
+"""
+    stage_combine_rates_specs_from_csv(
+        csv_path, coupling_cols, coupling_labels;
+        key_col="Model_name", skip_empty=true, key_normalizer=identity,
+        base_new_params=Float64[], base_new_labels=String[],
+        coupling_mode_values=(free=default_coupling_gamma_csv(:free), activate=default_coupling_gamma_csv(:activate), inhibit=default_coupling_gamma_csv(:inhibit)),
+    ) -> Vector{NamedTuple}
+
+Read a coupling CSV and build per-key append specs for [`stage_combine_rates`](@ref).
+
+- `coupling_cols`: CSV columns containing coupling sign/mode text per coupling parameter.
+- `coupling_labels`: output labels for those coupling parameters (same length as `coupling_cols`).
+- `coupling_mode_values`: Dict/NamedTuple providing numeric values for `:free`, `:activate`, `:inhibit`.
+- `base_new_params`/`base_new_labels`: optional non-coupling appended parameters (e.g. hidden units), copied
+  into every output spec before coupling parameters.
+"""
+function stage_combine_rates_specs_from_csv(
+    csv_path::AbstractString,
+    coupling_cols::AbstractVector{<:AbstractString},
+    coupling_labels::AbstractVector{<:AbstractString};
+    key_col::AbstractString="Model_name",
+    skip_empty::Bool=true,
+    key_normalizer=identity,
+    base_new_params::AbstractVector{<:Real}=Float64[],
+    base_new_labels::AbstractVector{<:AbstractString}=String[],
+    coupling_mode_values=(free=default_coupling_gamma_csv(:free), activate=default_coupling_gamma_csv(:activate), inhibit=default_coupling_gamma_csv(:inhibit)),
+)
+    length(coupling_cols) == length(coupling_labels) ||
+        throw(ArgumentError("coupling_cols and coupling_labels must have the same length"))
+    length(base_new_params) == length(base_new_labels) ||
+        throw(ArgumentError("base_new_params and base_new_labels must have the same length"))
+
+    mode_vals = if coupling_mode_values isa NamedTuple
+        Dict{Symbol,Float64}(k => Float64(getfield(coupling_mode_values, k)) for k in keys(coupling_mode_values))
+    else
+        Dict{Symbol,Float64}(Symbol(k) => Float64(v) for (k, v) in pairs(coupling_mode_values))
+    end
+    for k in (:free, :activate, :inhibit)
+        haskey(mode_vals, k) || throw(ArgumentError("coupling_mode_values must define $(repr(k))"))
+    end
+
+    df = DataFrame(CSV.File(csv_path))
+    name_syms = Symbol.(names(df))
+    kc = Symbol(key_col)
+    kc in name_syms || throw(ArgumentError("missing key column $(repr(key_col)) in $(repr(csv_path))"))
+    csyms = Symbol.(coupling_cols)
+    for c in csyms
+        c in name_syms || throw(ArgumentError("missing coupling column $(repr(String(c))) in $(repr(csv_path))"))
+    end
+
+    rows = NamedTuple{(:key, :new_params, :new_labels), Tuple{String,Vector{Float64},Vector{String}}}[]
+    base_vals = collect(Float64, base_new_params)
+    base_lbls = [String(strip(x)) for x in base_new_labels]
+    any(isempty, base_lbls) && throw(ArgumentError("base_new_labels must be non-empty strings"))
+    coup_lbls = [String(strip(x)) for x in coupling_labels]
+    any(isempty, coup_lbls) && throw(ArgumentError("coupling_labels must be non-empty strings"))
+
+    for row in eachrow(df)
+        key_raw = strip(string(row[kc]))
+        (skip_empty && isempty(key_raw)) && continue
+        key = String(key_normalizer(key_raw))
+        isempty(strip(key)) && throw(ArgumentError("key became empty after key_normalizer for input $(repr(key_raw))"))
+
+        cvals = Float64[]
+        for c in csyms
+            mode = _stage_parse_coupling_mode(row[c])
+            push!(cvals, mode_vals[mode])
+        end
+        push!(rows, (;
+            key=key,
+            new_params=vcat(base_vals, cvals),
+            new_labels=vcat(base_lbls, coup_lbls),
+        ))
+    end
+    return rows
+end
+
+function _stage_is_coupling_cell(x)::Bool
+    x === missing && return true
+    if x isa Number
+        return true
+    end
+    s = lowercase(strip(String(x)))
+    isempty(s) && return true
+    s in ("activate", ":activate", "+", "+1", "positive", "pos", ">0") && return true
+    s in ("inhibit", ":inhibit", "-", "-1", "negative", "neg", "<0") && return true
+    s in ("free", ":free", "0", "none", "neutral") && return true
+    try
+        parse(Float64, s)
+        return true
+    catch
+        return false
+    end
+end
+
+"""Infer coupling sign/mode columns from CSV by excluding `key_col` and keeping columns with sign-like values."""
+function _stage_detect_coupling_cols(csv_path::AbstractString, key_col::AbstractString)::Vector{String}
+    df = DataFrame(CSV.File(csv_path))
+    name_strs = String.(names(df))
+    key = String(key_col)
+    out = String[]
+    for nm in name_strs
+        nm == key && continue
+        col = df[!, Symbol(nm)]
+        has_nonempty = false
+        ok = true
+        for v in col
+            v === missing && continue
+            s = strip(string(v))
+            isempty(s) || (has_nonempty = true)
+            if !_stage_is_coupling_cell(v)
+                ok = false
+                break
+            end
+        end
+        if ok && has_nonempty
+            push!(out, nm)
+        end
+    end
+    isempty(out) && throw(ArgumentError(
+        "could not infer coupling columns from $(repr(csv_path)); pass explicit coupling columns or use sign-like values (>0/<0/free)",
+    ))
+    return out
+end
+
+"""
+    stage_combine_rates_from_csv(
+        csv_path, rate_files, number_of_parameters, output_folder;
+        key_col="Model_name", skip_empty=true, key_normalizer=identity,
+        base_new_params=Float64[], base_new_labels=String[],
+        coupling_mode_values=(free=default_coupling_gamma_csv(:free), activate=default_coupling_gamma_csv(:activate), inhibit=default_coupling_gamma_csv(:inhibit)),
+        coupling_cols=nothing, coupling_labels=nothing,
+        hierarchical=false, write_out=true, force=true, root=".", root_out=root,
+    ) -> (; n, rows)
+
+Batch driver over [`stage_combine_rates`](@ref): for each CSV row, generate `new_params/new_labels` from
+coupling sign/mode columns and write `rates_<key>.txt` into `output_folder`.
+"""
+function stage_combine_rates_from_csv(
+    csv_path::AbstractString,
+    rate_files::AbstractVector{<:AbstractString},
+    number_of_parameters::AbstractVector{<:Integer},
+    output_folder::AbstractString,
+    ;
+    key_col::AbstractString="Model_name",
+    skip_empty::Bool=true,
+    key_normalizer=identity,
+    base_new_params::AbstractVector{<:Real}=Float64[],
+    base_new_labels::AbstractVector{<:AbstractString}=String[],
+    coupling_mode_values=(free=default_coupling_gamma_csv(:free), activate=default_coupling_gamma_csv(:activate), inhibit=default_coupling_gamma_csv(:inhibit)),
+    coupling_cols=nothing,
+    coupling_labels=nothing,
+    hierarchical::Bool=false,
+    write_out::Bool=true,
+    force::Bool=true,
+    root::AbstractString=".",
+    root_out::AbstractString=root,
+)
+    cols = coupling_cols === nothing ? _stage_detect_coupling_cols(csv_path, key_col) : String.(coupling_cols)
+    labels = if coupling_labels === nothing
+        ["Coupling_$(i)" for i in eachindex(cols)]
+    else
+        String.(coupling_labels)
+    end
+    specs = stage_combine_rates_specs_from_csv(
+        csv_path,
+        cols,
+        labels;
+        key_col=key_col,
+        skip_empty=skip_empty,
+        key_normalizer=key_normalizer,
+        base_new_params=base_new_params,
+        base_new_labels=base_new_labels,
+        coupling_mode_values=coupling_mode_values,
+    )
+    out_abs = _stage_resolve_output_file(output_folder, String(root_out); write_out=write_out)
+    rows = NamedTuple{(:key, :dst, :result), Tuple{String,String,NamedTuple}}[]
+    for s in specs
+        outfile = joinpath(out_abs, "rates_" * s.key * ".txt")
+        r = stage_combine_rates(
+            rate_files,
+            outfile,
+            number_of_parameters,
+            s.new_params,
+            s.new_labels,
+            hierarchical,
+            write_out,
+            force,
+            root,
+            ".",
+        )
+        push!(rows, (; key=s.key, dst=r.dst, result=r))
+    end
+    return (; n=length(rows), rows=rows)
+end
+
