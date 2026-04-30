@@ -2198,7 +2198,7 @@ function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, ins
         hidden_units = [k for k in model_units if !(k in observed_units)]
         for k in hidden_units
             if has_joint_indices
-                dec_per_trace = [[inverse_state(idx, G, R, S, insertstep, model_units, any)[k] for idx in t] for t in joint_states]
+                dec_per_trace = [[inverse_state(idx, G, R, S, insertstep, model_units)[k] for idx in t] for t in joint_states]
                 g_hidden = [[d[1] for d in dec] for dec in dec_per_trace]
                 gs_hidden = ["Gstate$k" * "_$i" => [g_hidden[i]; fill(missing, l - length(g_hidden[i]))] for i in eachindex(g_hidden)]
                 cols = hcat(cols, gs_hidden)
