@@ -484,6 +484,52 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             @test length(scripts) == 2
             @test all(isfile, scripts)
 
+            one = make_fitscript(
+                "single-key";
+                filedir=dir,
+                juliafile="fitscript",
+                resultfolder="rf_single",
+            )
+            @test isfile(one)
+            @test basename(one) == "fitscript_single-key.jl"
+
+            cmd = build_julia_script_command(
+                "fitscript_sA.jl";
+                nthreads=4,
+                nprocs=3,
+                project=".",
+                extra_flags=["--check-bounds=no"],
+            )
+            @test occursin("--project=.", cmd)
+            @test occursin("-t 4", cmd)
+            @test occursin("-p 3", cmd)
+            @test occursin("fitscript_sA.jl", cmd)
+
+            cfile = make_commandfile_from_csv(
+                csv_path;
+                filedir=dir,
+                commandfile="fit.commands",
+                juliafile="fitscript",
+                nthreads=2,
+                nprocs=5,
+            )
+            @test isfile(cfile)
+            ctext = read(cfile, String)
+            @test occursin("-t 2", ctext)
+            @test occursin("-p 5", ctext)
+            @test occursin("fitscript_sA.jl", ctext)
+            @test occursin("fitscript_sB.jl", ctext)
+
+            cfile_direct = make_commandfile(
+                ["fitscript_sA.jl", "fitscript_sB.jl"];
+                filedir=dir,
+                commandfile="direct.commands",
+                nthreads=1,
+                nprocs=2,
+            )
+            @test isfile(cfile_direct)
+            @test occursin("fitscript_sA.jl", read(cfile_direct, String))
+
             swarm = make_swarmfile_from_csv(
                 csv_path;
                 filedir=dir,
@@ -504,6 +550,16 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             )
             @test isfile(both.swarm)
             @test length(both.scripts) == 2
+
+            both_cmd = make_fitscripts_and_commandfile_from_csv(
+                csv_path;
+                filedir=joinpath(dir, "both_cmd"),
+                commandfile="combo.commands",
+                juliafile="emit2",
+                resultfolder="rf3",
+            )
+            @test isfile(both_cmd.commandfile)
+            @test length(both_cmd.scripts) == 2
         end
     end
 

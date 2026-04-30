@@ -22,7 +22,7 @@ For key-based workflows, each run can be described by:
 - **`info_<key>.toml`** — small marker pointing at the JLD2 companion.
 - **`info_<key>.jld2`** — full keyword dict (including types like `method`, `probfn`) read by `read_run_spec` (see [Run specification (info TOML)](run_spec_toml.md)).
 
-[fit](api/fit.md) with keyword `key` loads this spec when present and merges with explicit keywords (keywords win). Batch helpers such as `write_run_spec_preset`, `makeswarm`, and `makeswarmfiles` generate these files (see [Cluster and batch workflows](cluster_batch_workflows.md)).
+[fit](api/fit.md) with keyword `key` loads this spec when present and merges with explicit keywords (keywords win). Stage batch helpers such as `make_fitscript`, `make_fitscripts_from_csv`, `make_commandfile`, and `make_commandfile_from_csv` use these keys directly; Biowulf-oriented `makeswarm*` helpers also support this layout (see [Cluster and batch workflows](cluster_batch_workflows.md)).
 
 ## States vs steps (nomenclature)
 
@@ -118,7 +118,7 @@ The saved covariance is stored as `proposal-cov_<name>.jld2` with metadata valid
 
 ## Cluster workflows (pointer)
 
-For NIH Biowulf **swarm** generation, **`makeswarm`** / **`makeswarm_genes`** / **`makeswarmfiles`**, and the **coupled** pipeline (single-unit fits → **`create_combined_file`** → coupled **`fit`**), read [Cluster and batch workflows](cluster_batch_workflows.md).
+For stage-native command-file generation (**`make_commandfile*`**), Biowulf **swarm** generation (`make_swarmfile_from_csv`, `makeswarm*`), and the **coupled** pipeline (single-unit fits → **`create_combined_file`** → coupled **`fit`**), read [Cluster and batch workflows](cluster_batch_workflows.md).
 
 ## Coupled CSV (`Coupled_models_to_test`)
 

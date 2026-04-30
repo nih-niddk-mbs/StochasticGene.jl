@@ -86,7 +86,7 @@ fits, stats, measures, data, model, options = fit(; kwargs...)
 - `options`: [`MHOptions`](@ref), [`NUTSOptions`](@ref), or [`ADVIOptions`](@ref) depending on `inference_method`.
 
 # Notes
-- When `label` is empty, `create_label` (see `biowulf.jl`) builds a default stem from normalized `datatype` (`datatype_label`), `cell`, and `datacond`; set `label` explicitly for a custom stem. For Biowulf gene swarms, optional topology text is passed as `transition_type` into `create_label`, not as a second label field.
+- When `label` is empty, `create_label` (in `biowulf.jl`) builds `datatype * "-" * cell * "_" * datacond`; set `label` explicitly if result filenames must include extra tokens (for example topology tags formerly carried in a separate keyword).
 - If `propcv < 0`, proposal covariance is loaded from previous run if available during [`make_structures`](@ref), after model parameters (including fittedparam) are determined. Validation occurs against stored metadata to ensure compatibility.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
 - File and folder conventions: see the package manual (*Package overview*, *Cluster and batch workflows*) and the [GitHub README](https://github.com/nih-niddk-mbs/StochasticGene.jl#readme).
@@ -146,11 +146,11 @@ const _FIT_DEFAULTS = (
     rinit=nothing,
     nchains=2,
     datatype="rna",
-    datapath="HCT116_testdata/",
-    gene="MYC",
-    cell="HCT116",
-    datacond="MOCK",
-    resultfolder="HCT116_test",
+    datapath="rnatest/",
+    gene="gene1",
+    cell="",
+    datacond="",
+    resultfolder="rnatest",
     label="",
     fittedparam=Int[],
     fixedeffects=tuple(),
@@ -249,10 +249,12 @@ function fit(; key=nothing, kwargs...)
     kw = Dict{Symbol, Any}(pairs(kwargs))
     merged = copy(defaults)
     merge!(merged, kw)
-    if key !== nothing
+    use_key = key !== nothing && !isempty(strip(string(key)))
+    key_str = use_key ? string(key) : ""
+    if use_key
         resultfolder = merged[:resultfolder]
         root = merged[:root]
-        spec_toml = joinpath(folder_path(resultfolder, root, "results"), "info_" * key * ".toml")
+        spec_toml = joinpath(folder_path(resultfolder, root, "results"), "info_" * key_str * ".toml")
         spec_jld2 = info_jld2_path(spec_toml)
         # Machine-readable run spec is always the companion JLD2 (see `read_run_spec`); do not require the TOML to exist.
         if isfile(spec_jld2)
@@ -271,10 +273,10 @@ function fit(; key=nothing, kwargs...)
     run_spec = Dict{Symbol, Any}(merged)
     delete!(run_spec, :infolder)
     delete!(run_spec, :inlabel)
-    if key !== nothing
-        run_spec[:key] = key
+    if use_key
+        run_spec[:key] = key_str
     end
-    name_override = key !== nothing ? filename(key) : nothing
+    name_override = use_key ? filename(key_str) : nothing
     rinit = merged[:rinit]
     nchains = merged[:nchains]
     datatype = merged[:datatype]
@@ -321,11 +323,15 @@ function fit(; key=nothing, kwargs...)
     yieldfactor = merged[:yieldfactor]
     trace_specs = merged[:trace_specs]
     dwell_specs = merged[:dwell_specs]
-    label = create_label(label, datatype_label(datatype), datacond, cell)
+    if use_key
+        label = key_str
+    else
+        label = create_label(label, datatype_label(datatype), datacond, cell)
+    end
     run_spec[:label] = label
-    if rinit === nothing && key !== nothing && key != ""
+    if rinit === nothing && use_key
         rr = folder_path(resultfolder, root, "results")
-        rates_path = joinpath(rr, "rates_" * key * ".txt")
+        rates_path = joinpath(rr, "rates_" * key_str * ".txt")
         if isfile(rates_path)
             rinit = readrates(rates_path, get_row(ratetype))
         end

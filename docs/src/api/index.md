@@ -333,7 +333,7 @@ A structure for parameter transformations during fitting.
 
 Narrative guide (when to use which function, file layout, order of operations): [Cluster and batch workflows](../cluster_batch_workflows.md).
 
-Relevant APIs include [`makeswarm`](@ref), [`makeswarm_models`](@ref), [`makeswarmfiles`](@ref), [`makeswarmfiles_h3_latent`](@ref), [`write_run_spec_preset`](@ref), [`normalize_trace_specs_legacy_t_end!`](@ref), [`create_combined_file`](@ref), [`create_combined_file_mult`](@ref), [`combined_rates_key`](@ref), [`read_combined_file_specs_csv`](@ref), [`create_combined_files_driver`](@ref), [`create_combined_files`](@ref), [`create_combined_files_h3_latent`](@ref), [`read_rates_table`](@ref), [`write_rates_table`](@ref).
+Relevant APIs include stage-native [`make_fitscript`](@ref), [`make_fitscripts_from_csv`](@ref), [`build_julia_script_command`](@ref), [`make_commandfile`](@ref), [`make_commandfile_from_csv`](@ref), [`make_fitscripts_and_commandfile_from_csv`](@ref), compatibility wrappers [`make_swarmfile_from_csv`](@ref), [`make_fitscripts_and_swarm_from_csv`](@ref), plus Biowulf-oriented [`makeswarm`](@ref), [`makeswarm_models`](@ref), [`makeswarmfiles`](@ref), [`makeswarmfiles_h3_latent`](@ref), [`write_run_spec_preset`](@ref), [`normalize_trace_specs_legacy_t_end!`](@ref), and combined-rate helpers [`create_combined_file`](@ref), [`create_combined_file_mult`](@ref), [`combined_rates_key`](@ref), [`read_combined_file_specs_csv`](@ref), [`create_combined_files_driver`](@ref), [`create_combined_files`](@ref), [`create_combined_files_h3_latent`](@ref), [`read_rates_table`](@ref), [`write_rates_table`](@ref).
 
 ## Analysis Functions
 

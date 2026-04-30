@@ -49,6 +49,30 @@ function _stage_resolve_dst(dst::AbstractString, root_dst::AbstractString; dry_r
     return abspath(p2)
 end
 
+"""
+    folder_setup(root=".")
+
+Create `data/` and `results/` under `root` when missing.
+"""
+function folder_setup(root::AbstractString=".")
+    data = joinpath(root, "data")
+    results = joinpath(root, "results")
+    !ispath(data) && mkpath(data)
+    !ispath(results) && mkpath(results)
+    return (; data, results)
+end
+
+"""
+    rna_setup(root=".")
+
+Set up `data/` and `results/` under `root`, then seed bundled reference RNA test data
+into `root/data/`.
+"""
+function rna_setup(root::AbstractString=".")
+    folder_setup(root)
+    _stage_seed_reference_data(root)
+end
+
 # Longest first so `sampled_rates` does not match before `rates`.
 const _STAGE_LEGACY_RESULT_PREFIXES = (
     "ll_sampled_rates", "sampled_rates", "param-stats", "proposal-cov", "advi-measures",
@@ -750,11 +774,141 @@ function _stage_read_keys_from_csv(csv_path::AbstractString; key_col::AbstractSt
     return unique(keys)
 end
 
+function _stage_seed_reference_data(root::AbstractString=".")
+    alleles = joinpath(root, "data", "alleles")
+    halflives = joinpath(root, "data", "halflives")
+    testdata = joinpath(root, "data", "HCT116_testdata")
+    rnatest = joinpath(root, "data", "rnatest")
+    for d in (alleles, halflives, testdata)
+        !ispath(d) && mkpath(d)
+    end
+    !ispath(rnatest) && mkpath(rnatest)
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/CH12_alleles.csv", joinpath(alleles, "CH12_alleles.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/HCT116_alleles.csv", joinpath(alleles, "HCT116_alleles.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/ESC_halflife.csv", joinpath(halflives, "ESC_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/CH12_halflife.csv", joinpath(halflives, "CH12_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/HCT116_halflife.csv", joinpath(halflives, "HCT116_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/OcaB_halflife.csv", joinpath(halflives, "OcaB_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "aB_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "CAST_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "FIBS_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "MAST_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "NK_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "TEC_halflife.csv"))
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "SKIN_halflife.csv"))
+    repo_root = normpath(joinpath(@__DIR__, ".."))
+    candidates = (
+        joinpath(repo_root, "data", "HCT116_testdata"),
+        joinpath(repo_root, "test", "data", "HCT116_testdata"),
+    )
+    src_testdata = ""
+    for c in candidates
+        if isdir(c)
+            src_testdata = c
+            break
+        end
+    end
+    isempty(src_testdata) && throw(ArgumentError("could not locate bundled HCT116_testdata in repository"))
+    for f in readdir(src_testdata)
+        cp(joinpath(src_testdata, f), joinpath(testdata, f); force=true)
+    end
+    # Anonymized bundled test set used by default `fit()`.
+    src_gene1 = if isfile(joinpath(src_testdata, "MYC_MOCK.txt"))
+        joinpath(src_testdata, "MYC_MOCK.txt")
+    else
+        joinpath(src_testdata, readdir(src_testdata)[1])
+    end
+    src_gene2 = if isfile(joinpath(src_testdata, "CENPL_MOCK.txt"))
+        joinpath(src_testdata, "CENPL_MOCK.txt")
+    else
+        src_gene1
+    end
+    cp(src_gene1, joinpath(rnatest, "gene1.txt"); force=true)
+    cp(src_gene2, joinpath(rnatest, "gene2.txt"); force=true)
+    return (; alleles, halflives, testdata, rnatest)
+end
+
+"""
+    create_label(label, datatype, datacond, cell; transition_type="")
+
+Return `label` when non-empty; otherwise build default
+`datatype * "-" * cell * ("-" * transition_type when set) * "_" * datacond`.
+"""
+function create_label(label::AbstractString, datatype::AbstractString, datacond::AbstractString, cell::AbstractString; transition_type::AbstractString="")
+    if isempty(strip(label))
+        out = string(datatype) * "-" * string(cell)
+        if !isempty(strip(transition_type))
+            out = out * "-" * string(transition_type)
+        end
+        return out * "_" * string(datacond)
+    end
+    return string(label)
+end
+
+create_label(label::AbstractString, datatype::AbstractString, datacond::Symbol, cell::AbstractString; transition_type::AbstractString="") =
+    create_label(label, datatype, string(datacond), cell; transition_type=transition_type)
+
+function create_label(label::AbstractString, datatype::AbstractString, datacond::AbstractVector{<:AbstractString}, cell::AbstractString; transition_type::AbstractString="")
+    create_label(label, datatype, join(string.(datacond), "-"), cell; transition_type=transition_type)
+end
+
+function create_label(label::AbstractString, datatype::AbstractString, datacond::AbstractVector, cell::AbstractString; transition_type::AbstractString="")
+    create_label(label, datatype, join((string(x) for x in datacond), "-"), cell; transition_type=transition_type)
+end
+
+"""
+    folder_path(folder::String, root::String, folderatetype::String=""; make=false)
+
+Resolve folder path relative to `root` and optional folder type (e.g. `"results"`), optionally creating it.
+"""
+function folder_path(folder::String, root::String, folderatetype::String=""; make=false)
+    f = folder
+    if ~ispath(folder) && ~isempty(folder)
+        f = joinpath(root, folder)
+        if ~ispath(f)
+            f = joinpath(root, folderatetype, folder)
+            if ~ispath(f) && !make
+                println("$folder not found")
+            elseif ~ispath(f) && make
+                mkpath(f)
+            end
+        end
+    end
+    f
+end
+
+function folder_path(folder::Vector, root, foldertype)
+    fv = folder
+    for i in eachindex(fv)
+        fv[i] = folder_path(fv[i], root, foldertype)
+    end
+    fv
+end
+
+"""
+    make_fitscript(key; juliafile="fitscript", filedir=".", src="", kwargs...) -> String
+
+Write one key-based fit script (`juliafile_<key>.jl`) via [`write_fitfile_key`](@ref) and
+return the script path.
+"""
+function make_fitscript(
+    key::AbstractString;
+    juliafile::String="fitscript",
+    filedir::AbstractString=".",
+    src::AbstractString="",
+    kwargs...,
+)
+    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
+    scriptpath = joinpath(String(filedir), juliafile * "_" * sanitize_for_filename(String(key)) * ".jl")
+    write_fitfile_key(scriptpath, String(key); src=src, kwargs...)
+    return scriptpath
+end
+
 """
     make_fitscripts_from_csv(csv_path; key_col="Model_name", skip_empty=true, juliafile="fitscript", filedir=".", src="", kwargs...) -> Vector{String}
 
 Stage-native script emitter: read keys from a CSV and write one key-based fit script per key
-(`juliafile_<key>.jl`) via [`write_fitfile_key`](@ref). This writes scripts only (no swarm file).
+(`juliafile_<key>.jl`) via [`make_fitscript`](@ref). This writes scripts only (no command file).
 """
 function make_fitscripts_from_csv(
     csv_path::AbstractString;
@@ -766,21 +920,147 @@ function make_fitscripts_from_csv(
     kwargs...,
 )
     keys = _stage_read_keys_from_csv(csv_path; key_col=key_col, skip_empty=skip_empty)
-    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
-    out = String[]
-    for k in keys
-        scriptpath = joinpath(String(filedir), juliafile * "_" * sanitize_for_filename(k) * ".jl")
-        write_fitfile_key(scriptpath, k; src=src, kwargs...)
-        push!(out, scriptpath)
+    return [
+        make_fitscript(
+            k;
+            juliafile=juliafile,
+            filedir=filedir,
+            src=src,
+            kwargs...,
+        ) for k in keys
+    ]
+end
+
+"""
+    build_julia_script_command(script; julia_bin="julia", nthreads=1, nprocs=2, project="", sysimage="", extra_flags=String[], script_args=String[]) -> String
+
+Build one command line to execute a fit script. This is scheduler-agnostic and can be used for
+swarm files, plain command lists, or other launchers.
+"""
+function build_julia_script_command(
+    script::AbstractString;
+    julia_bin::AbstractString="julia",
+    nthreads::Integer=1,
+    nprocs::Integer=2,
+    project::AbstractString="",
+    sysimage::AbstractString="",
+    extra_flags::AbstractVector{<:AbstractString}=String[],
+    script_args::AbstractVector{<:AbstractString}=String[],
+)::String
+    parts = String[String(julia_bin)]
+    !isempty(project) && push!(parts, "--project=$(String(project))")
+    !isempty(sysimage) && push!(parts, "--sysimage=$(String(sysimage))")
+    nthreads > 0 && push!(parts, "-t $(Int(nthreads))")
+    nprocs > 0 && push!(parts, "-p $(Int(nprocs))")
+    append!(parts, String.(extra_flags))
+    push!(parts, String(script))
+    append!(parts, String.(script_args))
+    return join(parts, " ")
+end
+
+"""
+    write_julia_command_file(command_path, scripts; julia_bin="julia", nthreads=1, nprocs=2, project="", sysimage="", extra_flags=String[]) -> String
+
+Write one command per script into `command_path`.
+"""
+function write_julia_command_file(
+    command_path::AbstractString,
+    scripts::AbstractVector{<:AbstractString};
+    julia_bin::AbstractString="julia",
+    nthreads::Integer=1,
+    nprocs::Integer=2,
+    project::AbstractString="",
+    sysimage::AbstractString="",
+    extra_flags::AbstractVector{<:AbstractString}=String[],
+)::String
+    f = open(command_path, "w")
+    for s in scripts
+        cmd = build_julia_script_command(
+            s;
+            julia_bin=julia_bin,
+            nthreads=nthreads,
+            nprocs=nprocs,
+            project=project,
+            sysimage=sysimage,
+            extra_flags=extra_flags,
+        )
+        write(f, cmd * "\n")
     end
-    return out
+    close(f)
+    return String(command_path)
+end
+
+"""
+    make_commandfile(scripts; commandfile="fit.commands", filedir=".", julia_bin="julia", nthreads=1, nprocs=2, project="", sysimage="", extra_flags=String[]) -> String
+
+Write one Julia launch command per script path in `scripts`.
+"""
+function make_commandfile(
+    scripts::AbstractVector{<:AbstractString};
+    commandfile::String="fit.commands",
+    filedir::AbstractString=".",
+    julia_bin::AbstractString="julia",
+    nthreads::Integer=1,
+    nprocs::Integer=2,
+    project::AbstractString="",
+    sysimage::AbstractString="",
+    extra_flags::AbstractVector{<:AbstractString}=String[],
+)::String
+    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
+    command_path = joinpath(String(filedir), commandfile)
+    return write_julia_command_file(
+        command_path,
+        scripts;
+        julia_bin=julia_bin,
+        nthreads=nthreads,
+        nprocs=nprocs,
+        project=project,
+        sysimage=sysimage,
+        extra_flags=extra_flags,
+    )
+end
+
+"""
+    make_commandfile_from_csv(csv_path; key_col="Model_name", skip_empty=true, commandfile="fit.commands", juliafile="fitscript", filedir=".", julia_bin="julia", nthreads=1, nprocs=2, project="", sysimage="", extra_flags=String[]) -> String
+
+Read keys from CSV and write a scheduler-agnostic Julia command file with one command per
+`juliafile_<key>.jl` script.
+"""
+function make_commandfile_from_csv(
+    csv_path::AbstractString;
+    key_col::AbstractString="Model_name",
+    skip_empty::Bool=true,
+    commandfile::String="fit.commands",
+    juliafile::String="fitscript",
+    filedir::AbstractString=".",
+    julia_bin::AbstractString="julia",
+    nthreads::Integer=1,
+    nprocs::Integer=2,
+    project::AbstractString="",
+    sysimage::AbstractString="",
+    extra_flags::AbstractVector{<:AbstractString}=String[],
+)
+    keys = _stage_read_keys_from_csv(csv_path; key_col=key_col, skip_empty=skip_empty)
+    scripts = [juliafile * "_" * sanitize_for_filename(k) * ".jl" for k in keys]
+    return make_commandfile(
+        scripts;
+        commandfile=commandfile,
+        filedir=filedir,
+        julia_bin=julia_bin,
+        nthreads=nthreads,
+        nprocs=nprocs,
+        project=project,
+        sysimage=sysimage,
+        extra_flags=extra_flags,
+    )
 end
 
 """
     make_swarmfile_from_csv(csv_path; key_col="Model_name", skip_empty=true, swarmfile="fit", juliafile="fitscript", filedir=".", nchains=2, nthreads=1, project="", sysimage="") -> String
 
-Stage-native swarm emitter: read keys from a CSV and write a swarm file with one line per key script
-(`juliafile_<key>.jl`). This writes swarm only.
+Biowulf-compatible wrapper: read keys from a CSV and write `<swarmfile>.swarm` with one line
+per key script (`juliafile_<key>.jl`). Internally this is a naming/keyword compatibility wrapper
+over [`make_commandfile_from_csv`](@ref).
 """
 function make_swarmfile_from_csv(
     csv_path::AbstractString;
@@ -794,31 +1074,41 @@ function make_swarmfile_from_csv(
     project::AbstractString="",
     sysimage::AbstractString="",
 )
-    keys = _stage_read_keys_from_csv(csv_path; key_col=key_col, skip_empty=skip_empty)
-    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
     sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
-    swarm_path = joinpath(String(filedir), sfile)
-    write_swarmfile_keys(swarm_path, nchains, nthreads, juliafile, keys, project, sysimage)
-    return swarm_path
+    return make_commandfile_from_csv(
+        csv_path;
+        key_col=key_col,
+        skip_empty=skip_empty,
+        commandfile=sfile,
+        juliafile=juliafile,
+        filedir=filedir,
+        julia_bin="julia",
+        nthreads=nthreads,
+        nprocs=nchains,
+        project=project,
+        sysimage=sysimage,
+    )
 end
 
 """
-    make_fitscripts_and_swarm_from_csv(csv_path; kwargs...) -> NamedTuple
+    make_fitscripts_and_commandfile_from_csv(csv_path; kwargs...) -> NamedTuple
 
 Convenience wrapper that first writes scripts via [`make_fitscripts_from_csv`](@ref), then writes the
-swarm file via [`make_swarmfile_from_csv`](@ref). Returns `(; swarm, scripts)`.
+command file via [`make_commandfile_from_csv`](@ref). Returns `(; commandfile, scripts)`.
 """
-function make_fitscripts_and_swarm_from_csv(
+function make_fitscripts_and_commandfile_from_csv(
     csv_path::AbstractString;
     key_col::AbstractString="Model_name",
     skip_empty::Bool=true,
-    swarmfile::String="fit",
+    commandfile::String="fit.commands",
     juliafile::String="fitscript",
     filedir::AbstractString=".",
-    nchains::Int=2,
+    nprocs::Int=2,
     nthreads=1,
     project::AbstractString="",
     sysimage::AbstractString="",
+    julia_bin::AbstractString="julia",
+    extra_flags::AbstractVector{<:AbstractString}=String[],
     src::AbstractString="",
     kwargs...,
 )
@@ -831,18 +1121,42 @@ function make_fitscripts_and_swarm_from_csv(
         src=src,
         kwargs...,
     )
-    swarm = make_swarmfile_from_csv(
+    command_path = make_commandfile_from_csv(
         csv_path;
         key_col=key_col,
         skip_empty=skip_empty,
-        swarmfile=swarmfile,
+        commandfile=commandfile,
         juliafile=juliafile,
         filedir=filedir,
-        nchains=nchains,
+        julia_bin=julia_bin,
         nthreads=nthreads,
+        nprocs=nprocs,
         project=project,
         sysimage=sysimage,
+        extra_flags=extra_flags,
     )
-    return (; swarm, scripts)
+    return (; commandfile=command_path, scripts)
+end
+
+"""
+    make_fitscripts_and_swarm_from_csv(csv_path; kwargs...) -> NamedTuple
+
+Compatibility wrapper over [`make_fitscripts_and_commandfile_from_csv`](@ref) that keeps historical
+`swarm` naming and returns `(; swarm, scripts)`.
+"""
+function make_fitscripts_and_swarm_from_csv(
+    csv_path::AbstractString;
+    swarmfile::String="fit",
+    nchains::Int=2,
+    kwargs...,
+)
+    sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
+    out = make_fitscripts_and_commandfile_from_csv(
+        csv_path;
+        commandfile=sfile,
+        nprocs=nchains,
+        kwargs...,
+    )
+    return (; swarm=out.commandfile, scripts=out.scripts)
 end
 

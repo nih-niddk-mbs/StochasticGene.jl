@@ -274,70 +274,6 @@ function write_prolog(f, src)
 end
 
 """
-    create_label(label, datatype, datacond, cell; transition_type="")
-
-Return `label` when non-empty; otherwise build the same stem used by [`fit(; ...)`](@ref):
-`datatype * "-" * cell * ("-" * transition_type when set) * "_" * datacond` (with vector `datacond` joined by `"-"`).
-
-`datatype` is typically from [`datatype_label`](@ref). Optional `transition_type` appends a topology
-token into the default stem (used by [`makeswarm_genes`](@ref); there is no separate input-label argument).
-"""
-function create_label(label::AbstractString, datatype::AbstractString, datacond::AbstractString, cell::AbstractString; transition_type::AbstractString="")
-    if isempty(strip(label))
-        out = string(datatype) * "-" * string(cell)
-        if !isempty(strip(transition_type))
-            out = out * "-" * string(transition_type)
-        end
-        return out * "_" * string(datacond)
-    end
-    return string(label)
-end
-
-create_label(label::AbstractString, datatype::AbstractString, datacond::Symbol, cell::AbstractString; transition_type::AbstractString="") =
-    create_label(label, datatype, string(datacond), cell; transition_type=transition_type)
-
-function create_label(label::AbstractString, datatype::AbstractString, datacond::AbstractVector{<:AbstractString}, cell::AbstractString; transition_type::AbstractString="")
-    create_label(label, datatype, join(string.(datacond), "-"), cell; transition_type=transition_type)
-end
-
-function create_label(label::AbstractString, datatype::AbstractString, datacond::AbstractVector, cell::AbstractString; transition_type::AbstractString="")
-    create_label(label, datatype, join((string(x) for x in datacond), "-"), cell; transition_type=transition_type)
-end
-
-"""
-    create_modelstring(G, R, S, insertstep)
-
-Creates a model string based on the given parameters.
-
-# Arguments
-- `G`: Parameter G.
-- `R`: Parameter R.
-- `S`: Parameter S.
-- `insertstep`: The insert step.
-
-# Returns
-- A string representing the model.
-
-# Description
-This function generates a model string based on the provided parameters. If `R` is greater than 0, it adjusts `S` based on `R` and `insertstep` and returns a concatenated string of `G`, `R`, `S`, and `insertstep`. If `R` is not greater than 0, it returns `G` as the model string.
-"""
-function create_modelstring(G::Int, R, S, insertstep)
-    if R > 0
-        return "$G$R$S$insertstep"
-    else
-        return "$G"
-    end
-end
-
-function create_modelstring(G::Tuple, R, S, insertstep)
-    m = ""
-    for i in eachindex(G)
-        m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
-    end
-    return m
-end
-
-"""
     fix(folder)
 
 Finds jobs that failed and writes a swarmfile for those genes.
@@ -359,72 +295,6 @@ function fix_filenames(folder, old="scRNA-ss-", new="scRNA-ss_")
         end
     end
 end
-
-"""
-    rna_setup(root=".")
-
-Sets up the folder system prior to use. Defaults to the current directory.
-
-# Arguments
-- `root`: The root directory for setting up the folder system. Defaults to the current directory.
-
-# Description
-This function sets up the necessary folder structure for RNA data processing, including creating directories for alleles, halflives, and test data if they do not already exist.
-"""
-function rna_setup(root=".")
-    folder_setup(root)
-    alleles = joinpath("data", "alleles")
-    halflives = joinpath("data", "halflives")
-    testdata = joinpath("data", "HCT116_testdata")
-
-    if ~ispath(alleles)
-        mkpath(alleles)
-    end
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/CH12_alleles.csv", "$alleles/CH12_alleles.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/HCT116_alleles.csv", "$alleles/HCT116_alleles.csv")
-    if ~ispath(halflives)
-        mkpath(halflives)
-    end
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/ESC_halflife.csv", "$halflives/ESC_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/CH12_halflife.csv", "$halflives/CH12_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/HCT116_halflife.csv", "$halflives/HCT116_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/OcaB_halflife.csv", "$halflives/OcaB_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", "$halflives/aB_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", "$halflives/CAST_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", "$halflives/FIBS_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", "$halflives/MAST_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", "$halflives/NK_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", "$halflives/TEC_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", "$halflives/SKIN_halflife.csv")
-    if ~ispath(testdata)
-        mkpath(testdata)
-    end
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/HCT116_testdata/CENPL_MOCK.txt", "$testdata/CENPL_MOCK.txt")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/HCT116_testdata/MYC_MOCK.txt", "$testdata/MYC_MOCK.txt")
-end
-
-"""
-    folder_setup(root=".")
-
-Creates data and results folders (if they do not already exist).
-
-# Arguments
-- `root`: The root directory for setting up the folder system. Defaults to the current directory.
-
-# Description
-This function creates the necessary data and results folders within the specified root directory. If the folders already exist, it does nothing.
-"""
-function folder_setup(root=".")
-    data = joinpath(root, "data")
-    results = joinpath(root, "results")
-    if ~ispath(data)
-        mkpath(data)
-    end
-    if ~ispath(results)
-        mkpath(results)
-    end
-end
-
 
 """
     getbatches(genes, ngenes, batchsize)
@@ -499,58 +369,6 @@ function checkgenes(root, cond::String, datapath::String, cell::String, threshol
             return convert(Vector{String}, genes)
         end
     end
-end
-
-"""
-    folder_path(folder::String, root::String, folderatetype::String=""; make=false)
-
-Returns the full path for a given folder, optionally creating the path if it does not exist.
-
-# Arguments
-- `folder`: A folder name.
-- `root`: The root directory.
-- `folderatetype`: Optional subfolder type (e.g. `"results"`); used to form `joinpath(root, folderatetype, folder)` when needed (default `""`).
-- `make`: If `true`, create the path if it does not exist (default `false`).
-
-# Returns
-- `String`: The full path for the given folder.
-"""
-function folder_path(folder::String, root::String, folderatetype::String=""; make=false)
-    f = folder
-    if ~ispath(folder) && ~isempty(folder)
-        f = joinpath(root, folder)
-        if ~ispath(f)
-            f = joinpath(root, folderatetype, folder)
-            if ~ispath(f) && ~make
-                println("$folder not found")
-            elseif ~ispath(f) && make
-                mkpath(f)
-            end
-        end
-    end
-    f
-end
-
-"""
-    folder_path(folder::Vector, root, foldertype)
-
-Returns the full paths for a list of folders, optionally creating the paths if they do not exist.
-
-# Arguments
-- `folders`: A list of folder names.
-- `root`: The root directory.
-- `foldertype`: The type of folder (optional, default is an empty string).
-- `make`: A boolean flag indicating whether to create the paths if they do not exist (optional, default is `false`).
-
-# Returns
-- `Vector{String}`: The full paths for the given folders.
-"""
-function folder_path(folder::Vector, root, foldertype)
-    fv = folder
-    for i in eachindex(fv)
-        fv[i] = folder_path(fv[i], root, foldertype)
-    end
-    fv
 end
 
 """
