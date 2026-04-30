@@ -3378,16 +3378,7 @@ Read RNA histogram data from a file.
 - Used for reading RNA count histogram data
 """
 function read_rna(gene, cond, datapath)
-    conds = strip(string(cond))
-    t = if isempty(conds)
-        joinpath(datapath, string(gene) * ".txt")
-    else
-        joinpath(datapath, string(gene) * "_" * conds * ".txt")
-    end
-    if !isfile(t)
-        t_alt = joinpath(datapath, string(gene) * ".txt")
-        isfile(t_alt) && (t = t_alt)
-    end
+    t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
     h = readfile(t)[:, 1]
     # h = readfile(gene, cond, datapath)[:, 1]
     # Only truncate if histogram has more than 400 elements
@@ -3424,16 +3415,7 @@ Read RNA count data from a file.
 - Used for reading individual RNA count measurements
 """
 function read_rnacount(gene, cond, datapath)
-    conds = strip(string(cond))
-    t = if isempty(conds)
-        joinpath(datapath, string(gene) * ".txt")
-    else
-        joinpath(datapath, string(gene) * "_" * conds * ".txt")
-    end
-    if !isfile(t)
-        t_alt = joinpath(datapath, string(gene) * ".txt")
-        isfile(t_alt) && (t = t_alt)
-    end
+    t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
     # println(t)
     # c = readfile(gene, cond, datapath)
     c = readfile(t)

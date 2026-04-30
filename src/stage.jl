@@ -778,11 +778,9 @@ function _stage_seed_reference_data(root::AbstractString=".")
     alleles = joinpath(root, "data", "alleles")
     halflives = joinpath(root, "data", "halflives")
     testdata = joinpath(root, "data", "HCT116_testdata")
-    rnatest = joinpath(root, "data", "rnatest")
     for d in (alleles, halflives, testdata)
         !ispath(d) && mkpath(d)
     end
-    !ispath(rnatest) && mkpath(rnatest)
     Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/CH12_alleles.csv", joinpath(alleles, "CH12_alleles.csv"))
     Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/HCT116_alleles.csv", joinpath(alleles, "HCT116_alleles.csv"))
     Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/ESC_halflife.csv", joinpath(halflives, "ESC_halflife.csv"))
@@ -797,12 +795,8 @@ function _stage_seed_reference_data(root::AbstractString=".")
     Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "TEC_halflife.csv"))
     Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "SKIN_halflife.csv"))
     repo_root = normpath(joinpath(@__DIR__, ".."))
-    candidates = (
-        joinpath(repo_root, "data", "HCT116_testdata"),
-        joinpath(repo_root, "test", "data", "HCT116_testdata"),
-    )
     src_testdata = ""
-    for c in candidates
+    for c in (joinpath(repo_root, "data", "HCT116_testdata"), joinpath(repo_root, "test", "data", "HCT116_testdata"))
         if isdir(c)
             src_testdata = c
             break
@@ -812,20 +806,7 @@ function _stage_seed_reference_data(root::AbstractString=".")
     for f in readdir(src_testdata)
         cp(joinpath(src_testdata, f), joinpath(testdata, f); force=true)
     end
-    # Anonymized bundled test set used by default `fit()`.
-    src_gene1 = if isfile(joinpath(src_testdata, "MYC_MOCK.txt"))
-        joinpath(src_testdata, "MYC_MOCK.txt")
-    else
-        joinpath(src_testdata, readdir(src_testdata)[1])
-    end
-    src_gene2 = if isfile(joinpath(src_testdata, "CENPL_MOCK.txt"))
-        joinpath(src_testdata, "CENPL_MOCK.txt")
-    else
-        src_gene1
-    end
-    cp(src_gene1, joinpath(rnatest, "gene1.txt"); force=true)
-    cp(src_gene2, joinpath(rnatest, "gene2.txt"); force=true)
-    return (; alleles, halflives, testdata, rnatest)
+    return (; alleles, halflives, testdata)
 end
 
 """

@@ -86,7 +86,7 @@ fits, stats, measures, data, model, options = fit(; kwargs...)
 - `options`: [`MHOptions`](@ref), [`NUTSOptions`](@ref), or [`ADVIOptions`](@ref) depending on `inference_method`.
 
 # Notes
-- When `label` is empty, `create_label` (in `biowulf.jl`) builds `datatype * "-" * cell * "_" * datacond`; set `label` explicitly if result filenames must include extra tokens (for example topology tags formerly carried in a separate keyword).
+- When `label` is empty and `key` is not used, `create_label` (in `stage.jl`) builds `datatype * "-" * cell * "_" * datacond`; set `label` explicitly if result filenames must include extra tokens (for example topology tags formerly carried in a separate keyword). With `fit(; key=...)`, `label` is taken from `key` and `create_label` is skipped.
 - If `propcv < 0`, proposal covariance is loaded from previous run if available during [`make_structures`](@ref), after model parameters (including fittedparam) are determined. Validation occurs against stored metadata to ensure compatibility.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
 - File and folder conventions: see the package manual (*Package overview*, *Cluster and batch workflows*) and the [GitHub README](https://github.com/nih-niddk-mbs/StochasticGene.jl#readme).
@@ -146,11 +146,11 @@ const _FIT_DEFAULTS = (
     rinit=nothing,
     nchains=2,
     datatype="rna",
-    datapath="rnatest/",
-    gene="gene1",
-    cell="",
-    datacond="",
-    resultfolder="rnatest",
+    datapath="HCT116_testdata/",
+    gene="MYC",
+    cell="HCT116",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
     label="",
     fittedparam=Int[],
     fixedeffects=tuple(),
