@@ -104,6 +104,37 @@ function decompose_model(model::String)
 end
 
 """
+    create_modelstring(G, R, S, insertstep)
+
+Build the model identifier string used in rate filenames (inverse of the per-unit
+encoding in `filename` / `parse_filename`).
+
+Each unit contributes four decimal digits in order ``G``, ``R``, ``S``, ``insertstep``.
+Scalars are treated as a single unit; tuples must have equal length across arguments.
+
+# Examples
+```julia
+create_modelstring(3, 3, 0, 1)           # "3301"
+create_modelstring((3, 3, 3), (3, 3, 0), (0, 0, 0), (1, 1, 0))  # "330133013000"
+```
+"""
+function create_modelstring(G, R, S, insertstep)
+    Gt = G isa Tuple ? G : (G,)
+    Rt = R isa Tuple ? R : (R,)
+    St = S isa Tuple ? S : (S,)
+    It = insertstep isa Tuple ? insertstep : (insertstep,)
+    n = length(Gt)
+    if !(length(Rt) == length(St) == length(It) == n)
+        throw(ArgumentError("G, R, S, insertstep must have the same number of units (tuple lengths or scalar); got lengths $(length(Gt)), $(length(Rt)), $(length(St)), $(length(It))"))
+    end
+    m = ""
+    for i in 1:n
+        m *= string(Int(Gt[i])) * string(Int(Rt[i])) * string(Int(St[i])) * string(Int(It[i]))
+    end
+    return m
+end
+
+"""
     decompose_cond(cond::String)
 
 Decompose a condition string by checking for hyphens and returning appropriate format.
