@@ -451,6 +451,59 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             d_act, h_act = read_rates_table(joinpath(out, "rates_k_act.txt"))
             @test d_act[1, :] == [1.0, 2.0, 5.0, 9.0, 0.2]
             @test h_act == ["u1_a1", "u1_a2", "u2_b1", "Hidden_1", "Coupling_1"]
+
+            out_flag = joinpath(dir, "out_flag")
+            res_flag = stage_combine_rates_from_csv(
+                csv_path,
+                [p1, p2],
+                [2, 1],
+                out_flag;
+                key_flag="pilotA",
+                coupling_mode_values=Dict(:free => 0.0, :activate => 0.2, :inhibit => -0.2),
+                base_new_params=[9.0],
+                base_new_labels=["Hidden_1"],
+            )
+            @test res_flag.n == 3
+            @test all(startswith(row.key, "pilotA-") for row in res_flag.rows)
+            @test isfile(joinpath(out_flag, "rates_pilotA-k_act.txt"))
+        end
+    end
+
+    @testset "stage-native make_fitscript helpers" begin
+        mktempdir() do dir
+            csv_path = joinpath(dir, "keys.csv")
+            CSV.write(csv_path, DataFrame(Model_name=["sA", "sB"]))
+
+            scripts = make_fitscripts_from_csv(
+                csv_path;
+                filedir=dir,
+                juliafile="fitscript",
+                resultfolder="rf",
+                root=".",
+            )
+            @test length(scripts) == 2
+            @test all(isfile, scripts)
+
+            swarm = make_swarmfile_from_csv(
+                csv_path;
+                filedir=dir,
+                swarmfile="stagefit",
+                juliafile="fitscript",
+            )
+            @test isfile(swarm)
+            stext = read(swarm, String)
+            @test occursin("fitscript_sA.jl", stext)
+            @test occursin("fitscript_sB.jl", stext)
+
+            both = make_fitscripts_and_swarm_from_csv(
+                csv_path;
+                filedir=joinpath(dir, "both"),
+                swarmfile="combo",
+                juliafile="emit",
+                resultfolder="rf2",
+            )
+            @test isfile(both.swarm)
+            @test length(both.scripts) == 2
         end
     end
 

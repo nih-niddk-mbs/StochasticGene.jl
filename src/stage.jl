@@ -525,11 +525,20 @@ function _stage_parse_coupling_mode(x)::Symbol
     return parse_coupling_sign_csv(s)
 end
 
+function _stage_apply_key_flag(key::AbstractString, key_flag::AbstractString)::String
+    f = strip(String(key_flag))
+    isempty(f) && return String(key)
+    # Keep filename/key-safe behavior aligned with existing key normalization style.
+    f = replace(f, " " => "-")
+    return string(f, "-", key)
+end
+
 """
     stage_combine_rates_specs_from_csv(
         csv_path, coupling_cols, coupling_labels;
         key_col="Model_name", skip_empty=true, key_normalizer=identity,
         base_new_params=Float64[], base_new_labels=String[],
+        key_flag="",
         coupling_mode_values=(free=default_coupling_gamma_csv(:free), activate=default_coupling_gamma_csv(:activate), inhibit=default_coupling_gamma_csv(:inhibit)),
     ) -> Vector{NamedTuple}
 
@@ -540,6 +549,7 @@ Read a coupling CSV and build per-key append specs for [`stage_combine_rates`](@
 - `coupling_mode_values`: Dict/NamedTuple providing numeric values for `:free`, `:activate`, `:inhibit`.
 - `base_new_params`/`base_new_labels`: optional non-coupling appended parameters (e.g. hidden units), copied
   into every output spec before coupling parameters.
+- `key_flag`: if non-empty, the effective key is `"{flag}-{key}"` (spaces in the flag become `-`).
 """
 function stage_combine_rates_specs_from_csv(
     csv_path::AbstractString,
@@ -550,6 +560,7 @@ function stage_combine_rates_specs_from_csv(
     key_normalizer=identity,
     base_new_params::AbstractVector{<:Real}=Float64[],
     base_new_labels::AbstractVector{<:AbstractString}=String[],
+    key_flag::AbstractString="",
     coupling_mode_values=(free=default_coupling_gamma_csv(:free), activate=default_coupling_gamma_csv(:activate), inhibit=default_coupling_gamma_csv(:inhibit)),
 )
     length(coupling_cols) == length(coupling_labels) ||
@@ -586,6 +597,7 @@ function stage_combine_rates_specs_from_csv(
         key_raw = strip(string(row[kc]))
         (skip_empty && isempty(key_raw)) && continue
         key = String(key_normalizer(key_raw))
+        key = _stage_apply_key_flag(key, key_flag)
         isempty(strip(key)) && throw(ArgumentError("key became empty after key_normalizer for input $(repr(key_raw))"))
 
         cvals = Float64[]
@@ -655,6 +667,7 @@ end
         csv_path, rate_files, number_of_parameters, output_folder;
         key_col="Model_name", skip_empty=true, key_normalizer=identity,
         base_new_params=Float64[], base_new_labels=String[],
+        key_flag="",
         coupling_mode_values=(free=default_coupling_gamma_csv(:free), activate=default_coupling_gamma_csv(:activate), inhibit=default_coupling_gamma_csv(:inhibit)),
         coupling_cols=nothing, coupling_labels=nothing,
         hierarchical=false, write_out=true, force=true, root=".", root_out=root,
@@ -674,6 +687,7 @@ function stage_combine_rates_from_csv(
     key_normalizer=identity,
     base_new_params::AbstractVector{<:Real}=Float64[],
     base_new_labels::AbstractVector{<:AbstractString}=String[],
+    key_flag::AbstractString="",
     coupling_mode_values=(free=default_coupling_gamma_csv(:free), activate=default_coupling_gamma_csv(:activate), inhibit=default_coupling_gamma_csv(:inhibit)),
     coupling_cols=nothing,
     coupling_labels=nothing,
@@ -698,6 +712,7 @@ function stage_combine_rates_from_csv(
         key_normalizer=key_normalizer,
         base_new_params=base_new_params,
         base_new_labels=base_new_labels,
+        key_flag=key_flag,
         coupling_mode_values=coupling_mode_values,
     )
     out_abs = _stage_resolve_output_file(output_folder, String(root_out); write_out=write_out)
@@ -719,5 +734,115 @@ function stage_combine_rates_from_csv(
         push!(rows, (; key=s.key, dst=r.dst, result=r))
     end
     return (; n=length(rows), rows=rows)
+end
+
+function _stage_read_keys_from_csv(csv_path::AbstractString; key_col::AbstractString="Model_name", skip_empty::Bool=true)
+    df = DataFrame(CSV.File(csv_path))
+    kc = Symbol(key_col)
+    kc in Symbol.(names(df)) || throw(ArgumentError("missing key column $(repr(key_col)) in $(repr(csv_path))"))
+    keys = String[]
+    for row in eachrow(df)
+        key = strip(string(row[kc]))
+        (skip_empty && isempty(key)) && continue
+        isempty(key) || push!(keys, key)
+    end
+    isempty(keys) && throw(ArgumentError("no keys found in $(repr(csv_path)) using key_col=$(repr(key_col))"))
+    return unique(keys)
+end
+
+"""
+    make_fitscripts_from_csv(csv_path; key_col="Model_name", skip_empty=true, juliafile="fitscript", filedir=".", src="", kwargs...) -> Vector{String}
+
+Stage-native script emitter: read keys from a CSV and write one key-based fit script per key
+(`juliafile_<key>.jl`) via [`write_fitfile_key`](@ref). This writes scripts only (no swarm file).
+"""
+function make_fitscripts_from_csv(
+    csv_path::AbstractString;
+    key_col::AbstractString="Model_name",
+    skip_empty::Bool=true,
+    juliafile::String="fitscript",
+    filedir::AbstractString=".",
+    src::AbstractString="",
+    kwargs...,
+)
+    keys = _stage_read_keys_from_csv(csv_path; key_col=key_col, skip_empty=skip_empty)
+    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
+    out = String[]
+    for k in keys
+        scriptpath = joinpath(String(filedir), juliafile * "_" * sanitize_for_filename(k) * ".jl")
+        write_fitfile_key(scriptpath, k; src=src, kwargs...)
+        push!(out, scriptpath)
+    end
+    return out
+end
+
+"""
+    make_swarmfile_from_csv(csv_path; key_col="Model_name", skip_empty=true, swarmfile="fit", juliafile="fitscript", filedir=".", nchains=2, nthreads=1, project="", sysimage="") -> String
+
+Stage-native swarm emitter: read keys from a CSV and write a swarm file with one line per key script
+(`juliafile_<key>.jl`). This writes swarm only.
+"""
+function make_swarmfile_from_csv(
+    csv_path::AbstractString;
+    key_col::AbstractString="Model_name",
+    skip_empty::Bool=true,
+    swarmfile::String="fit",
+    juliafile::String="fitscript",
+    filedir::AbstractString=".",
+    nchains::Int=2,
+    nthreads=1,
+    project::AbstractString="",
+    sysimage::AbstractString="",
+)
+    keys = _stage_read_keys_from_csv(csv_path; key_col=key_col, skip_empty=skip_empty)
+    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
+    sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
+    swarm_path = joinpath(String(filedir), sfile)
+    write_swarmfile_keys(swarm_path, nchains, nthreads, juliafile, keys, project, sysimage)
+    return swarm_path
+end
+
+"""
+    make_fitscripts_and_swarm_from_csv(csv_path; kwargs...) -> NamedTuple
+
+Convenience wrapper that first writes scripts via [`make_fitscripts_from_csv`](@ref), then writes the
+swarm file via [`make_swarmfile_from_csv`](@ref). Returns `(; swarm, scripts)`.
+"""
+function make_fitscripts_and_swarm_from_csv(
+    csv_path::AbstractString;
+    key_col::AbstractString="Model_name",
+    skip_empty::Bool=true,
+    swarmfile::String="fit",
+    juliafile::String="fitscript",
+    filedir::AbstractString=".",
+    nchains::Int=2,
+    nthreads=1,
+    project::AbstractString="",
+    sysimage::AbstractString="",
+    src::AbstractString="",
+    kwargs...,
+)
+    scripts = make_fitscripts_from_csv(
+        csv_path;
+        key_col=key_col,
+        skip_empty=skip_empty,
+        juliafile=juliafile,
+        filedir=filedir,
+        src=src,
+        kwargs...,
+    )
+    swarm = make_swarmfile_from_csv(
+        csv_path;
+        key_col=key_col,
+        skip_empty=skip_empty,
+        swarmfile=swarmfile,
+        juliafile=juliafile,
+        filedir=filedir,
+        nchains=nchains,
+        nthreads=nthreads,
+        project=project,
+        sysimage=sysimage,
+    )
+    return (; swarm, scripts)
 end
 
