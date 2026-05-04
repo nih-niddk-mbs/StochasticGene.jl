@@ -69,7 +69,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `warmupsteps=0`: MH — warmup steps to adapt proposal covariance before sampling. Harmonized to NUTS `n_adapts` (unless `n_adapts` is set explicitly) via [`load_options`](@ref). Warmup runs before sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
 - `writesamples=false`: write out posterior samples when supported (MH; see IO paths for other methods)
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
-- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for **`info_<key>.jld2`** under the resolved results folder; if present, loads the merged run dict via [`read_run_spec`](@ref) and merges with defaults and any kwargs you pass (kwargs take precedence). The companion **`info_<key>.toml`** is not required for this load path. On write, both TOML (human-readable) and JLD2 (full types) are produced. Legacy keys **`traceinfo`** and **`dttype`** in an old merged spec are applied for loading then **dropped** from the persisted run dict (use **`trace_specs`** / **`dwell_specs`** going forward).
+- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for **`info_<key>.jld2`** under the resolved results folder; if present, loads the merged run dict via [`read_run_spec`](@ref) and merges with defaults and any kwargs you pass (kwargs take precedence). The companion **`info_<key>.toml`** is not required for this load path. On write, both TOML (human-readable) and JLD2 (full types) are produced. Legacy keys **`traceinfo`** and **`dttype`** in an old merged spec are applied for loading then **dropped** from the persisted run dict (use **`trace_specs`** / **`dwell_specs`** going forward). With a non-empty key, optional starting rates are **`rates_<key>.txt`** under the same resolved results folder; if that file is missing and `rinit` is unset, initial rates are taken from priors via [`set_rinit`](@ref) — the positional `readrates(…, label, gene, …)` path is **not** used (it would probe a different `rates_…` stem than the key file).
 
 # Returns
 
@@ -334,6 +334,10 @@ function fit(; key=nothing, kwargs...)
         rates_path = joinpath(rr, "rates_" * key_str * ".txt")
         if isfile(rates_path)
             rinit = readrates(rates_path, get_row(ratetype))
+        else
+            # Stay key-based: do not use `fit(nchains,…)` → `readrates(…, label, gene, …)` (different
+            # `rates_…` stem). Empty `rinit` → default init from priors in `set_rinit`.
+            rinit = Float64[]
         end
     end
     _current_run_spec[] = run_spec
@@ -4099,7 +4103,22 @@ Print gene / data / folder lines. With an [`Options`](@ref) argument, [`print_in
 #     println("maxtime: ", maxtime)
 # end
 
+function _println_runtime_versions()
+    sg = try
+        Base.pkgversion(StochasticGene)
+    catch
+        nothing
+    end
+    if sg === nothing
+        println("StochasticGene: (version unknown), Julia: ", VERSION)
+    else
+        println("StochasticGene: v", sg, ", Julia: ", VERSION)
+    end
+    return nothing
+end
+
 function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv)
+    _println_runtime_versions()
     if R == 0
         println("Gene: ", gene, " G: ", G, " Treatment:  ", datacond, ", nalleles: ", nalleles)
     else
@@ -4111,6 +4130,7 @@ function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, resultfol
 end
 
 function printinfo(gene, G::Tuple, R, S, insertstep, datacond, datapath, resultfolder, maxtime, nalleles, propcv)
+    _println_runtime_versions()
     println("Gene: ", gene)
     for i in eachindex(G)
         cond = i <= length(datacond) ? datacond[i] : "(hidden)"
