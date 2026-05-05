@@ -38,19 +38,20 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                 script, 2, (:rna, :rnadwelltime), (rna="data/rna/", dwelltime=("ON.csv", "OFF.csv")),
                 "CELL", "MOCK", "res", "lb",
                 Int[], tuple(), ([1, 2], [2, 1]), 2, 0, 0, 1, tuple(), nothing, ".", 60.0, 6.0,
-                Float64[], 1, 10.0, Int[], -1.0, "", StochasticGene.prob_Gaussian, [], tuple(), "median", 0.01,
-                1000, 0, 1.0, 1.0, false, false, false, "Tsit5()", "", true, 3, 1, 0.05,
+                Float64[], 1, 10, Int[], -1.0, "", StochasticGene.prob_Gaussian, [], tuple(), "median", 0.01,
+                1000, 0, 1.0, 1.0, false, false, false, "Tsit5()", false, 3, 1, 0.05,
                 [trace_row], [];
                 inference_method=:mh,
             )
             s = read(script, String)
-            @test occursin("@time fit(;", s)
-            @test occursin("gene=ARGS[1]", s)
-            @test !occursin("fit(2,", s)
+            @test occursin("@time fit(", s)
+            @test occursin("ARGS[1]", s)
+            @test occursin("fit(2,", s)
+            @test occursin("inference_method=:mh", s)
             @test !occursin("infolder", s) && !occursin("inlabel", s)
             @test occursin(":rna", s) && occursin(":rnadwelltime", s)
             swarmf = joinpath(dir, "batch.swarm")
-            StochasticGene.emit_swarm_batch(swarmf, 2, 1, "gene_fit.jl", ["GENE1", "GENE2"])
+            StochasticGene.write_swarmfile(swarmf, 2, 1, "gene_fit.jl", ["GENE1", "GENE2"])
             sw = read(swarmf, String)
             @test occursin("gene_fit.jl", sw) && occursin("GENE1", sw) && occursin("GENE2", sw)
             staged = joinpath(dir, "staged")
@@ -62,10 +63,10 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             outm = joinpath(dir, "minimal")
             mkpath(outm)
             StochasticGene.makeswarm(; filedir=outm, key="k1", juliafile="once.jl", resultfolder="rf", root=".", nchains=3)
-            ms = read(joinpath(outm, "once.jl"), String)
+            ms = read(joinpath(outm, "once.jl_k1.jl"), String)
             @test occursin("key=", ms) && occursin("\"k1\"", ms)
             sw1 = read(joinpath(outm, "fit.swarm"), String)
-            @test occursin("once.jl", sw1)
+            @test occursin("once.jl_k1.jl", sw1)
             rb = joinpath(dir, "results", "batchres")
             mkpath(rb)
             touch(joinpath(rb, "info_mykey.jld2"))
@@ -301,8 +302,8 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
     end
 
     @testset "staging_key_segment (Result_Fields only)" begin
-        r = Result_Fields("rates", "scRNA", "", "CANX", "3331", "2")
-        @test staging_key_segment(r, :gene) == "CANX"
+        r = StochasticGene.Result_Fields("rates", "scRNA", "", "CANX", "3331", "2")
+        @test StochasticGene.staging_key_segment(r, :gene) == "CANX"
     end
 
     @testset "stage_label_to_key key_mode=:fields (Summary vs Result)" begin

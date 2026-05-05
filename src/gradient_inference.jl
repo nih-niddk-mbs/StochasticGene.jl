@@ -180,6 +180,27 @@ function _make_ℓπ(ℓ)
     end
 end
 
+function _nuts_start_failure_error(
+    stage::AbstractString,
+    err,
+    θ0::AbstractVector{Float64},
+    options::NUTSOptions,
+)
+    nshow = min(length(θ0), 6)
+    θpreview = join(map(x -> string(round(x, sigdigits=5)), θ0[1:nshow]), ", ")
+    shown = sprint(io -> showerror(io, err))
+    return ErrorException(
+        "NUTS initialization failed during $stage. " *
+        "This usually means the starting point is invalid/unstable for this model/data " *
+        "(for example ODE/HMM produced NaN or empty predictions near the initial parameters).\n" *
+        "Try one of: provide a better `rinit`, tighten priors/priorcv, reduce proposal scale `propcv`, " *
+        "or run `inference_method=:mh` first to find a feasible point.\n" *
+        "NUTS settings: gradient=$(options.gradient), fd_ε=$(options.fd_ε).\n" *
+        "Initial θ (first $nshow): [$θpreview]\n" *
+        "Original error: $shown",
+    )
+end
+
 
 
 
@@ -238,22 +259,42 @@ function run_nuts(
         else
             Hamiltonian(metric, ℓ, :Zygote)
         end
-        ϵ = find_good_stepsize(rng, ham, θ0)
+        lp0 = try
+            LogDensityProblems.logdensity(ℓ, θ0)
+        catch err
+            throw(_nuts_start_failure_error("initial logdensity check", err, θ0, options))
+        end
+        isfinite(lp0) || throw(
+            ErrorException(
+                "NUTS initialization failed: initial log posterior is not finite (value = $lp0). " *
+                "Starting point is likely invalid for this model/data. " *
+                "Try `rinit`, tighter priors, smaller `propcv`, or `inference_method=:mh` first.",
+            ),
+        )
+        ϵ = try
+            find_good_stepsize(rng, ham, θ0)
+        catch err
+            throw(_nuts_start_failure_error("step-size search", err, θ0, options))
+        end
         integrator = Leapfrog(ϵ)
         kernel = HMCKernel(Trajectory{MultinomialTS}(integrator, GeneralisedNoUTurn()))
         adaptor = StanHMCAdaptor(MassMatrixAdaptor(metric), StepSizeAdaptor(options.δ, integrator))
 
-        samples_θ, st = AdvancedHMC.sample(
-            rng,
-            ham,
-            kernel,
-            θ0,
-            options.n_samples,
-            adaptor,
-            options.n_adapts;
-            verbose=options.verbose,
-            progress=options.progress,
-        )
+        samples_θ, st = try
+            AdvancedHMC.sample(
+                rng,
+                ham,
+                kernel,
+                θ0,
+                options.n_samples,
+                adaptor,
+                options.n_adapts;
+                verbose=options.verbose,
+                progress=options.progress,
+            )
+        catch err
+            throw(_nuts_start_failure_error("sampling", err, θ0, options))
+        end
         mat = reduce(hcat, samples_θ)
         return (
             samples=mat,

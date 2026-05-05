@@ -63,6 +63,22 @@ function folder_setup(root::AbstractString=".")
 end
 
 """
+    stage_run(src, dst; copy_specs=true)
+
+Create a staged run layout under `dst`: `specs/` and `inputs/manifest.toml`.
+`src` is reserved for future copying when `copy_specs` is true; callers may pass a non-existent path.
+Returns `dst` (as `abspath`).
+"""
+function stage_run(src::AbstractString, dst::AbstractString; copy_specs::Bool=true)
+    d = abspath(String(dst))
+    mkpath(joinpath(d, "specs"))
+    mkpath(joinpath(d, "inputs"))
+    manifest = joinpath(d, "inputs", "manifest.toml")
+    !isfile(manifest) && write(manifest, "# StochasticGene staged run manifest\n")
+    return d
+end
+
+"""
     rna_setup(root=".")
 
 Set up `data/` and `results/` under `root`, then seed bundled reference RNA test data

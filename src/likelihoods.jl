@@ -572,9 +572,11 @@ end
 # | [`RNADwellTimeData`](@ref) (RNA + **dwell-time** histograms per type): [`MTComponents`](@ref) / [`TDComponents`](@ref), [`dwelltimePDF`](@ref) | Usually OK uncoupled; **coupled** units → large `make_mat_TC` / joint steady state — watch memory | Usually OK uncoupled; coupled cost scales with generator size (different failure mode than trace matrix-exp) | Always OK |
 # | [`DwellTimeData`](@ref) (dwell-time **only**): same PDF machinery; if [`hastrait`](@ref)`(model, :coupling)` uses [`predictedarray`](@ref) with [`TCoupledComponents`](@ref) / [`TDCoupledFullComponents`](@ref) — joint generators, not the trace HMM | Coupled multi-unit dwell can be **heavy** for Zygote (large graphs) | Not blocked by the trace [`kolmogorov_forward_ad`](@ref) / `Dual` issue; may still be slow for huge state | Always OK |
 #
-# Specialized non-mutating helpers ([`predictedarray_ad`](@ref)) exist for some shapes (e.g. [`TDComponents`](@ref),
-# [`RNAData`](@ref)); generic [`predictedfn`](@ref) for [`AbstractHistogramData`](@ref) calls [`predictedarray`](@ref)
-# — use `steady_state_solver=:augmented` for AD through the nullspace.
+# Specialized non-mutating helpers ([`predictedarray_ad`](@ref)) exist for shapes used in reverse-mode AD.
+# [`predictedfn`](@ref) for [`AbstractHistogramData`](@ref) calls [`predictedarray`](@ref) when `rates_fn` is
+# [`get_rates`](@ref) (MH / primal, may use preallocation + `push!`), and [`predictedarray_ad`](@ref) when
+# `rates_fn ===` [`get_rates_ad`](@ref) (NUTS/ADVI Zygote path). Use `steady_state_solver=:augmented` for AD through
+# the nullspace where applicable.
 #
 # ### Trace likelihoods ([`AbstractTraceData`](@ref), [`TraceRNAData`](@ref))
 #
@@ -638,9 +640,19 @@ This function calculates the log-likelihood for different types of data and mode
 # Convention
 - All loglikelihood functions in this codebase return the log-likelihood (higher is better), not the negative log-likelihood.
 """
+function _histogram_predictions_invalid(predictions, hist)
+    isempty(predictions) && return true
+    length(predictions) != length(hist) && return true
+    any(!isfinite, predictions) && return true
+    return false
+end
+
 function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
     predictions = predictedfn(param, data, model; steady_state_solver=steady_state_solver)
     hist = datahistogram(data)
+    if _histogram_predictions_invalid(predictions, hist)
+        return -Inf, fill(-Inf, length(hist))
+    end
     logpredictions = log.(max.(predictions, eps()))
     return sum(hist .* logpredictions), hist .* logpredictions  # Convention: return log-likelihoods
 end
@@ -675,6 +687,9 @@ Same as [`loglikelihood`](@ref) for histogram data but uses [`get_rates_ad`](@re
 function loglikelihood_ad(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
     predictions = predictedfn(param, data, model; steady_state_solver=steady_state_solver, rates_fn=get_rates_ad)
     hist = datahistogram(data)
+    if _histogram_predictions_invalid(predictions, hist)
+        return -Inf, fill(-Inf, length(hist))
+    end
     logpredictions = log.(max.(predictions, eps()))
     return sum(hist .* logpredictions), hist .* logpredictions
 end
@@ -746,7 +761,7 @@ function loglikelihood_ad(
     p_true = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
     yield_val = get_yield_value(data.yield)
     if yield_val < 1.0
-        L = make_loss_matrix(data.nRNA, nRNA_true, yield_val)
+        L = make_loss_matrix_ad(data.nRNA, nRNA_true, yield_val)
         predictions = L * p_true
     else
         predictions = p_true
@@ -810,7 +825,8 @@ function _combined_rna_predictions(
         nRNA_true = get_nRNA_true(data.yield, data.nRNA)
         p_true = predictedRNA(r[1:nr], model.components.mcomponents, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
         yield_val = get_yield_value(data.yield)
-        return yield_val < 1.0 ? make_loss_matrix(data.nRNA, nRNA_true, yield_val) * p_true : p_true[1:data.nRNA]
+        Lmk = _combined_uses_ad(mode) ? make_loss_matrix_ad : make_loss_matrix
+        return yield_val < 1.0 ? Lmk(data.nRNA, nRNA_true, yield_val) * p_true : p_true[1:data.nRNA]
     end
     return predictedfn(param, data, model; steady_state_solver=steady_state_solver, rates_fn=rates_fn)
 end
@@ -1048,7 +1064,7 @@ function predictedfn(
         yield_val = get_yield_value(data.yield)
         if yield_val < 1.0
             # Apply loss matrix: observed = L * true
-            L = make_loss_matrix(data.nRNA, nRNA_true, yield_val)
+            L = (rates_fn === get_rates_ad ? make_loss_matrix_ad : make_loss_matrix)(data.nRNA, nRNA_true, yield_val)
             p_observed = L * p_true
             return p_observed
         else
@@ -1074,6 +1090,9 @@ Calculates the likelihood for multiple histograms.
 
 # Returns
 - `Array{Float64,2}`: An array of likelihoods for the histograms.
+
+When `rates_fn ===` [`get_rates_ad`](@ref), this calls [`predictedarray_ad`](@ref) (non-mutating, Zygote-friendly).
+Otherwise it calls [`predictedarray`](@ref) (MH / primal path; may use `push!` for speed).
 """
 function predictedfn(
     param,
@@ -1082,7 +1101,12 @@ function predictedfn(
     steady_state_solver::Symbol=:default,
     rates_fn::Function=get_rates,
 )
-    h = predictedarray(rates_fn(param, model), data, model; steady_state_solver=steady_state_solver)
+    r = rates_fn(param, model)
+    # MH / primal (`get_rates`): keep mutating `predictedarray` (preallocated + push!) for speed.
+    # AD / NUTS (`get_rates_ad`): use `predictedarray_ad` (non-mutating) so Zygote can differentiate.
+    h = rates_fn === get_rates_ad ?
+        predictedarray_ad(r, data, model; steady_state_solver=steady_state_solver) :
+        predictedarray(r, data, model; steady_state_solver=steady_state_solver)
     make_array(h)
 end
 
@@ -1182,6 +1206,34 @@ function predictedarray(r, data::DwellTimeData, model::AbstractGRSMmodel{T}; ste
     predictedarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
 end
 
+# --- `predictedarray_ad` entry points for `AbstractHistogramData` (Zygote / `get_rates_ad` only) ---
+
+function predictedarray_ad(r, data::DwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
+    return predictedarray_ad(r, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
+end
+
+function predictedarray_ad(r, data::DwellTimeData, model::AbstractGRSMmodel{T}; steady_state_solver::Symbol=:augmented) where {T<:NamedTuple{(:coupling,)}}
+    r, coupling_strength = prepare_rates_coupled(r, model.nrates, model.trait.coupling.couplingindices)
+    return predictedarray_ad(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
+end
+
+function predictedarray_ad(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
+    return predictedarray_ad(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA; steady_state_solver=steady_state_solver)
+end
+
+function predictedarray_ad(r, data::RNAOnOffData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
+    return predictedarray(r, data, model; steady_state_solver=steady_state_solver)
+end
+
+function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype; steady_state_solver::Symbol=:augmented)
+    return predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)
+end
+
+function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:augmented)
+    M = make_mat_M(components.mcomponents, r)
+    return [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
+end
+
 function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype; steady_state_solver::Symbol=:default)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
@@ -1204,6 +1256,8 @@ function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype; steady_s
         elseif Dtype == "ONG"
             TD = make_mat(tcomponents.elementsTD[i], r, G)
             h = ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsG, pssG))
+        else
+            error("Unknown Dtype: $Dtype")
         end
         push!(hists, h)
     end

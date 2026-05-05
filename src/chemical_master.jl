@@ -166,6 +166,15 @@ function pdf_from_cdf(S)
     P / sum(P)
 end
 
+# Zero vector for dwell-time entrance-flux accumulation; must promote element type so
+# ForwardDiff/Zygote can propagate (e.g. rates and/or pss carry Dual numbers).
+function _vector_zero_sinit_like(pss::AbstractVector, others::AbstractVector...)
+    T = eltype(pss)
+    for v in others
+        T = promote_type(T, eltype(v))
+    end
+    return zeros(T, length(pss))
+end
 
 """
     init_S(r::Vector,livestates::Vector,elements::Vector,pss)
@@ -182,7 +191,7 @@ given by transition probability of entering live states in steady state
 
 """
 function init_S(r::Vector, sojourn::Vector, elements::Vector, pss)
-    Sinit = zeros(length(pss))
+    Sinit = _vector_zero_sinit_like(pss, r)
     for e in elements
         if e.b != e.a && (e.a ∈ sojourn && e.b ∉ sojourn)
             Sinit[e.a] += pss[e.b] * r[e.index]
@@ -193,7 +202,7 @@ function init_S(r::Vector, sojourn::Vector, elements::Vector, pss)
 end
 
 function init_S(r::Vector, sojourn::Vector, elements::Vector, pss, nonzeros)
-    Sinit = zeros(length(pss))
+    Sinit = _vector_zero_sinit_like(pss, r)
     for e in elements
         if e.b != e.a && (e.a ∈ sojourn && e.b ∉ sojourn)
             Sinit[e.a] += pss[e.b] * r[e.index]
@@ -211,8 +220,8 @@ Initial distribution for dwell time: **ON** = entrance to sojourn (flux from bar
 current sojourn (same net formula: flux from complement into sojourn). T(i,j) = rate from j to i.
 """
 function init_S(sojourn::Vector, T::SparseMatrixCSC, pss)
-    Sinit = zeros(length(pss))
     rows, cols, vals = findnz(T)
+    Sinit = _vector_zero_sinit_like(pss, vals)
     for i in eachindex(rows)
         if cols[i] != rows[i] && (rows[i] ∈ sojourn && cols[i] ∉ sojourn)
             Sinit[rows[i]] += pss[cols[i]] * vals[i]
@@ -231,8 +240,8 @@ Dwell-time initial distribution by type.
   transition; same net formula (flux from complement into sojourn). T(i,j) = rate from j to i.
 """
 function init_S(sojourn::Vector, T::SparseMatrixCSC, pss, dttype::String)
-    Sinit = zeros(length(pss))
     rows, cols, vals = findnz(T)
+    Sinit = _vector_zero_sinit_like(pss, vals)
     for i in eachindex(rows)
         cols[i] == rows[i] && continue
         if rows[i] ∈ sojourn && cols[i] ∉ sojourn
@@ -265,7 +274,7 @@ return nonzero states of initial distribution for OFF time distribution
 
 """
 function init_SI(r::Vector, onstates::Vector, elements::Vector, pss, nonzeros)
-    Sinit = zeros(length(pss))
+    Sinit = _vector_zero_sinit_like(pss, r)
     for e in elements
         if e.b != e.a && (e.b ∈ onstates && e.a ∉ onstates)
             Sinit[e.a] += pss[e.b] * r[e.index]
@@ -769,6 +778,9 @@ end
 Create a loss matrix L where L[i+1, j+1] = P(observe i | true count j)
 using binomial coefficients.
 
+**MH / primal path:** mutating implementation (preallocated matrix + column normalization in place).
+For reverse-mode AD (Zygote / NUTS with `get_rates_ad`), use [`make_loss_matrix_ad`](@ref).
+
 # Arguments
 - `nRNA_observed::Int`: Size of observed histogram (number of bins)
 - `nRNA_true::Int`: Size of true histogram (number of bins, typically larger when yieldfactor < 1.0)
@@ -804,8 +816,7 @@ function make_loss_matrix(nRNA_observed::Int, nRNA_true::Int, yieldfactor::Float
             d = Binomial(j, clamp(yieldfactor, 0.0, 1.0))
             L[i+1, j+1] = pdf(d, i)
         end
-        # Normalize column to account for truncation (probabilities for i > nRNA_observed-1 are lost)
-        col_sum = sum(L[:, j+1])
+        col_sum = sum(@view L[:, j+1])
         if col_sum > 0
             L[:, j+1] ./= col_sum
         end
@@ -813,8 +824,25 @@ function make_loss_matrix(nRNA_observed::Int, nRNA_true::Int, yieldfactor::Float
     return L
 end
 
+"""
+    make_loss_matrix_ad(nRNA_observed::Int, nRNA_true::Int, yieldfactor::Float64)
+
+Same mathematics as [`make_loss_matrix`](@ref), but **no in-place column writes** (builds columns and
+`hcat`). Use with Zygote / [`get_rates_ad`](@ref) / NUTS. For MH, keep [`make_loss_matrix`](@ref).
+"""
+function make_loss_matrix_ad(nRNA_observed::Int, nRNA_true::Int, yieldfactor::Float64)
+    y = clamp(yieldfactor, 0.0, 1.0)
+    cols = map(0:nRNA_true-1) do j
+        col = [pdf(Binomial(j, y), i) for i in 0:nRNA_observed-1]
+        s = sum(col)
+        s > 0 ? col ./ s : col
+    end
+    return reduce(hcat, cols)::Matrix{Float64}
+end
+
 # Backward compatibility: if only nRNA provided, assume square matrix (old behavior)
 make_loss_matrix(nRNA::Int, yieldfactor::Float64) = make_loss_matrix(nRNA, nRNA, yieldfactor)
+make_loss_matrix_ad(nRNA::Int, yieldfactor::Float64) = make_loss_matrix_ad(nRNA, nRNA, yieldfactor)
 
 """
 solve_vector(A::Matrix,b::vector)

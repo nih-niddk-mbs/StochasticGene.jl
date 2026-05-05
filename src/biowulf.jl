@@ -57,6 +57,60 @@ function makeswarm(; key::String, kwargs...)
 end
 
 """
+    model_grid(; Gset=[2], Rset=[0], Sset=[0], insertset=[1])
+
+Cartesian product of model dimensions for batch grids. Each element is a named tuple
+`(G=..., R=..., S=..., insertstep=...)` suitable for `fit`/`makeswarm_genes` loops.
+"""
+function model_grid(; Gset=[2], Rset=[0], Sset=[0], insertset=[1])
+    return [
+        (; G=g, R=r, S=s, insertstep=ins)
+        for g in Gset, r in Rset, s in Sset, ins in insertset
+    ]
+end
+
+"""
+    makeswarm_folder(resultfolder; root=".", filedir=".", nchains=2, nthreads=1, swarmfile="fit", juliafile="fitscript", ...)
+
+Scan `joinpath(root, \"results\", resultfolder)` for `info_<key>.jld2`, collect each `<key>`, then write
+[`write_fitfile_key`](@ref) scripts and a [`write_swarmfile_keys`](@ref) swarm under `filedir`.
+Returns the discovered keys (sorted). Extra keywords are forwarded to `write_fitfile_key`.
+"""
+function makeswarm_folder(
+    resultfolder::AbstractString;
+    root::AbstractString=".",
+    filedir::AbstractString=".",
+    nchains::Int=2,
+    nthreads::Int=1,
+    swarmfile::String="fit",
+    juliafile::String="fitscript",
+    project::String="",
+    sysimage::String="",
+    src::String="",
+    kwargs...,
+)
+    rdir = joinpath(root, "results", String(resultfolder))
+    isdir(rdir) || throw(ArgumentError("results folder not found: $(repr(rdir))"))
+    rx = r"^info_(.+)\.jld2$"
+    keys = String[]
+    for fn in readdir(rdir)
+        m = match(rx, fn)
+        m === nothing && continue
+        push!(keys, String(m.captures[1]))
+    end
+    sort!(keys)
+    isempty(keys) && return keys
+    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
+    sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
+    write_swarmfile_keys(joinpath(filedir, sfile), nchains, nthreads, juliafile, keys, project, sysimage)
+    for k in keys
+        scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
+        write_fitfile_key(scriptpath, k; src=src, kwargs...)
+    end
+    return keys
+end
+
+"""
     makeswarm_genes(genes::Vector{String}; <keyword arguments>)
 
 Write a swarm file and one shared fit script to run each gene in `genes`. Each swarm line runs the same
@@ -218,12 +272,12 @@ Writes a fit script that takes the gene as `ARGS[1]` and calls the positional [`
 
 `fit(nchains, datatype, datapath, gene, cell, datacond, resultfolder, label, fittedparam, …, trace_specs, dwell_specs)`,
 
-optionally appending `; dttype=…` / `; traceinfo=…` for legacy loaders when those are set.
+optionally appending `; dttype=…` / `; traceinfo=…` for legacy loaders when those are set, and `; inference_method=…` when passed (forwarded as a trailing keyword on the `fit` call).
 """
 function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs;
-    src="", dttype=nothing, traceinfo=nothing)
+    src="", dttype=nothing, traceinfo=nothing, inference_method=nothing)
     s = '"'
     transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
     f = open(fitfile, "w")
@@ -240,6 +294,9 @@ function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacon
     end
     if traceinfo !== nothing
         push!(extra, "traceinfo=" * repr(traceinfo))
+    end
+    if inference_method !== nothing
+        push!(extra, "inference_method=" * repr(inference_method))
     end
     if !isempty(extra)
         line *= "; " * join(extra, ", ")
