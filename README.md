@@ -2,7 +2,7 @@
 
 **Version 1.10.0**
 
-[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
+[![Documents](https://img.shields.io/badge/Documents-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 
 Julia package for **stochastic models of gene transcription**, **Bayesian inference** (Metropolis–Hastings, NUTS, and mean-field ADVI on the same transformed parameters), and **analysis** of smFISH, scRNA-seq, live-cell traces, and dwell-time data.
 
@@ -12,7 +12,7 @@ Julia package for **stochastic models of gene transcription**, **Bayesian infere
 
 | Resource | URL |
 |----------|-----|
-| **Manual (hosted)** | [Docs](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/) |
+| **Manual (hosted)** | [Documents](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/) |
 | **Cluster & batch workflows** | [Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/cluster_batch_workflows.html) — Biowulf swarms, `makeswarm`, `makeswarmfiles`, combined rate files, key-based `fit` |
 | **Package overview** | [Repository layout, nomenclature, data types](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/package_overview.html) |
 | **Issues** | [GitHub Issues](https://github.com/nih-niddk-mbs/StochasticGene.jl/issues) |
