@@ -11,7 +11,6 @@
 - `run_nuts_fit`, `run_advi_fit`: Gradient-based inference pipelines
 - `INFERENCE_MH`, `INFERENCE_NUTS`, `INFERENCE_ADVI`, `INFERENCE_CHOICES`: symbolic method tags for run specs
 - [`loglikelihood`](@ref): Calculate log-likelihood for model parameters
-- [`run_mcmc_parallel`](@ref): Run parallel MCMC chains
 
 ### Model Simulation
 - [`simulator`](simulator.md): Simulate stochastic gene expression models
