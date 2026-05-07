@@ -10,7 +10,7 @@ makedocs(
     sitename = "StochasticGene.jl",
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", "false") == "true",
-        canonical = "https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/",
+        canonical = "https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/",
         assets = ["assets/custom.css"],
         analytics = "UA-XXXXXXXXX-X",
     ),
@@ -75,6 +75,6 @@ deploydocs(
     branch = "gh-pages",
     push_preview = true,
     forcepush = true,
-    versions = ["stable" => "v^", "v#.#", "dev" => "dev"],
+    versions = ["dev" => "dev"],
     make = nothing,
 )

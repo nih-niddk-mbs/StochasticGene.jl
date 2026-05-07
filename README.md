@@ -2,8 +2,7 @@
 
 **Version 1.10.0**
 
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/)
+[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 
 Julia package for **stochastic models of gene transcription**, **Bayesian inference** (Metropolis–Hastings, NUTS, and mean-field ADVI on the same transformed parameters), and **analysis** of smFISH, scRNA-seq, live-cell traces, and dwell-time data.
 
@@ -13,12 +12,10 @@ Julia package for **stochastic models of gene transcription**, **Bayesian infere
 
 | Resource | URL |
 |----------|-----|
-| **Manual (hosted)** | [Stable docs](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) · [Dev docs](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/) |
-| **Cluster & batch workflows** | [Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html) — Biowulf swarms, `makeswarm`, `makeswarmfiles`, combined rate files, key-based `fit` |
-| **Package overview** | [Repository layout, nomenclature, data types](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/package_overview.html) |
+| **Manual (hosted)** | [Docs](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/) |
+| **Cluster & batch workflows** | [Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/cluster_batch_workflows.html) — Biowulf swarms, `makeswarm`, `makeswarmfiles`, combined rate files, key-based `fit` |
+| **Package overview** | [Repository layout, nomenclature, data types](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/package_overview.html) |
 | **Issues** | [GitHub Issues](https://github.com/nih-niddk-mbs/StochasticGene.jl/issues) |
-
-Use `/stable/` for the latest release and `/dev/` for the default branch.
 
 ---
 
@@ -165,4 +162,4 @@ MIT License — see [LICENSE](LICENSE).
 
 ## Contributing
 
-See [Contributing](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/contributing.html) in the manual. Pull requests and issue reports are welcome.
+See [Contributing](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/contributing.html) in the manual. Pull requests and issue reports are welcome.

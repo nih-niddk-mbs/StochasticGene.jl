@@ -101,6 +101,9 @@ function _fullstack_sampling_kwargs(;
     )
 end
 
+_single_modality_datatype(modality::Symbol) = (modality,)
+_single_modality_datapath(modality::Symbol, path) = NamedTuple{(modality,)}((path,))
+
 function _rna_model_kwargs(unit::Integer=1)
     rates = collect(Float64, COUPLED_UNIT_RNA_RATES[unit])
     return (
@@ -178,8 +181,8 @@ function fit_fullstack_rna(;
         _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _rna_model_kwargs(unit)...,
-        datatype="rna",
-        datapath="rna",
+        datatype=_single_modality_datatype(:rna),
+        datapath=_single_modality_datapath(:rna, "rna"),
         gene=gene,
         datacond=FULLSTACK_COND,
         label=_fullstack_label("fullstack-rna-$(gene)", label_suffix),
@@ -203,8 +206,8 @@ function fit_fullstack_rnacount(;
         _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _rna_model_kwargs(unit)...,
-        datatype="rnacount",
-        datapath="rnacount",
+        datatype=_single_modality_datatype(:rnacount),
+        datapath=_single_modality_datapath(:rnacount, "rnacount"),
         gene=gene,
         datacond=FULLSTACK_COND,
         label=_fullstack_label("fullstack-rnacount-$(gene)", label_suffix),
@@ -227,8 +230,8 @@ function fit_fullstack_trace(;
         _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _trace_model_kwargs()...,
-        datatype="trace",
-        datapath="trace",
+        datatype=_single_modality_datatype(:trace),
+        datapath=_single_modality_datapath(:trace, "trace"),
         gene=gene,
         datacond="$(gene)_$(FULLSTACK_COND)",
         traceinfo=(1.0, 1, -1, 1.0, 0.0),
@@ -251,8 +254,8 @@ function fit_fullstack_tracejoint(;
         _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _tracejoint_model_kwargs()...,
-        datatype="tracejoint",
-        datapath="trace",
+        datatype=_single_modality_datatype(:tracejoint),
+        datapath=_single_modality_datapath(:tracejoint, "trace"),
         gene=FULLSTACK_GENES[1],
         datacond=FULLSTACK_TRACEJOINT_CONDS,
         traceinfo=(1.0, 1, -1, [1.0, 1.0], [0.0, 0.0]),
@@ -278,8 +281,8 @@ function fit_fullstack_dwelltime(;
         _fullstack_common_kwargs(; resultfolder=resultfolder)...,
         _fullstack_sampling_kwargs(; kwargs...)...,
         _rna_model_kwargs(unit)...,
-        datatype="dwelltime",
-        datapath=["dwelltime/$(gene)_$(FULLSTACK_COND)_OFF.txt"],
+        datatype=_single_modality_datatype(:dwelltime),
+        datapath=_single_modality_datapath(:dwelltime, ["dwelltime/$(gene)_$(FULLSTACK_COND)_OFF.txt"]),
         gene=gene,
         datacond=FULLSTACK_COND,
         dttype=["OFF"],
@@ -400,18 +403,30 @@ function _selected_inference_pairs(cases, specs)
 end
 
 """
-    run_fullstack_fits!(; cases=nothing, regenerate=true, kwargs...)
+    run_fullstack_fits!(; cases=nothing, regenerate=true, inference_spec=nothing, kwargs...)
 
 Generate fixtures if requested and run selected developer full-stack fits. Use
 `cases=:rna` or `cases="rna,trace"` to restrict execution.
+
+Set `inference_spec` to one of keys in [`FULLSTACK_INFERENCE_SPECS`](@ref)
+to quickly toggle inference method + gradient without spelling individual kwargs.
+Explicit keyword args still override spec defaults.
 """
-function run_fullstack_fits!(; cases=nothing, regenerate::Bool=true, kwargs...)
+function run_fullstack_fits!(; cases=nothing, regenerate::Bool=true, inference_spec=nothing, kwargs...)
     regenerate && generate_fullstack_data!()
     mkpath(joinpath(DEFAULT_ROOT, FULLSTACK_RESULTFOLDER))
+    run_kwargs = (; kwargs...)
+    if !isnothing(inference_spec)
+        spec = Symbol(inference_spec)
+        haskey(FULLSTACK_INFERENCE_SPECS, spec) ||
+            throw(ArgumentError("unknown full-stack inference spec $(repr(spec)); choose from $(join(keys(FULLSTACK_INFERENCE_SPECS), ", "))"))
+        run_kwargs = merge(FULLSTACK_INFERENCE_SPECS[spec], run_kwargs)
+        println("Using full-stack inference spec: ", spec)
+    end
     outputs = Dict{Symbol,Any}()
     for case in _selected_cases(cases)
         println("Running full-stack fit case: ", case)
-        outputs[case] = FULLSTACK_FIT_CASES[case](; kwargs...)
+        outputs[case] = FULLSTACK_FIT_CASES[case](; run_kwargs...)
         print_rate_recovery(case, outputs[case])
     end
     println("Full-stack results written to: ", joinpath(DEFAULT_ROOT, FULLSTACK_RESULTFOLDER))
@@ -458,11 +473,13 @@ end
 if abspath(PROGRAM_FILE) == @__FILE__
     cases_env = get(ENV, "SG_FULLSTACK_CASES", "")
     cases = isempty(cases_env) ? nothing : cases_env
+    spec_env = get(ENV, "SG_FULLSTACK_INFERENCE_SPEC", "")
+    inference_spec = isempty(spec_env) ? nothing : Symbol(spec_env)
     specs_env = get(ENV, "SG_FULLSTACK_INFERENCE_SPECS", "")
     specs = isempty(specs_env) ? nothing : specs_env
     if haskey(ENV, "SG_FULLSTACK_INFERENCE_MATRIX")
         run_fullstack_inference_matrix!(; cases=cases, specs=specs)
     else
-        run_fullstack_fits!(; cases=cases)
+        run_fullstack_fits!(; cases=cases, inference_spec=inference_spec)
     end
 end

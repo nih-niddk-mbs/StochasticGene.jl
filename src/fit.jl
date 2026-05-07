@@ -535,7 +535,7 @@ const SUPPORTED_DATATYPES = Set([
 ])
 
 const COMBINED_MODALITIES = Set([
-    :rna, :trace, :dwelltime, :grid
+    :rna, :rnacount, :trace, :tracejoint, :dwelltime, :grid
 ])
 
 _datatype_symbol(x::Symbol) = x
@@ -2403,6 +2403,15 @@ function make_reporter_components(data::CombinedData{NT}, transitions, G, R, S, 
     return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
 end
 
+function make_reporter_components(data::CombinedData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    modalities = combined_modalities(data)
+    if length(modalities) == 1
+        leg = getfield(data.legs, modalities[1])
+        return make_reporter_components(leg, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
+    end
+    throw(ArgumentError("No make_reporter_components method for CombinedData modalities $(repr(modalities))"))
+end
+
 """
     make_grid(transitions, R::Int, S, insertstep, noisepriors, grid)
 
@@ -2797,7 +2806,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         onstates = full_onstates
     end
     insertstep = normalize_insertstep(R, insertstep)
-    has_trace_leg = data isa AbstractTraceData || (data isa CombinedData && :trace in combined_modalities(data))
+    has_trace_leg = data isa AbstractTraceData || (data isa CombinedData && !isdisjoint((:trace, :tracejoint), combined_modalities(data)))
     reporter, components = if data isa DwellTimeData
         make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dwell_specs=dwell_specs, coupled_stack=coupled_stack)
     elseif has_trace_leg

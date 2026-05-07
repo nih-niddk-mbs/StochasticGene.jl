@@ -853,6 +853,32 @@ function _combined_likelihood_leg(
 end
 
 function _combined_likelihood_leg(
+    ::Val{:rnacount},
+    param,
+    data::RNACountData,
+    model::AbstractGeneTransitionModel,
+    ::Val{:primal};
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _likelihood_parts(loglikelihood(param, data, model; steady_state_solver=steady_state_solver))
+end
+
+function _combined_likelihood_leg(
+    ::Val{:rnacount},
+    param,
+    data::RNACountData,
+    model::AbstractGeneTransitionModel,
+    ::Val{:ad};
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _likelihood_parts(loglikelihood_ad(param, data, model; steady_state_solver=steady_state_solver))
+end
+
+function _combined_likelihood_leg(
     ::Val{:trace},
     param,
     data::AbstractTraceData,
@@ -866,7 +892,38 @@ function _combined_likelihood_leg(
 end
 
 function _combined_likelihood_leg(
+    ::Val{:tracejoint},
+    param,
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel,
+    ::Val{:primal};
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _likelihood_parts(loglikelihood(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack))
+end
+
+function _combined_likelihood_leg(
     ::Val{:trace},
+    param,
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel,
+    ::Val{:ad};
+    steady_state_solver::Symbol,
+    hmm_stack::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    return _likelihood_parts(loglikelihood_ad(
+        param, data, model;
+        steady_state_solver=steady_state_solver,
+        hmm_stack=hmm_stack,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+    ))
+end
+
+function _combined_likelihood_leg(
+    ::Val{:tracejoint},
     param,
     data::AbstractTraceData,
     model::AbstractGRSMmodel,
