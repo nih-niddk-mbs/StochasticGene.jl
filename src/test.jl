@@ -1124,6 +1124,99 @@ with that yield parameter, and compare predictions at both the true (lossless) a
   - `lossy_pred`: Predicted histogram after applying yieldfactor loss
   - `lossy_actual`: Observed histogram after applying yieldfactor loss to true sim data
 """
+function test_yield_downsampling(; yieldfactor::Float64=0.5, λ::Float64=10.0, nRNA::Int=80, tol::Float64=1e-6)
+    results = Dict{String,Any}()
+    all_passed = true
+
+    # ---- Test 1: Poisson(λ) thinned by y == Poisson(yλ) ----
+    # Build Poisson(λ) PMF over nRNA bins
+    p_poisson = normalize_histogram([pdf(Poisson(λ), k) for k in 0:nRNA-1])
+
+    # Reference: Poisson(y*λ) over same bins
+    p_expected = normalize_histogram([pdf(Poisson(yieldfactor * λ), k) for k in 0:nRNA-1])
+
+    # Path A: technical_loss (direct binomial convolution)
+    p_loss_direct = technical_loss(p_poisson, yieldfactor, nRNA)
+
+    err_direct = maximum(abs.(p_loss_direct .- p_expected))
+    pass_direct = err_direct < tol
+    results["technical_loss_poisson_exact"] = (passed=pass_direct, max_err=err_direct)
+    all_passed &= pass_direct
+
+    # Path B: make_loss_matrix (matrix multiply)
+    nRNA_true = nhist_loss(nRNA, yieldfactor)
+    p_poisson_expanded = normalize_histogram([pdf(Poisson(λ), k) for k in 0:nRNA_true-1])
+    L = make_loss_matrix(nRNA, nRNA_true, yieldfactor)
+    p_loss_matrix = L * p_poisson_expanded
+
+    err_matrix = maximum(abs.(p_loss_matrix .- p_expected))
+    pass_matrix = err_matrix < tol
+    results["make_loss_matrix_poisson_exact"] = (passed=pass_matrix, max_err=err_matrix)
+    all_passed &= pass_matrix
+
+    # ---- Test 2: technical_loss vs make_loss_matrix agree for fast-decaying distributions ----
+    # The two methods differ slightly due to column normalization in make_loss_matrix
+    # (conditional on obs < nRNA_obs vs unconditional). They agree when the distribution
+    # decays fast enough that P(obs >= nRNA_obs) ≈ 0 after thinning.
+    # Use a geometric-like distribution (decays fast) at nRNA_true scale.
+    # This mimics real RNA distributions which are peaked near 0 and decay rapidly.
+    θ = 0.85  # geometric decay rate — 99%+ mass in lower half of support
+    p_geom_true = normalize_histogram([θ^k for k in 0:nRNA_true-1])
+
+    p_lm_geom = make_loss_matrix(nRNA, nRNA_true, yieldfactor) * p_geom_true
+    p_tl_geom = technical_loss(p_geom_true, yieldfactor, nRNA)
+
+    err_consistency = maximum(abs.(p_lm_geom .- p_tl_geom))
+    pass_consistency = err_consistency < tol
+    results["loss_matrix_vs_technical_loss"] = (passed=pass_consistency, max_err=err_consistency)
+    all_passed &= pass_consistency
+
+    # ---- Test 3: End-to-end CME path — mean scaling ----
+    # Simple G=2 model, no R (geometric marginal over burst sizes)
+    r = [0.33, 0.19, 2.5, 0.1]
+    transitions = ([1, 2], [2, 1])
+    G = 2
+    nalleles = 1
+    nRNA_obs = nRNA
+    nRNA_true_size = nhist_loss(nRNA_obs, yieldfactor)
+    yield_tuple = (yieldfactor, nRNA_true_size)
+
+    data = RNAData{typeof(nRNA_obs), Vector{Float64}}("", "", nRNA_obs, zeros(nRNA_obs), yield_tuple, [1])
+    model = load_model(data, r, prior_ratemean(transitions, 0, 0, 1, r[end], [], 1.0),
+        [1, 2, 3], tuple(), transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], r[end], 0.02,
+        prob_Gaussian, [], 1, tuple(), tuple(), nothing)
+
+    # Get prediction at observed size (should have yield applied)
+    param = log.(r[[1, 2, 3]])
+    p_obs_pred = predictedfn(param, data, model)
+
+    # Also get the true (pre-loss) prediction at nRNA_true_size
+    r_full = get_rates(param, model)
+    M = make_mat_M(model.components, r_full)
+    p_true_pred = steady_state(M, model.components.nT, nalleles, nRNA_true_size)
+
+    mean_true = sum((0:nRNA_true_size-1) .* p_true_pred)
+    mean_obs  = sum((0:nRNA_obs-1) .* p_obs_pred)
+
+    # After binomial thinning: mean_obs should ≈ yieldfactor * mean_true
+    mean_ratio = mean_obs / mean_true
+    pass_mean = abs(mean_ratio - yieldfactor) < 0.01
+    results["mean_scaling_cme"] = (passed=pass_mean, mean_ratio=mean_ratio, expected=yieldfactor)
+    all_passed &= pass_mean
+
+    # ---- Test 4: predictedfn returns correct output length ----
+    pass_length = length(p_obs_pred) == nRNA_obs
+    results["output_length"] = (passed=pass_length, got=length(p_obs_pred), expected=nRNA_obs)
+    all_passed &= pass_length
+
+    println("test_yield_downsampling: ", all_passed ? "ALL PASSED" : "SOME FAILED")
+    for (name, r) in sort(collect(results), by=first)
+        status = r.passed ? "✓" : "✗"
+        println("  $status $name: ", r)
+    end
+    return (passed=all_passed, results=results)
+end
+
 function test_fit_simrna_yield(; maxtime = 60.0, rtarget=[0.33, 0.19, 2.5, .1], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=1000000, nchains=1, yieldfactor=0.5)
     # Simulate without loss
     h_true = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]

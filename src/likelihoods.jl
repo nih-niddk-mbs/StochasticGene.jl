@@ -1227,7 +1227,15 @@ function predictedarray(r, data::RNAOnOffData, model::AbstractGeneTransitionMode
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
-    histF = steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA; steady_state_solver=steady_state_solver)
+    nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+    p_true = steady_state(M, components.mcomponents.nT, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+    yield_val = get_yield_value(data.yield)
+    histF = if yield_val < 1.0
+        L = make_loss_matrix(data.nRNA, nRNA_true, yield_val)
+        L * p_true
+    else
+        p_true[1:data.nRNA]
+    end
     modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates; steady_state_solver=steady_state_solver)
     return [modelOFF, modelON, histF]
 end
@@ -1251,7 +1259,9 @@ This function calculates the likelihood array for RNA dwell time data using the 
 
 """
 function predictedarray(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
-    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA; steady_state_solver=steady_state_solver)
+    nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+    yield_val = get_yield_value(data.yield)
+    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver)
 end
 
 function predictedarray(r, data::DwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
@@ -1275,11 +1285,29 @@ function predictedarray_ad(r, data::DwellTimeData, model::AbstractGRSMmodel{T}; 
 end
 
 function predictedarray_ad(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
-    return predictedarray_ad(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA; steady_state_solver=steady_state_solver)
+    nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+    yield_val = get_yield_value(data.yield)
+    return predictedarray_ad(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver)
 end
 
 function predictedarray_ad(r, data::RNAOnOffData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
-    return predictedarray(r, data, model; steady_state_solver=steady_state_solver)
+    components = model.components
+    onstates = model.reporter
+    T = make_mat_T(components.tcomponents, r)
+    TA = make_mat_TA(components.tcomponents, r)
+    TI = make_mat_TI(components.tcomponents, r)
+    M = make_mat_M(components.mcomponents, r)
+    nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+    p_true = steady_state(M, components.mcomponents.nT, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+    yield_val = get_yield_value(data.yield)
+    histF = if yield_val < 1.0
+        L = make_loss_matrix_ad(data.nRNA, nRNA_true, yield_val)
+        L * p_true
+    else
+        p_true[1:data.nRNA]
+    end
+    modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates; steady_state_solver=steady_state_solver)
+    return [modelOFF, modelON, histF]
 end
 
 function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype; steady_state_solver::Symbol=:augmented)
@@ -1289,6 +1317,19 @@ end
 function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:augmented)
     M = make_mat_M(components.mcomponents, r)
     return [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
+end
+
+# Yield-aware overload: solve at nRNA_true then apply binomial loss matrix
+function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA_obs, nRNA_true, yield_val; steady_state_solver::Symbol=:augmented)
+    M = make_mat_M(components.mcomponents, r)
+    p_true = steady_state(M, components.mcomponents.nT, nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+    histRNA = if yield_val < 1.0
+        L = make_loss_matrix_ad(nRNA_obs, nRNA_true, yield_val)
+        L * p_true
+    else
+        p_true[1:nRNA_obs]
+    end
+    return [histRNA; predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
 end
 
 function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype; steady_state_solver::Symbol=:default)
@@ -1398,6 +1439,19 @@ end
 function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:default)
     M = make_mat_M(components.mcomponents, r)
     [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
+end
+
+# Yield-aware overload: solve at nRNA_true then apply binomial loss matrix
+function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA_obs, nRNA_true, yield_val; steady_state_solver::Symbol=:default)
+    M = make_mat_M(components.mcomponents, r)
+    p_true = steady_state(M, components.mcomponents.nT, nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+    histRNA = if yield_val < 1.0
+        L = make_loss_matrix(nRNA_obs, nRNA_true, yield_val)
+        L * p_true
+    else
+        p_true[1:nRNA_obs]
+    end
+    [histRNA; predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
 end
 
 function predictedarray(r, components::MTComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default)
