@@ -1,0 +1,290 @@
+[ Info: SetupBuildDirectory: setting up build directory.
+[ Info: Doctest: skipped.
+[ Info: ExpandTemplates: expanding markdown templates.
+[ Info: CrossReferences: building cross-references.
+┌ Warning: Cannot resolve @ref for md"[Joint Analysis](@ref)" in docs/src/examples/hierarchical_trace.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Time Series Analysis](@ref)" in docs/src/examples/hierarchical_trace.md.
+│ - Header with slug 'Time-Series-Analysis' is not unique in docs/src/examples/hierarchical_trace.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Joint Analysis](@ref)" in docs/src/examples/trace_analysis.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Pre-RNA Steps](@ref)" in docs/src/examples/multi_state_rna.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Multi-State Models](@ref)" in docs/src/examples/rna_histogram.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Pre-RNA Steps](@ref)" in docs/src/examples/rna_histogram.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`fit`](@ref)" in docs/src/api/analysis.md.
+│ - No docstring found in doc for binding `StochasticGene.fit`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulator`](@ref)" in docs/src/api/analysis.md.
+│ - No docstring found in doc for binding `StochasticGene.simulator`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_traces`](@ref)" in docs/src/api/analysis.md.
+│ - No docstring found in doc for binding `StochasticGene.write_traces`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`utilities`](@ref)" in docs/src/api/analysis.md.
+│ - No docstring found in doc for binding `Main.utilities`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Data Types](@ref)" in docs/src/examples/ms2_analysis.md.
+│ - Header with slug 'Data-Types' is not unique in docs/src/examples/ms2_analysis.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Dual Reporter System](@ref)" in docs/src/examples/ms2_analysis.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Time Series Analysis](@ref)" in docs/src/examples/ms2_analysis.md.
+│ - Header with slug 'Time-Series-Analysis' is not unique in docs/src/examples/ms2_analysis.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Time Series Analysis](@ref)" in docs/src/examples/joint_trace.md.
+│ - Header with slug 'Time-Series-Analysis' is not unique in docs/src/examples/joint_trace.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`fit`](@ref)" in docs/src/api/utilities.md.
+│ - No docstring found in doc for binding `StochasticGene.fit`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulator`](@ref)" in docs/src/api/utilities.md.
+│ - No docstring found in doc for binding `StochasticGene.simulator`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`load_data`](@ref)" in docs/src/api/utilities.md.
+│ - No docstring found in doc for binding `StochasticGene.load_data`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_traces`](@ref)" in docs/src/api/utilities.md.
+│ - No docstring found in doc for binding `StochasticGene.write_traces`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulate_trace`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.simulate_trace`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulate_trace_data`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.simulate_trace_data`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulate_trace_vector`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.simulate_trace_vector`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulate_trials`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.simulate_trials`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`CombinedData`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.CombinedData`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`load_model`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.load_model`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`rna_setup`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.rna_setup`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`readrates`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.readrates`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`read_run_spec`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.read_run_spec`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`read_run_spec_for_rates_file`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.read_run_spec_for_rates_file`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`info_toml_path_for_rates_file`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.info_toml_path_for_rates_file`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`readfile`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.readfile`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_histograms`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.write_histograms`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_dataframes`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.write_dataframes`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`num_all_parameters`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.num_all_parameters`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`prob_Gaussian_grid`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.prob_Gaussian_grid`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_dataframes_only`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.write_dataframes_only`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`make_fitscript`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.make_fitscript`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`make_fitscripts_from_csv`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.make_fitscripts_from_csv`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`build_julia_script_command`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.build_julia_script_command`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`make_commandfile`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.make_commandfile`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`make_commandfile_from_csv`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.make_commandfile_from_csv`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`make_fitscripts_and_commandfile_from_csv`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.make_fitscripts_and_commandfile_from_csv`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`make_swarmfile_from_csv`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.make_swarmfile_from_csv`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`make_fitscripts_and_swarm_from_csv`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.make_fitscripts_and_swarm_from_csv`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`makeswarm`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.makeswarm`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`makeswarm_models`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `Main.makeswarm_models`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`makeswarmfiles`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `Main.makeswarmfiles`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`makeswarmfiles_h3_latent`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `Main.makeswarmfiles_h3_latent`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_run_spec_preset`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `Main.write_run_spec_preset`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`normalize_trace_specs_legacy_t_end!`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.normalize_trace_specs_legacy_t_end!`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`create_combined_file`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.create_combined_file`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`create_combined_file_mult`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.create_combined_file_mult`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`combined_rates_key`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.combined_rates_key`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`read_combined_file_specs_csv`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.read_combined_file_specs_csv`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`create_combined_files_driver`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.create_combined_files_driver`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`create_combined_files`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.create_combined_files`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`create_combined_files_h3_latent`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.create_combined_files_h3_latent`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`read_rates_table`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.read_rates_table`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_rates_table`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.write_rates_table`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`assemble_measures_model`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.assemble_measures_model`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`make_traces_dataframe`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.make_traces_dataframe`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_cov`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `Main.write_cov`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_augmented`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.write_augmented`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_winners`](@ref)" in docs/src/api/index.md.
+│ - No docstring found in doc for binding `StochasticGene.write_winners`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Data Types](@ref)" in docs/src/examples/dwell_time_analysis.md.
+│ - Header with slug 'Data-Types' is not unique in docs/src/examples/dwell_time_analysis.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Coupled States](@ref)" in docs/src/examples/dwell_time_analysis.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Multiple Conditions](@ref)" in docs/src/examples/dwell_time_analysis.md.
+│ - Header with slug 'Multiple-Conditions' is not unique in docs/src/examples/dwell_time_analysis.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Time Series Analysis](@ref)" in docs/src/examples/dual_reporter.md.
+│ - Header with slug 'Time-Series-Analysis' is not unique in docs/src/examples/dual_reporter.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: invalid local link/image: file does not exist in docs/src/examples/index.md
+│   link =
+│    @ast MarkdownAST.Link("model_validation.md", "") do
+│      MarkdownAST.Text("Model Validation")
+│    end
+│    
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: invalid local link/image: file does not exist in docs/src/examples/index.md
+│   link =
+│    @ast MarkdownAST.Link("parameter_analysis.md", "") do
+│      MarkdownAST.Text("Parameter Analysis")
+│    end
+│    
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Large Dataset Analysis](@ref)" in docs/src/examples/parallel_processing.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulate_trace`](@ref)" in docs/src/api/simulator.md.
+│ - No docstring found in doc for binding `StochasticGene.simulate_trace`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulate_trials`](@ref)" in docs/src/api/simulator.md.
+│ - No docstring found in doc for binding `StochasticGene.simulate_trials`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`fit`](@ref)" in docs/src/api/simulator.md.
+│ - No docstring found in doc for binding `StochasticGene.fit`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`fit`](@ref)" in docs/src/api/load_data.md.
+│ - No docstring found in doc for binding `StochasticGene.fit`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`simulator`](@ref)" in docs/src/api/load_data.md.
+│ - No docstring found in doc for binding `StochasticGene.simulator`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`write_dataframes`](@ref)" in docs/src/api/load_data.md.
+│ - No docstring found in doc for binding `StochasticGene.write_dataframes`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`makeswarm`](@ref)" in docs/src/getting_started.md.
+│ - No docstring found in doc for binding `StochasticGene.makeswarm`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`makeswarmfiles`](@ref)" in docs/src/getting_started.md.
+│ - No docstring found in doc for binding `Main.makeswarmfiles`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`create_combined_file`](@ref)" in docs/src/getting_started.md.
+│ - No docstring found in doc for binding `StochasticGene.create_combined_file`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Examples](@ref)" in docs/src/getting_started.md.
+│ - Header with slug 'Examples' is not unique in docs/src/getting_started.md.
+│ - No docstring found in doc for binding `Main.Examples`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Data Types](@ref)" in docs/src/examples/basic_telegraph.md.
+│ - Header with slug 'Data-Types' is not unique in docs/src/examples/basic_telegraph.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Multi-State Model](@ref)" in docs/src/examples/basic_telegraph.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Pre-RNA Steps](@ref)" in docs/src/examples/basic_telegraph.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Joint Analysis](@ref)" in docs/src/examples/coupled_models.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Time Series Analysis](@ref)" in docs/src/examples/coupled_models.md.
+│ - Header with slug 'Time-Series-Analysis' is not unique in docs/src/examples/coupled_models.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Pre-RNA Steps](@ref)" in docs/src/examples/rna_dwell_time.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[Pre-RNA Steps](@ref)" in docs/src/examples/rna_onoff.md.
+│ - No docstring found in doc for binding `Base.-`.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/utilities/utilities.jl:49
+[ Info: CheckDocument: running document checks.
+[ Info: Populate: populating indices.
+[ Info: RenderDocument: rendering document.
+[ Info: HTMLWriter: rendering HTML pages.
+[ Info: Automatic `version="1.10.0"` for inventory from ../Project.toml
+┌ Warning: Documenter could not auto-detect the building environment. Skipping deployment.
+└ @ Documenter ~/.julia/packages/Documenter/iRt2s/src/deployconfig.jl:76
