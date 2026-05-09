@@ -175,6 +175,8 @@ fits, stats, measures, data, model, options = fit(
 )
 ```
 
+Trace observation likelihoods use Gaussian **densities** (`prob_Gaussian`) for the observed fluorescence values. Because a continuous density has units of inverse fluorescence and can be greater than `1` when the noise scale is small, trace log-likelihood contributions can be positive. This is expected and does not imply a probability greater than `1`; it only means the density per fluorescence unit is high near the observed value. If a future workflow needs likelihoods interpreted as finite-bin probability masses, a measurement-resolution correction can be applied after the HMM likelihood, e.g. `logL + n_observations * log(delta_y)`, with `delta_y = 1.0` preserving the current behavior.
+
 ## Notes
 
 1. **Rate order** — G transitions, R transitions, S if present, decay, noise parameters (see package overview).

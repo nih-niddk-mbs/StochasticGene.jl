@@ -1,5 +1,6 @@
+# This file is part of StochasticGene.jl  
 
-# Unified inference entry point for StochasticGene.jl
+# Unified inference entry point for MH, NUTS, and ADVI. Dispatches on `options` type (`MHOptions`, `NUTSOptions`, `ADVIOptions`).
 
 """
     run_inference(data, model, options; rng=Random.default_rng(), nchains::Integer=1)

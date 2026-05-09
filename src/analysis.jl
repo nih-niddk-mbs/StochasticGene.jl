@@ -2,6 +2,8 @@
 
 # analysis.jl
 
+# Data analysis and result processing functions for StochasticGene.jl
+
 """
     make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
 

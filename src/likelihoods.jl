@@ -1,3 +1,5 @@
+# This file is part of StochasticGene.jl  
+
 # Model and Data dependent functions
 
 """

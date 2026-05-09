@@ -1,3 +1,5 @@
+# This file is part of StochasticGene.jl  
+
 # gradient_inference.jl — NUTS (AdvancedHMC) and mean-field ADVI on the same
 # transformed parameter space as Metropolis–Hastings (`get_param`, `logprior`).
 #

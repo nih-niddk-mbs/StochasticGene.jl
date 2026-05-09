@@ -2,6 +2,8 @@
 
 # utilities.jl
 
+# General utility functions for StochasticGene.jl, not specific to any particular inference method or model type.
+
 """
     maxtime_seconds(maxtime)
 

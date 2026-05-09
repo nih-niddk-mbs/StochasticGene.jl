@@ -215,7 +215,7 @@ n_total = num_all_parameters(transitions, 2, 1, 1, reporter, coupling, grid)
 prob_Gaussian(y::Float64, μ::Float64, σ::Float64) -> Float64
 ```
 
-Calculate Gaussian probability density.
+Calculate Gaussian probability density. This is a continuous density, not a discrete probability mass. Therefore the returned value can be greater than `1` when `σ` is small, and log-likelihoods built from this density can be positive. This is mathematically valid: the density has units of inverse observation units. To convert a density into an approximate probability over a finite measurement bin, multiply by the bin width `delta_y` (or add `log(delta_y)` to the log-likelihood contribution).
 
 **Arguments:**
 - `y`: Observed value

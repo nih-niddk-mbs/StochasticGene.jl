@@ -412,7 +412,6 @@ include("likelihoods.jl")
 # Metropolis Hastings MCMC for computing posterior distributions of model parameters
 include("metropolis_hastings.jl")
 
-
 # NUTS / ADVI (gradient-based inference on transformed parameters)
 include("gradient_inference.jl")
 
