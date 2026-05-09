@@ -743,7 +743,7 @@ Options for `run_nuts` (NUTS/AdvancedHMC).
 # Fields
 - `n_samples`, `n_adapts`: post-warmup samples and adaptation steps
 - `δ`: target acceptance (NUTS dual averaging)
-- `gradient`: :ForwardDiff (default), :finite, :Zygote
+- `gradient`: :finite (default), :ForwardDiff, :Zygote
 - `fd_ε`: finite-difference step when `gradient === :finite`
 - `verbose`, `progress`: passed to AdvancedHMC.sample (`progress` defaults to `true`, enabling AdvancedHMC’s ProgressMeter sampling bar; set `nuts_progress=false` in [`fit`](@ref) / run-spec when running many parallel chains)
 - `device::Symbol`: :cpu, :gpu
@@ -766,7 +766,7 @@ struct NUTSOptions <: Options
 end
 
 function NUTSOptions(;
-    n_samples=1000, n_adapts=1000, δ=0.8, gradient=:ForwardDiff, fd_ε=1e-5, verbose=true, progress=true,
+    n_samples=1000, n_adapts=1000, δ=0.8, gradient=:finite, fd_ε=1e-5, verbose=true, progress=true,
     device::Symbol=:cpu, parallel::Symbol=:single,
     likelihood_executor::Symbol=HMM_STACK_AD,
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
@@ -996,4 +996,3 @@ const DEFAULT_CORRELATION_ALGORITHM = StandardCorrelation()
 
 # Type alias for backward compatibility
 const CorrelationAlgorithm = CorrelationTrait
-

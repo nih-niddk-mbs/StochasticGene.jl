@@ -134,7 +134,7 @@ NUTS on the same keyword surface:
 fits, stats, measures, data, model, options = fit(
     G = 2, R = 0, transitions = ([1,2], [2,1]),
     datatype = "rna", datapath = "data/HCT116_testdata/", gene = "MYC", datacond = "MOCK",
-    inference_method = :nuts, samplesteps = 500, warmupsteps = 250, parallel = :single, gradient = :ForwardDiff,
+    inference_method = :nuts, samplesteps = 500, warmupsteps = 250, parallel = :single, gradient = :finite,
 )
 ```
 """
@@ -1217,7 +1217,7 @@ function load_options(run0::AbstractDict)
         verbose = Bool(get(run, :verbose, get(run, :nuts_verbose, true)))
         progress = Bool(get(run, :progress, get(run, :nuts_progress, true)))
         g = if gradient === nothing
-            :ForwardDiff
+            :finite
         elseif gradient === :forward
             :ForwardDiff
         elseif gradient === :zygote

@@ -36,6 +36,10 @@ Other cross-method options stored on `MHOptions`, `NUTSOptions`, and `ADVIOption
 - **`parallel`** (alias **`parallelism`**): `:single`, `:threaded`, or `:distributed` — used with **`nchains`** for multi-chain NUTS/ADVI dispatch (`run_inference`); MH multi-chain still uses the existing distributed MH chain runner when `nchains > 1`.
 - **`gradient`**: method-specific; e.g. `:finite`, `:ForwardDiff`, `:Zygote` for NUTS/ADVI; `:none` default for MH. String values in TOML/JSON-style dicts are coerced when possible.
 
+For **NUTS**, the package default is **`gradient = :finite`**. This uses central finite differences on the optimized primal likelihood and is the recommended production path for trace, dwell-time, coupled, and other nontrivial likelihoods unless a local benchmark shows `:ForwardDiff` or `:Zygote` wins for that specific model. `:ForwardDiff` and `:Zygote` remain useful opt-in validation/benchmark paths.
+
+For **ADVI**, `gradient = :finite` and `gradient = :ForwardDiff` both differentiate the ELBO with ForwardDiff. Trace ADVI with plain `gradient = :Zygote` intentionally falls back to that safer path unless `zygote_trace = true`.
+
 `make_structures` merges **`_current_run_spec[]`** (from `fit(; key=...)`) with explicit `samplesteps` / `warmupsteps` / `maxtime` / `temp` and any extra `kwargs...`, then calls `load_options` on that dict. You can also call `load_options` directly in scripts or tests.
 
 ## Arguments (high level)
@@ -116,9 +120,11 @@ fits, stats, measures, data, model, options = fit(
     samplesteps = 500,
     warmupsteps = 250,
     parallel = :single,
-    gradient = :ForwardDiff,
+    gradient = :finite,
 )
 ```
+
+Omitting `gradient` in a NUTS fit is equivalent to `gradient = :finite`.
 
 ### Combined RNA + dwell-time data
 

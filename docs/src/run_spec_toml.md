@@ -67,6 +67,7 @@ Typical entries (all optional except what your model needs):
 - **`inference_method`**: `:mh`, `:nuts`, `:advi`, or `INFERENCE_MH` / `INFERENCE_NUTS` / `INFERENCE_ADVI`.
 - **`samplesteps` / `warmupsteps`**: shared budgets; mapped per method in `load_options` (e.g. NUTS `n_samples` / `n_adapts`, ADVI `maxiter`).
 - **`device`**, **`parallel`** (or **`parallelism`**), **`gradient`**: passed through to the option struct after normalization (strings from TOML are coerced where supported).
+- **NUTS gradient default**: if `[run] inference_method = "nuts"` and `gradient` is omitted, `load_options` uses `gradient = :finite`. Use `gradient = "ForwardDiff"` or `gradient = "Zygote"` only when you have benchmarked that path for the model.
 - Method-specific overrides such as **`n_mc`**, **`maxiter`**, **`n_adapts`**, **`nuts_delta`**, **`fd_ε`**, **`time_limit`**, **`verbose`**, **`progress`**, etc., are read by `load_options` when present in the dict.
 
 ## See also

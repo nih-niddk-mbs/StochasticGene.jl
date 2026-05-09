@@ -3732,7 +3732,7 @@ Use **`steady_state_solver=:default`** to align log-likelihood with MH for RNA h
 
 **Default `steady_state_solver` is `:auto`:** [`AbstractTraceData`](@ref) uses **`:augmented`** (AD-friendly steady state for [`loglikelihood_ad`](@ref)); other data use **`:default`**.
 
-**Default `nuts_gradient` is `:auto`:** [`AbstractTraceData`](@ref) uses **`:finite`** (central differences; Zygote through the full trace HMM often overflows the compiler stack). RNA / count data use **`:Zygote`**. Pass **`nuts_gradient=:ForwardDiff`** to use forward-mode AD ([`NUTSOptions`](@ref); often good when only **few** parameters are fit). Pass `nuts_gradient=:Zygote` to try reverse-mode AD on traces.
+**Default `nuts_gradient` is `:auto`:** uses **`:finite`** (central differences on the fast primal likelihood). Pass **`nuts_gradient=:ForwardDiff`** or **`nuts_gradient=:Zygote`** as opt-in benchmark/validation paths for scenarios where AD wins.
 
 **Traces and NUTS:** For live traces—including **coupled** `tracejoint` models—**`gradient=:finite`** is the **supported** NUTS choice: each log-density evaluation uses central differences on [`loglikelihood_ad`](@ref), so cost scales with the number of fitted parameters, not with “embarrassment.” Reverse-mode Zygote on the full coupled HMM (see [`benchmark_trace_zygote_gradient`](@ref)) is a separate, experimental micro-benchmark and can allocate huge memory or hit compiler `_pullback_generator` limits; it is **not** required for NUTS, and NUTS does **not** default to it for traces.
 

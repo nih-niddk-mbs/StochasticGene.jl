@@ -172,6 +172,9 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         b2 = StochasticGene.CombinedData((trace=td, rna=rna))
         @test StochasticGene.combined_modalities(b2) == (:rna, :trace)
         @test typeof(b) === typeof(b2)
+        rna_only = StochasticGene.CombinedData((rna=rna,))
+        @test !StochasticGene._trace_or_combined_for_hmm(rna_only)
+        @test StochasticGene._trace_or_combined_for_hmm(b2)
         @test StochasticGene.normalize_datatype((:trace, :rna)) == (:rna, :trace)
         @test StochasticGene.normalize_datatype(["trace", "rna"]) == (:rna, :trace)
         @test_throws ArgumentError StochasticGene.normalize_datatype((:rna, :rna))
@@ -279,6 +282,8 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test pred ≈ pred_legacy
 
         ad_opts = StochasticGene.NUTSOptions(n_samples=1, n_adapts=1)
+        @test ad_opts.gradient === :finite
+        @test StochasticGene.load_options(Dict(:inference_method => :nuts, :samplesteps => 1)).gradient === :finite
         ll_ad, pred_ad = StochasticGene.loglikelihood_ad(θ, combined, model, ad_opts; steady_state_solver=:augmented)
         ll_rna_ad, pred_rna_ad = StochasticGene.loglikelihood_ad(θ, StochasticGene.CombinedData((rna=combined.legs.rna,)), model, ad_opts; steady_state_solver=:augmented)
         ll_trace_ad, pred_trace_ad = StochasticGene.loglikelihood_ad(θ, StochasticGene.CombinedData((trace=combined.legs.trace,)), model, ad_opts; steady_state_solver=:augmented)

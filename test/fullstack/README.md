@@ -106,7 +106,7 @@ Named inference specs are:
 
 - `mh_fast`: MH with the fast likelihood stack.
 - `nuts_forwarddiff`: NUTS with `gradient = :ForwardDiff`.
-- `nuts_finite`: NUTS with central finite-difference gradients.
+- `nuts_finite`: NUTS with central finite-difference gradients; this is the production default for NUTS.
 - `nuts_zygote`: NUTS with `gradient = :Zygote`.
 - `advi_zygote`: ADVI with `gradient = :Zygote`.
 - `advi_forwarddiff`: ADVI with `gradient = :ForwardDiff`.
@@ -118,6 +118,8 @@ expected recovery check. Plain `advi_zygote` intentionally falls back to the
 ForwardDiff/finite ELBO gradient path unless `zygote_trace = true`; reverse-mode
 Zygote through the trace HMM is memory-heavy and should be treated as a short-trace
 diagnostic only.
+
+For NUTS, omitting `gradient` in the fit call uses the same central finite-difference path as `nuts_finite`. Keep `nuts_forwarddiff` and `nuts_zygote` as explicit comparison/validation specs.
 
 From the shell, set `SG_FULLSTACK_INFERENCE_MATRIX=1` and optionally restrict cases/specs:
 
