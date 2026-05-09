@@ -232,6 +232,6 @@ plot_validation(validation, "results/validation/")
 - Compare results across different genes
 
 For more advanced examples, see:
-- [Pre-RNA Steps](@ref)
-- [Coupled Models](@ref)
-- [Hierarchical Models](@ref) 
+- Pre-RNA Steps
+- Coupled Models
+- Hierarchical Models 

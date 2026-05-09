@@ -134,6 +134,6 @@ cleanup_parallel()
 - Scale up to cluster computing
 
 For more advanced examples, see:
-- [Cluster Computing](@ref)
-- [Hierarchical Models](@ref)
-- [Large Dataset Analysis](@ref) 
+- Cluster Computing
+- Hierarchical Models
+- Large Dataset Analysis 

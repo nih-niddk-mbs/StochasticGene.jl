@@ -228,6 +228,6 @@ corrected_fits = correct_background(fits)
 - Compare results across different genes
 
 For more advanced examples, see:
-- [Hierarchical Models](@ref)
-- [Coupled Models](@ref)
-- [Time Series Analysis](@ref) 
+- Hierarchical Models
+- Coupled Models
+- Time Series Analysis 

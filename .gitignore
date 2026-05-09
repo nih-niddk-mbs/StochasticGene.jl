@@ -7,3 +7,6 @@ scripts/
 # local fit/analysis outputs (not part of package)
 results/
 test/fullstack/results/
+
+# local docs environment lockfile; docs/Project.toml points StochasticGene at this checkout
+docs/Manifest.toml

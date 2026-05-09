@@ -16,7 +16,7 @@ cd("ms2_example")
 
 ## Data Preparation
 
-Place your MS2 reporter image data in the `data/` directory. The data should be in a format compatible with the package (see [Data Types](@ref) for details).
+Place your MS2 reporter image data in the `data/` directory. The data should be in a format compatible with the package (see Data Types for details).
 
 ## Model Definition
 
@@ -96,6 +96,6 @@ println(burst_stats)
 - Compare results across different genes
 
 For more advanced examples, see:
-- [Dual Reporter System](@ref)
-- [Time Series Analysis](@ref)
-- [Coupled Models](@ref) 
+- Dual Reporter System
+- Time Series Analysis
+- Coupled Models 

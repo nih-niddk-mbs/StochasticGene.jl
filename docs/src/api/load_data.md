@@ -470,8 +470,8 @@ The function validates:
 
 ## See Also
 
-- [`RNAData`](@ref): RNA data structure
-- [`TraceData`](@ref): Trace data structure
-- [`fit`](@ref): Model fitting function
-- [`simulator`](@ref): Data simulation function
-- [`write_dataframes`](@ref): Write data to files
+- `RNAData`: RNA data structure
+- `TraceData`: Trace data structure
+- `fit`: Model fitting function
+- `simulator`: Data simulation function
+- `write_dataframes`: Write data to files

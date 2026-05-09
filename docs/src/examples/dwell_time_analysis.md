@@ -16,7 +16,7 @@ cd("dwell_example")
 
 ## Data Preparation
 
-Place your dwell time data in the `data/` directory. The data should be in a format compatible with the package (see [Data Types](@ref) for details).
+Place your dwell time data in the `data/` directory. The data should be in a format compatible with the package (see Data Types for details).
 
 ## Model Definition
 
@@ -100,6 +100,6 @@ println(burst_stats)
 - Compare results across different genes
 
 For more advanced examples, see:
-- [Coupled States](@ref)
-- [Multiple Conditions](@ref)
-- [Hierarchical Models](@ref) 
+- Coupled States
+- Multiple Conditions
+- Hierarchical Models 

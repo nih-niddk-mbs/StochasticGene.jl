@@ -16,7 +16,7 @@ cd("telegraph_example")
 
 ## Data Preparation
 
-Place your RNA count data in the `data/` directory. The data should be in a format compatible with the package (see [Data Types](@ref) for details).
+Place your RNA count data in the `data/` directory. The data should be in a format compatible with the package (see Data Types for details).
 
 ## Model Definition
 
@@ -80,6 +80,6 @@ The fitted model provides:
 - Compare results across different genes
 
 For more advanced examples, see:
-- [Multi-State Model](@ref)
-- [Pre-RNA Steps](@ref)
-- [Coupled Models](@ref) 
+- Multi-State Model
+- Pre-RNA Steps
+- Coupled Models 

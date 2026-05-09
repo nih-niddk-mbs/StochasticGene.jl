@@ -10,30 +10,30 @@
 - `run_mh`: Metropolis–Hastings MCMC sampling
 - `run_nuts_fit`, `run_advi_fit`: Gradient-based inference pipelines
 - `INFERENCE_MH`, `INFERENCE_NUTS`, `INFERENCE_ADVI`, `INFERENCE_CHOICES`: symbolic method tags for run specs
-- [`loglikelihood`](@ref): Calculate log-likelihood for model parameters
+- `loglikelihood`: Calculate log-likelihood for model parameters
 
 ### Model Simulation
 - [`simulator`](simulator.md): Simulate stochastic gene expression models
-- [`simulate_trace`](@ref): Generate intensity traces from models
-- [`simulate_trace_data`](@ref): Generate trace data with metadata
-- [`simulate_trace_vector`](@ref): Generate vectors of traces
-- [`simulate_trials`](@ref): Simulate multiple model realizations
+- `simulate_trace`: Generate intensity traces from models
+- `simulate_trace_data`: Generate trace data with metadata
+- `simulate_trace_vector`: Generate vectors of traces
+- `simulate_trials`: Simulate multiple model realizations
 
 ### Data Loading and Management
 - [`load_data`](load_data.md): Load experimental data from files
-- [`CombinedData`](@ref): Container for independent elementary modality legs such as `:rna`, `:trace`, and `:dwelltime`
-- [`load_model`](@ref): Load model parameters from files
-- [`rna_setup`](@ref): Set up project directory structure
-- [`readrates`](@ref): Read rate parameters from files
-- [`read_run_spec`](@ref), [`read_run_spec_for_rates_file`](@ref), [`info_toml_path_for_rates_file`](@ref): Load run specification from info TOML (see [Run specification (info TOML)](../run_spec_toml.md))
-- [`readfile`](@ref): Read data files with error handling
+- `CombinedData`: Container for independent elementary modality legs such as `:rna`, `:trace`, and `:dwelltime`
+- `load_model`: Load model parameters from files
+- `rna_setup`: Set up project directory structure
+- `readrates`: Read rate parameters from files
+- `read_run_spec`, `read_run_spec_for_rates_file`, `info_toml_path_for_rates_file`: Load run specification from info TOML (see [Run specification (info TOML)](../run_spec_toml.md))
+- `readfile`: Read data files with error handling
 
 ### Analysis and Visualization
 - [`write_traces`](write_traces.md): Generate model-predicted intensity traces
 - [`write_ONOFFhistograms`](write_ONOFFhistograms.md): Generate ON/OFF dwell time histograms
 - [`write_residency_G_folder`](write_residency_G_folder.md): Generate G state residency probabilities
-- [`write_histograms`](@ref): Write RNA histogram predictions
-- [`write_dataframes`](@ref): Write results to CSV files
+- `write_histograms`: Write RNA histogram predictions
+- `write_dataframes`: Write results to CSV files
 
 ## Comprehensive Function Documentation
 
@@ -302,56 +302,56 @@ A structure for parameter transformations during fitting.
 ## Utility Functions
 
 ### Data Processing
-- [`normalize_histogram`](@ref): Normalize probability distributions
-- [`make_array`](@ref): Convert data to arrays
-- [`make_mat`](@ref): Convert data to matrices
-- [`digit_vector`](@ref): Convert numbers to digit vectors
+- `normalize_histogram`: Normalize probability distributions
+- `make_array`: Convert data to arrays
+- `make_mat`: Convert data to matrices
+- `digit_vector`: Convert numbers to digit vectors
 
 ### Model Construction
-- [`prepare_rates`](@ref): Prepare rate parameters for fitting
-- [`get_rates`](@ref): Extract rates from fitted parameters
-- [`get_param`](@ref): Extract specific parameters
-- [`num_rates`](@ref): Count number of rates in model
-- [`num_all_parameters`](@ref): Count total parameters
+- `prepare_rates`: Prepare rate parameters for fitting
+- `get_rates`: Extract rates from fitted parameters
+- `get_param`: Extract specific parameters
+- `num_rates`: Count number of rates in model
+- `num_all_parameters`: Count total parameters
 
 ### Statistical Functions
-- [`prob_Gaussian`](@ref): Gaussian probability density
-- [`prob_Gaussian_grid`](@ref): Gaussian probability on grid
-- [`mean_elongationtime`](@ref): Calculate mean elongation time
-- [`on_states`](@ref): Identify transcriptionally active states
-- [`source_states`](@ref): Identify source states for transitions
+- `prob_Gaussian`: Gaussian probability density
+- `prob_Gaussian_grid`: Gaussian probability on grid
+- `mean_elongationtime`: Calculate mean elongation time
+- `on_states`: Identify transcriptionally active states
+- `source_states`: Identify source states for transitions
 
 ### File I/O
-- [`folder_path`](@ref): Construct folder paths
-- [`folder_setup`](@ref): Set up directory structure
-- [`datapdf`](@ref): Generate data PDFs
-- [`make_dataframes`](@ref): Create DataFrames from results
-- [`write_dataframes_only`](@ref): Write DataFrames to files
+- `folder_path`: Construct folder paths
+- `folder_setup`: Set up directory structure
+- `datapdf`: Generate data PDFs
+- `make_dataframes`: Create DataFrames from results
+- `write_dataframes_only`: Write DataFrames to files
 
 ### Cluster and combined-rate batch workflows
 
 Narrative guide (when to use which function, file layout, order of operations): [Cluster and batch workflows](../cluster_batch_workflows.md).
 
-Relevant APIs include stage-native [`make_fitscript`](@ref), [`make_fitscripts_from_csv`](@ref), [`build_julia_script_command`](@ref), [`make_commandfile`](@ref), [`make_commandfile_from_csv`](@ref), [`make_fitscripts_and_commandfile_from_csv`](@ref), compatibility wrappers [`make_swarmfile_from_csv`](@ref), [`make_fitscripts_and_swarm_from_csv`](@ref), plus Biowulf-oriented [`makeswarm`](@ref), [`makeswarm_models`](@ref), [`makeswarmfiles`](@ref), [`makeswarmfiles_h3_latent`](@ref), [`write_run_spec_preset`](@ref), [`normalize_trace_specs_legacy_t_end!`](@ref), and combined-rate helpers [`create_combined_file`](@ref), [`create_combined_file_mult`](@ref), [`combined_rates_key`](@ref), [`read_combined_file_specs_csv`](@ref), [`create_combined_files_driver`](@ref), [`create_combined_files`](@ref), [`create_combined_files_h3_latent`](@ref), [`read_rates_table`](@ref), [`write_rates_table`](@ref).
+Relevant APIs include stage-native `make_fitscript`, `make_fitscripts_from_csv`, `build_julia_script_command`, `make_commandfile`, `make_commandfile_from_csv`, `make_fitscripts_and_commandfile_from_csv`, compatibility wrappers `make_swarmfile_from_csv`, `make_fitscripts_and_swarm_from_csv`, plus Biowulf-oriented `makeswarm`, `makeswarm_models`, `makeswarmfiles`, `makeswarmfiles_h3_latent`, `write_run_spec_preset`, `normalize_trace_specs_legacy_t_end!`, and combined-rate helpers `create_combined_file`, `create_combined_file_mult`, `combined_rates_key`, `read_combined_file_specs_csv`, `create_combined_files_driver`, `create_combined_files`, `create_combined_files_h3_latent`, `read_rates_table`, `write_rates_table`.
 
 ## Analysis Functions
 
 ### Model Diagnostics
-- [`large_deviance`](@ref): Identify chains with large deviance
-- [`large_rhat`](@ref): Identify parameters with large R-hat
-- [`assemble_measures_model`](@ref): Assemble model measures
-- [`assemble_all`](@ref): Assemble all results
+- `large_deviance`: Identify chains with large deviance
+- `large_rhat`: Identify parameters with large R-hat
+- `assemble_measures_model`: Assemble model measures
+- `assemble_all`: Assemble all results
 
 ### Post-fitting Analysis
-- [`predictedarray`](@ref): Generate model predictions
-- [`predictedfn`](@ref): Generate prediction functions
-- [`make_traces`](@ref): Generate trace predictions
-- [`make_traces_dataframe`](@ref): Convert traces to DataFrames
+- `predictedarray`: Generate model predictions
+- `predictedfn`: Generate prediction functions
+- `make_traces`: Generate trace predictions
+- `make_traces_dataframe`: Convert traces to DataFrames
 
 ### Visualization Support
-- [`write_cov`](@ref): Write covariance matrices
-- [`write_augmented`](@ref): Write augmented results
-- [`write_winners`](@ref): Write best-fit results
+- `write_cov`: Write covariance matrices
+- `write_augmented`: Write augmented results
+- `write_winners`: Write best-fit results
 
 ## Hierarchical and Coupling Models
 

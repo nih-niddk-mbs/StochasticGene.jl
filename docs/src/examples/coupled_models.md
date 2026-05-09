@@ -240,6 +240,6 @@ plot_parameter_correlations(correlations, "results/parameter_correlations/")
 - Compare results across different gene pairs
 
 For more advanced examples, see:
-- [Hierarchical Models](@ref)
-- [Joint Analysis](@ref)
-- [Time Series Analysis](@ref) 
+- Hierarchical Models
+- Joint Analysis
+- Time Series Analysis 

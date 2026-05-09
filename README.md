@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-**Version 1.10.0**
+**Version 1.10.1**
 
 [![Documents](https://img.shields.io/badge/Documents-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 

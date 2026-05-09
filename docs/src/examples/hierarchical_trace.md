@@ -227,6 +227,6 @@ plot_parameter_correlations(correlations, "results/parameter_correlations/")
 - Compare results across different genes
 
 For more advanced examples, see:
-- [Joint Analysis](@ref)
-- [Coupled Models](@ref)
-- [Time Series Analysis](@ref) 
+- Joint Analysis
+- Coupled Models
+- Time Series Analysis 

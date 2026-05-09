@@ -24,10 +24,6 @@ Cluster / Biowulf batch generation and combined rate files are documented on the
 ### Parallel Processing
 - [Parallel Processing](parallel_processing.md): Using parallel processing for large datasets
 
-### Model Analysis
-- [Model Validation](model_validation.md): Validating model assumptions and results
-- [Parameter Analysis](parameter_analysis.md): Analyzing model parameters and their uncertainties
-
 ## Contributing Examples
 
-We welcome contributions of new examples! If you have an interesting use case or analysis workflow, please consider sharing it with the community. See the [Contributing](@ref) guide for more information.
+We welcome contributions of new examples! If you have an interesting use case or analysis workflow, please consider sharing it with the community. See the Contributing guide for more information.

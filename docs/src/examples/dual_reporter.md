@@ -187,6 +187,6 @@ compare_conditions(fits_list, conditions, "results/comparison/")
 - Compare results across different genes
 
 For more advanced examples, see:
-- [Time Series Analysis](@ref)
-- [Coupled Models](@ref)
-- [Hierarchical Models](@ref) 
+- Time Series Analysis
+- Coupled Models
+- Hierarchical Models 

@@ -252,7 +252,7 @@ The function includes validation for:
 
 ## See Also
 
-- [`simulate_trace`](@ref): Generate traces only
-- [`simulate_trials`](@ref): Multiple simulation runs
-- [`fit`](@ref): Fit models to data
-- [`prob_Gaussian`](@ref): Gaussian observation model
+- `simulate_trace`: Generate traces only
+- `simulate_trials`: Multiple simulation runs
+- `fit`: Fit models to data
+- `prob_Gaussian`: Gaussian observation model

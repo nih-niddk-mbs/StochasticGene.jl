@@ -11,6 +11,7 @@ makedocs(
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", "false") == "true",
         canonical = "https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/",
+        edit_link = "main",
         assets = ["assets/custom.css"],
         analytics = "UA-XXXXXXXXX-X",
     ),
@@ -65,16 +66,18 @@ makedocs(
     doctest = false,        # Disable running doctests
     linkcheck = false,      # Disable link checking
     checkdocs = :none,      # Disable documentation checking
-    warnonly = true         # Only show warnings, don't fail on warnings
+    warnonly = false        # Fail on Documenter warnings so docs do not silently rot
 )
 
-deploydocs(
-    repo = "github.com/nih-niddk-mbs/StochasticGene.jl.git",
-    devbranch = "main",
-    target = "build",
-    branch = "gh-pages",
-    push_preview = true,
-    forcepush = true,
-    versions = ["dev" => "dev"],
-    make = nothing,
-)
+if get(ENV, "CI", "false") == "true"
+    deploydocs(
+        repo = "github.com/nih-niddk-mbs/StochasticGene.jl.git",
+        devbranch = "main",
+        target = "build",
+        branch = "gh-pages",
+        push_preview = true,
+        forcepush = true,
+        versions = ["dev" => "dev"],
+        make = nothing,
+    )
+end

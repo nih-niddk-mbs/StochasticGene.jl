@@ -669,7 +669,7 @@ active = on_states(G, R, S, insertstep)
 
 ## See Also
 
-- [`fit`](@ref): Main fitting function
-- [`simulator`](@ref): Model simulation
-- [`load_data`](@ref): Data loading
-- [`write_traces`](@ref): Trace generation
+- `fit`: Main fitting function
+- `simulator`: Model simulation
+- `load_data`: Data loading
+- `write_traces`: Trace generation

@@ -228,6 +228,6 @@ fits = fit(
 - Compare results across different genes
 
 For more advanced examples, see:
-- [Multi-State Models](@ref)
-- [Pre-RNA Steps](@ref)
-- [Coupled Models](@ref) 
+- Multi-State Models
+- Pre-RNA Steps
+- Coupled Models 

@@ -788,7 +788,7 @@ comparison = model_comparison(
 
 ## See Also
 
-- [`fit`](@ref): Main fitting function
-- [`simulator`](@ref): Model simulation
-- [`write_traces`](@ref): Trace generation
-- [`utilities`](@ref): Utility functions
+- `fit`: Main fitting function
+- `simulator`: Model simulation
+- `write_traces`: Trace generation
+- `utilities`: Utility functions
