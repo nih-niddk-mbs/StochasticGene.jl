@@ -25,7 +25,7 @@ function _fullstack_truth(case::Symbol; gene::AbstractString=FULLSTACK_GENES[1])
         return COUPLED_UNIT_RNA_RATES[unit][1:2]
     elseif case === :trace
         return COUPLED_RATES[1:2]
-    elseif case === :tracejoint
+    elseif case === :tracejoint || case === :rnatracejoint
         return COUPLED_RATES[19:19]
     else
         throw(ArgumentError("no full-stack truth registered for case $(repr(case))"))
@@ -265,6 +265,32 @@ function fit_fullstack_tracejoint(;
 end
 
 """
+    fit_fullstack_rnatracejoint(; kwargs...)
+
+Run a modular `CombinedData` fit with independent RNA and tracejoint legs. This
+uses per-modality `datacond` because RNA files use `COND` while joint trace files
+use one label per observed unit.
+"""
+function fit_fullstack_rnatracejoint(;
+    resultfolder::AbstractString=FULLSTACK_RESULTFOLDER,
+    label_suffix=nothing,
+    kwargs...,
+)
+    return StochasticGene.fit(;
+        _fullstack_common_kwargs(; resultfolder=resultfolder)...,
+        _fullstack_sampling_kwargs(; kwargs...)...,
+        _tracejoint_model_kwargs()...,
+        datatype=(:rna, :tracejoint),
+        datapath=(rna="rna", tracejoint="trace"),
+        gene=FULLSTACK_GENES[1],
+        datacond=(rna=FULLSTACK_COND, tracejoint=FULLSTACK_TRACEJOINT_CONDS),
+        traceinfo=(1.0, 1, -1, [1.0, 1.0], [0.0, 0.0]),
+        datacol=3,
+        label=_fullstack_label("fullstack-rnatracejoint", label_suffix),
+    )
+end
+
+"""
     fit_fullstack_dwelltime(; gene="GENE1", kwargs...)
 
 Run a small full-stack fit against one dwell-time histogram file.
@@ -296,6 +322,7 @@ const FULLSTACK_FIT_CASES = (
     rnacount=fit_fullstack_rnacount,
     trace=fit_fullstack_trace,
     tracejoint=fit_fullstack_tracejoint,
+    rnatracejoint=fit_fullstack_rnatracejoint,
     dwelltime=fit_fullstack_dwelltime,
 )
 
@@ -374,6 +401,15 @@ const FULLSTACK_INFERENCE_SMOKE_DEFAULTS = (
     maxtime=300.0,
 )
 
+function fullstack_smoke_defaults()
+    return (
+        samplesteps=2,
+        warmupsteps=0,
+        maxtime=30.0,
+        nchains=1,
+    )
+end
+
 function _selected_names(selection, table, kind::AbstractString)
     selection === nothing && return keys(table)
     names = if selection isa Symbol
@@ -431,6 +467,23 @@ function run_fullstack_fits!(; cases=nothing, regenerate::Bool=true, inference_s
     end
     println("Full-stack results written to: ", joinpath(DEFAULT_ROOT, FULLSTACK_RESULTFOLDER))
     return outputs
+end
+
+function assert_fullstack_fit_output(case::Symbol, fit_output)
+    fits, stats, measures, data, model, options = fit_output
+    @assert fits isa StochasticGene.Fit
+    @assert stats isa StochasticGene.Stats
+    @assert measures isa StochasticGene.Measures
+    @assert data isa StochasticGene.AbstractExperimentalData
+    @assert model isa StochasticGene.AbstractGeneTransitionModel
+    @assert options isa StochasticGene.Options
+    @assert size(fits.param, 1) == length(StochasticGene.get_param(model))
+    @assert size(fits.param, 2) >= 1
+    @assert length(fits.ll) == size(fits.param, 2)
+    @assert all(isfinite, fits.ll)
+    summary = print_rate_recovery(case, fit_output)
+    @assert length(summary.estimate) == length(summary.truth)
+    return true
 end
 
 """

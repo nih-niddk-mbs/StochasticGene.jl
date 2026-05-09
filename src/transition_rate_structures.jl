@@ -501,6 +501,18 @@ struct MTComponents{MType,Ttype} <: AbstractMTComponents
 end
 
 """
+    CombinedComponents{C,R}
+
+Per-modality component bundle for the modular `CombinedData` fit stack. The
+outer model stays a legacy `GMmodel` / `GRSMmodel`; likelihood code selects the
+component and reporter matching the data leg currently being evaluated.
+"""
+struct CombinedComponents{C<:NamedTuple,R<:NamedTuple} <: AbstractComponents
+    components::C
+    reporters::R
+end
+
+"""
     MT0Components
 
 Combined M and T components for the base GRS model (no on/off state separation).
@@ -541,5 +553,4 @@ struct MTDComponents <: AbstractMTComponents
     mcomponents::MComponents
     tcomponents::TDComponents
 end
-
 

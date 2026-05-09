@@ -326,7 +326,7 @@ function fit(; key=nothing, kwargs...)
     if use_key
         label = key_str
     else
-        label = create_label(label, datatype_label(datatype), datacond, cell)
+        label = create_label(label, datatype_label(datatype), _fit_datacond_label(datacond), cell)
     end
     run_spec[:label] = label
     if rinit === nothing && use_key
@@ -555,6 +555,8 @@ end
 is_combined_datatype(datatype) = normalize_datatype(datatype) isa Tuple
 datatype_label(datatype) = string(normalize_datatype(datatype))
 datatype_label(datatype::Union{Tuple,AbstractVector}) = join(string.(normalize_datatype(datatype)), "-")
+_fit_datacond_label(datacond) = datacond
+_fit_datacond_label(datacond::NamedTuple) = join((string(v) for v in values(datacond)), "-")
 
 function legacy_datatype_context(datatype)
     dt = normalize_datatype(datatype)
@@ -563,6 +565,19 @@ function legacy_datatype_context(datatype)
     dt == (:dwelltime, :rna) && return "rnadwelltime"
     length(dt) == 1 && return string(only(dt))
     throw(ArgumentError("No legacy model-building context is defined for combined datatype $(repr(dt))"))
+end
+
+function fit_datatype_context(datatype)
+    dt = normalize_datatype(datatype)
+    dt isa Symbol && return string(dt)
+    dt == (:rna, :trace) && return "tracerna"
+    dt == (:dwelltime, :rna) && return "rnadwelltime"
+    (:tracejoint in dt) && return "tracejoint"
+    (:trace in dt) && return "trace"
+    (:dwelltime in dt) && return "dwelltime"
+    (:rnacount in dt || :rna in dt) && return "rna"
+    length(dt) == 1 && return string(only(dt))
+    throw(ArgumentError("No fit datatype context is defined for combined datatype $(repr(dt))"))
 end
 
 """
@@ -1062,7 +1077,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     nalleles = reset_nalleles(nalleles, coupling)
     results_dir = folder_path(resultfolder, root, "results")
     datapath = _data_folder_path(datapath, root)
-    datatype_context = legacy_datatype_context(datatype)
+    datatype_context = fit_datatype_context(datatype)
     dttype = _coalesce_dttype(legacy_dttype, dwell_specs, datatype_context)
     traceinfo = _coalesce_traceinfo(legacy_traceinfo, trace_specs, datatype_context)
     trace_specs_work = trace_specs
@@ -1771,6 +1786,14 @@ function _combined_datapath(datapath::NamedTuple, modality::Symbol, modalities)
     return getfield(datapath, modality)
 end
 
+function _combined_arg(x::NamedTuple, modality::Symbol, modalities, name::Symbol)
+    haskey(x, modality) ||
+        throw(ArgumentError("$(name) NamedTuple for combined datatype $(repr(modalities)) is missing :$modality"))
+    return getfield(x, modality)
+end
+
+_combined_arg(x, modality::Symbol, modalities, name::Symbol) = x
+
 function _combined_datapath(datapath, modality::Symbol, modalities)
     if modalities == (:rna, :trace)
         modality === :trace && return datapath isa AbstractString ? datapath : datapath[1]
@@ -1791,7 +1814,12 @@ function load_combined_data(modalities::Tuple, dttype, datapath, label, gene, da
     legs = map(modalities) do modality
         leg_datatype = modality === :trace ? :trace : modality
         leg_path = _combined_datapath(datapath, modality, modalities)
-        leg = load_data(leg_datatype, dttype, leg_path, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs)
+        leg_label = _combined_arg(label, modality, modalities, :label)
+        leg_gene = _combined_arg(gene, modality, modalities, :gene)
+        leg_datacond = _combined_arg(datacond, modality, modalities, :datacond)
+        leg_trace_specs = modality in (:trace, :tracejoint, :tracegrid) ? trace_specs : []
+        leg_dwell_specs = modality === :dwelltime ? dwell_specs : []
+        leg = load_data(leg_datatype, dttype, leg_path, leg_label, leg_gene, leg_datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, leg_trace_specs, leg_dwell_specs)
         modality => leg
     end
     return CombinedData(legs...)
@@ -2179,6 +2207,34 @@ function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, i
     return reporter, components
 end
 
+function _unit_value(x::Tuple, unit::Integer)
+    x[unit]
+end
+function _unit_value(x::AbstractVector, unit::Integer)
+    x[unit]
+end
+_unit_value(x, unit::Integer) = x
+
+function make_reporter_components(data::AbstractRNAData, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    unit = isempty(data.units) ? 1 : first(data.units)
+    return make_reporter_components(
+        data,
+        transitions[unit],
+        G[unit],
+        R[unit],
+        S[unit],
+        insertstep[unit],
+        splicetype,
+        onstates,
+        _unit_value(decayrate, unit),
+        _unit_value(probfn, unit),
+        _unit_value(noisepriors, unit),
+        tuple(),
+        ejectnumber;
+        coupled_stack=coupled_stack,
+    )
+end
+
 """
     make_reporter_components(data::RNAOnOffData, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
 
@@ -2403,13 +2459,27 @@ function make_reporter_components(data::CombinedData{NT}, transitions, G, R, S, 
     return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
 end
 
+function _combined_primary_modality(modalities)
+    for modality in (:tracejoint, :trace, :dwelltime, :rnacount, :rna, :grid)
+        modality in modalities && return modality
+    end
+    return first(modalities)
+end
+
 function make_reporter_components(data::CombinedData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
     modalities = combined_modalities(data)
     if length(modalities) == 1
         leg = getfield(data.legs, modalities[1])
         return make_reporter_components(leg, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
     end
-    throw(ArgumentError("No make_reporter_components method for CombinedData modalities $(repr(modalities))"))
+    built = map(modalities) do modality
+        leg = getfield(data.legs, modality)
+        make_reporter_components(leg, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
+    end
+    reporters = NamedTuple{modalities}(Tuple(first(x) for x in built))
+    components = NamedTuple{modalities}(Tuple(last(x) for x in built))
+    primary = _combined_primary_modality(modalities)
+    return getfield(reporters, primary), CombinedComponents(components, reporters)
 end
 
 """
@@ -4406,7 +4476,3 @@ function alleles(gene::String, path::String; nalleles::Int=2, col::Int=3)
         return isnothing(a) ? nalleles : Int(a)
     end
 end
-
-
-
-

@@ -810,6 +810,21 @@ _combined_rates_fn(::Val{:ad}) = get_rates_ad
 _combined_uses_ad(::Val{:primal}) = false
 _combined_uses_ad(::Val{:ad}) = true
 
+function _combined_unit_rate_slice(r, data::AbstractRNAData, model::AbstractGRSMmodel)
+    nr = num_rates(model)
+    nr isa Integer && return r[1:nr]
+    unit = isempty(data.units) ? 1 : first(data.units)
+    noise_lengths = if model.reporter isa AbstractVector && all(x -> x isa HMMReporter, model.reporter)
+        getproperty.(model.reporter, :n)
+    else
+        zeros(Int, length(nr))
+    end
+    lens = nr .+ noise_lengths
+    starts = cumsum(vcat(1, lens[1:end-1]))
+    start = starts[unit]
+    return r[start:start + nr[unit] - 1]
+end
+
 function _combined_rna_predictions(
     param,
     data::AbstractRNAData,
@@ -818,12 +833,20 @@ function _combined_rna_predictions(
     steady_state_solver::Symbol,
 )
     rates_fn = _combined_rates_fn(mode)
-    if model isa AbstractGRSMmodel && hasproperty(model.components, :mcomponents)
+    components = get_components(model, data)
+    if model isa AbstractGRSMmodel && components isa MComponents
         r = rates_fn(param, model)
-        nr = num_rates(model)
-        nr isa Integer || throw(ArgumentError("CombinedData :rna leg with multi-unit GRSM models is not implemented yet"))
+        runit = _combined_unit_rate_slice(r, data, model)
         nRNA_true = get_nRNA_true(data.yield, data.nRNA)
-        p_true = predictedRNA(r[1:nr], model.components.mcomponents, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+        p_true = predictedRNA(runit, components, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+        yield_val = get_yield_value(data.yield)
+        Lmk = _combined_uses_ad(mode) ? make_loss_matrix_ad : make_loss_matrix
+        return yield_val < 1.0 ? Lmk(data.nRNA, nRNA_true, yield_val) * p_true : p_true[1:data.nRNA]
+    elseif model isa AbstractGRSMmodel && hasproperty(components, :mcomponents)
+        r = rates_fn(param, model)
+        runit = _combined_unit_rate_slice(r, data, model)
+        nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+        p_true = predictedRNA(runit, components.mcomponents, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
         yield_val = get_yield_value(data.yield)
         Lmk = _combined_uses_ad(mode) ? make_loss_matrix_ad : make_loss_matrix
         return yield_val < 1.0 ? Lmk(data.nRNA, nRNA_true, yield_val) * p_true : p_true[1:data.nRNA]
@@ -1026,11 +1049,45 @@ function loglikelihood_ad(
     )
 end
 
-# Helper to get the right component
-get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = model.components.tcomponents
-get_components(model::AbstractGRSMmodel, data::AbstractTraceData) =
-    hasproperty(model.components, :tcomponents) ? model.components.tcomponents : model.components
-# (Add more as needed)
+function _combined_component_key(cc::CombinedComponents, data)
+    ks = keys(cc.components)
+    if data isa RNACountData
+        (:rnacount in ks) && return :rnacount
+        (:rna in ks) && return :rna
+    elseif data isa AbstractRNAData
+        (:rna in ks) && return :rna
+        (:rnacount in ks) && return :rnacount
+    elseif data isa DwellTimeData
+        (:dwelltime in ks) && return :dwelltime
+    elseif data isa AbstractTraceData
+        (:trace in ks) && return :trace
+        (:tracejoint in ks) && return :tracejoint
+    end
+    throw(ArgumentError("No CombinedComponents leg for data type $(typeof(data)); available modalities=$(repr(Tuple(ks)))"))
+end
+
+function get_components(model::AbstractGeneTransitionModel, data)
+    components = model.components
+    if components isa CombinedComponents
+        key = _combined_component_key(components, data)
+        return getfield(components.components, key)
+    elseif data isa AbstractTraceHistogramData
+        return components.tcomponents
+    elseif data isa AbstractTraceData
+        return hasproperty(components, :tcomponents) ? components.tcomponents : components
+    else
+        return components
+    end
+end
+
+function get_reporter(model::AbstractGeneTransitionModel, data)
+    components = model.components
+    if components isa CombinedComponents
+        key = _combined_component_key(components, data)
+        return getfield(components.reporters, key)
+    end
+    return model.reporter
+end
 
 function ll_hmm_trace(
     param,
@@ -1043,22 +1100,23 @@ function ll_hmm_trace(
     with_hmm_zygote_checkpoint(hmm_checkpoint_steps) do
         r = hmm_stack === HMM_STACK_AD ? prepare_rates_ad(param, model) : prepare_rates(param, model)
         components = get_components(model, data)
+        reporter = get_reporter(model, data)
         observed_units = isempty(data.units) ? nothing : data.units
         if !isnothing(model.trait) && haskey(model.trait, :grid)
             ll_hmm(
-                r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method;
+                r, model.trait.grid.ngrid, components, reporter, data.interval, data.trace, model.method;
                 steady_state_solver=steady_state_solver, hmm_stack=hmm_stack,
             )
         else
             # Only pass observed_units for CoupledFull stack; legacy Coupled and single-unit don't support it
             if components isa TCoupledFullComponents
                 ll_hmm(
-                    r, components, model.reporter, data.interval, data.trace, model.method;
+                    r, components, reporter, data.interval, data.trace, model.method;
                     observed_units=observed_units, steady_state_solver=steady_state_solver, hmm_stack=hmm_stack,
                 )
             else
                 ll_hmm(
-                    r, components, model.reporter, data.interval, data.trace, model.method;
+                    r, components, reporter, data.interval, data.trace, model.method;
                     steady_state_solver=steady_state_solver, hmm_stack=hmm_stack,
                 )
             end
@@ -1097,7 +1155,8 @@ function predictedfn(
     rates_fn::Function=get_rates,
 )
     r = rates_fn(param, model)
-    M = make_mat_M(model.components, r)
+    components = get_components(model, data)
+    M = make_mat_M(components, r)
     
     # Get nRNA_true from data structure (already computed in load_data)
     # For RNACountData: data.nRNA is already nRNA_true
@@ -1107,7 +1166,7 @@ function predictedfn(
     else
         nRNA_true = get_nRNA_true(data.yield, data.nRNA)
     end
-    p_true = steady_state(M, model.components.nT, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+    p_true = steady_state(M, components.nT, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
     
     # Apply loss matrix if yield < 1.0 (observation noise)
     # Note: RNACountData has per-cell yields (Vector), handled separately in loglikelihood()
@@ -1221,8 +1280,8 @@ function predictedarray(r, data::RNAOnOffData, model::AbstractGeneTransitionMode
     #     if model.splicetype == "offdecay"
     #         # r[end-1] *= survival_fraction(nu, eta, model.R)
     #     end
-    components = model.components
-    onstates = model.reporter
+    components = get_components(model, data)
+    onstates = get_reporter(model, data)
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
@@ -1261,38 +1320,38 @@ This function calculates the likelihood array for RNA dwell time data using the 
 function predictedarray(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
     nRNA_true = get_nRNA_true(data.yield, data.nRNA)
     yield_val = get_yield_value(data.yield)
-    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver)
+    predictedarray(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver)
 end
 
 function predictedarray(r, data::DwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
-    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
+    predictedarray(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver)
 end
 
 function predictedarray(r, data::DwellTimeData, model::AbstractGRSMmodel{T}; steady_state_solver::Symbol=:default) where {T<:NamedTuple{(:coupling,)}}
     r, coupling_strength = prepare_rates_coupled(r, model.nrates, model.trait.coupling.couplingindices)
-    predictedarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
+    predictedarray(r, coupling_strength, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver)
 end
 
 # --- `predictedarray_ad` entry points for `AbstractHistogramData` (Zygote / `get_rates_ad` only) ---
 
 function predictedarray_ad(r, data::DwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
-    return predictedarray_ad(r, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
+    return predictedarray_ad(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver)
 end
 
 function predictedarray_ad(r, data::DwellTimeData, model::AbstractGRSMmodel{T}; steady_state_solver::Symbol=:augmented) where {T<:NamedTuple{(:coupling,)}}
     r, coupling_strength = prepare_rates_coupled(r, model.nrates, model.trait.coupling.couplingindices)
-    return predictedarray_ad(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
+    return predictedarray_ad(r, coupling_strength, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver)
 end
 
 function predictedarray_ad(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
     nRNA_true = get_nRNA_true(data.yield, data.nRNA)
     yield_val = get_yield_value(data.yield)
-    return predictedarray_ad(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver)
+    return predictedarray_ad(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver)
 end
 
 function predictedarray_ad(r, data::RNAOnOffData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
-    components = model.components
-    onstates = model.reporter
+    components = get_components(model, data)
+    onstates = get_reporter(model, data)
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)

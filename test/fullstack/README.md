@@ -36,6 +36,25 @@ Run the smoke-fit driver with:
 julia --project=. test/fullstack/run_fits.jl
 ```
 
+Run the developer full-stack test harness with:
+
+```bash
+julia --project=. test/fullstack/runtests.jl
+```
+
+This regenerates fixture data, runs small RNA and trace fits, checks key-based
+`info_<key>.jld2` loading, and marks currently unsupported new-stack combinations
+with `@test_broken` so gaps stay visible while the harness remains usable.
+
+For a heavier validation pass:
+
+```bash
+SG_FULLSTACK_EXTENDED=1 julia --project=. test/fullstack/runtests.jl
+```
+
+The extended mode adds a small inference matrix over MH and NUTS. It is still a
+developer smoke test, not a replacement for long production recovery runs.
+
 To run only selected cases:
 
 ```bash
