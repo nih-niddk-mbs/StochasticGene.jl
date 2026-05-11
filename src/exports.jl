@@ -20,6 +20,10 @@ export mean, norm, normalize_histogram, mean_elongationtime, on_states, source_s
 # Utility Functions
 export make_array, make_mat, prepare_rates, prepare_rates_ad, prob_Gaussian, prob_GaussianMixture, prob_Gaussian_grid
 
+# Transient RNA closure / splitting
+export TransientMasterProblem, transient_master_problem, transient_master_initial,
+    transient_master_strang, transient_master_marginal, transient_A_flow!, transient_B_flow!
+
 # Correlation Algorithms
 export CorrelationAlgorithm, StandardCorrelation, WindowedCorrelation, MultiTauCorrelation, IDLCorrelation, DEFAULT_CORRELATION_ALGORITHM
 

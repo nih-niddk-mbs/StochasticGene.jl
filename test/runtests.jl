@@ -30,6 +30,28 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
+    @testset "transient RNA closure" begin
+        transitions = ([1, 2], [2, 1])
+        G = 2
+        nhist = 30
+        decay = 1.0
+        rates = [0.3, 0.5, 8.0]
+        components = StochasticGene.MComponents(transitions, G, 0, nhist, decay, "")
+        problem = StochasticGene.transient_master_problem(components, rates)
+        P0 = StochasticGene.transient_master_initial([0.625, 0.375], nhist)
+        Psplit = StochasticGene.transient_master_strang(problem, P0, 1.0, 100)
+        M = Matrix(StochasticGene.make_mat_M(components, rates))
+        Pfull = reshape(StochasticGene.time_evolve(1.0, M, vec(P0), nothing), G, nhist)
+        @test sum(abs.(Psplit .- Pfull)) < 1e-4
+        @test isapprox(sum(Psplit), 1.0; atol=1e-10)
+
+        # R-step ejection changes the finite R configuration while incrementing mRNA.
+        # The current closed-form A-flow is valid only for diagonal productive events,
+        # so the adapter must reject this case explicitly.
+        r_components = StochasticGene.MComponents(transitions, G, 1, nhist, decay, "")
+        @test_throws ArgumentError StochasticGene.transient_master_problem(r_components, [0.3, 0.5, 2.0, 8.0])
+    end
+
     @testset "Biowulf script / swarm emission" begin
         mktempdir() do dir
             script = joinpath(dir, "gene_fit.jl")

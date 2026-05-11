@@ -355,6 +355,13 @@ export
     TraceData,
     TraceRNAData,
     Tsit5,
+    TransientMasterProblem,
+    transient_master_problem,
+    transient_master_initial,
+    transient_master_strang,
+    transient_master_marginal,
+    transient_A_flow!,
+    transient_B_flow!,
     unbiased_crosscov,
     correlation_function,
     correlation_function_windowed,
@@ -423,6 +430,10 @@ include("io.jl")
 
 # Chemical master equation solutions of stochastic models for likelihood functions in fitting algorithms
 include("chemical_master.jl")
+
+# Transient RNA closure / operator-splitting solvers. Kept separate from the
+# steady-state CME stack in chemical_master.jl.
+include("transient_master.jl")
 
 # commonly used functions
 include("utilities.jl")
