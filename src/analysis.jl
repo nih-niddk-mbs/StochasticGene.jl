@@ -4048,8 +4048,8 @@ metadata stored in `info_<key>.jld2`.
 
 # Keywords
 - `interval`: frame interval in **minutes** passed through to [`read_tracefiles`](@ref) / [`make_p0_coupled`](@ref).
-  Default `nothing` uses `traceinfo[1]` from each run spec. Set explicitly (e.g. `5/3`) if the saved `traceinfo`
-  does not match the data acquisition interval.
+  Default `nothing` uses `trace_specs[1].interval` from modern run specs, or `traceinfo[1]` from legacy run
+  specs. Set explicitly (e.g. `5/3`) if the saved metadata does not match the data acquisition interval.
 """
 function write_joint_residence_prob_onoff_key(
     folder::String;
@@ -4075,13 +4075,35 @@ function write_joint_residence_prob_onoff_key(
                     @warn "write_joint_residence_prob_onoff_key: missing rates file for key=$key at $ratefile; skipping"
                     continue
                 end
-                haskey(info, :datapath) && haskey(info, :datacond) && haskey(info, :traceinfo) || begin
-                    @warn "write_joint_residence_prob_onoff_key: run spec missing datapath/datacond/traceinfo for key=$key; skipping"
+                haskey(info, :datapath) && haskey(info, :datacond) || begin
+                    @warn "write_joint_residence_prob_onoff_key: run spec missing datapath/datacond for key=$key; skipping"
                     continue
                 end
 
                 r = readrates(ratefile, get_row(ratetype))
-                interval_eff = interval === nothing ? Float64(info[:traceinfo][1]) : Float64(interval)
+                trace_specs = get(info, :trace_specs, [])
+                ti_legacy = get(info, :traceinfo, nothing)
+                interval_eff, start_eff, stop_eff = if !isempty(trace_specs)
+                    s1 = trace_specs[1]
+                    start_raw = Int(round(Float64(get(s1, :start, 1.0))))
+                    stop_raw = Int(round(Float64(get(s1, :t_end, -1.0))))
+                    (
+                        interval === nothing ? Float64(get(s1, :interval, 1.0)) : Float64(interval),
+                        max(start_raw, 1),
+                        stop_raw,
+                    )
+                elseif ti_legacy !== nothing
+                    (
+                        interval === nothing ? Float64(ti_legacy[1]) : Float64(interval),
+                        length(ti_legacy) > 1 ? max(Int(round(Float64(ti_legacy[2]))), 1) : 1,
+                        length(ti_legacy) > 2 ? Int(round(Float64(ti_legacy[3]))) : -1,
+                    )
+                elseif interval !== nothing
+                    (Float64(interval), 1, -1)
+                else
+                    @warn "write_joint_residence_prob_onoff_key: run spec missing trace_specs/traceinfo and no interval was provided for key=$key; skipping"
+                    continue
+                end
                 splicetype = String(get(info, :splicetype, ""))
                 noiseparams = get(info, :noisepriors, 4)
                 hierarchical = get(info, :hierarchical, tuple())
@@ -4089,7 +4111,7 @@ function write_joint_residence_prob_onoff_key(
                 zeromedian = get(info, :zeromedian, false)
                 coupling = get(info, :coupling, tuple())
 
-                traces = read_tracefiles(info[:datapath], info[:datacond], 1, -1)
+                traces = read_tracefiles(info[:datapath], info[:datacond], start_eff, stop_eff)
                 p0 = make_p0_coupled(
                     traces, interval_eff, r,
                     info[:transitions], info[:G], info[:R], info[:S], info[:insertstep],
