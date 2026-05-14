@@ -45,11 +45,66 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test sum(abs.(Psplit .- Pfull)) < 1e-4
         @test isapprox(sum(Psplit), 1.0; atol=1e-10)
 
+        # Matrix-valued composition-multiplier closure: no splitting error, so
+        # at modest ode_steps it should match the dense reference to ODE tolerance.
+        Pclosure = StochasticGene.transient_master_closure(problem, P0, 1.0; ode_steps=200)
+        @test sum(abs.(Pclosure .- Pfull)) < 1e-6
+        @test isapprox(sum(Pclosure), 1.0; atol=1e-10)
+
+        # Richardson extrapolation should reduce error vs single Strang at the
+        # same base step count (Delta-t^4 vs Delta-t^2 leading term).
+        Prich = StochasticGene.transient_master_strang_richardson(problem, P0, 1.0, 50)
+        Pbase = StochasticGene.transient_master_strang(problem, P0, 1.0, 50)
+        @test sum(abs.(Prich .- Pfull)) < sum(abs.(Pbase .- Pfull))
+        @test isapprox(sum(Prich), 1.0; atol=1e-10)
+
+        # Pure-BD Strang (handles off-diagonal B by construction) should match
+        # the diagonal-B case here.
+        Ppurebd = StochasticGene.transient_master_strang_purebd(problem, P0, 1.0, 100)
+        @test sum(abs.(Ppurebd .- Pfull)) < 1e-3
+
         # R-step ejection changes the finite R configuration while incrementing mRNA.
-        # The current closed-form A-flow is valid only for diagonal productive events,
-        # so the adapter must reject this case explicitly.
+        # The diagonal-only adapter still rejects this case explicitly.
         r_components = StochasticGene.MComponents(transitions, G, 1, nhist, decay, "")
-        @test_throws ArgumentError StochasticGene.transient_master_problem(r_components, [0.3, 0.5, 2.0, 8.0])
+        r_rates = [0.3, 0.5, 2.0, 8.0]
+        @test_throws ArgumentError StochasticGene.transient_master_problem(r_components, r_rates)
+
+        # The general adapter accepts it and produces a TransientMasterProblemAB
+        # that the closure and pure-BD Strang can evolve.
+        gen_problem = StochasticGene.transient_master_problem_general(r_components, r_rates)
+        @test gen_problem isa StochasticGene.TransientMasterProblemAB
+        Pr0 = StochasticGene.transient_master_initial(
+            [1.0 / size(gen_problem.A, 1) for _ in axes(gen_problem.A, 1)], nhist)
+        Pr_closure = StochasticGene.transient_master_closure(gen_problem, Pr0, 1.0; ode_steps=200)
+        Pr_purebd = StochasticGene.transient_master_strang_purebd(gen_problem, Pr0, 1.0, 200)
+        @test isapprox(sum(Pr_closure), 1.0; atol=1e-8)
+        @test isapprox(sum(Pr_purebd), 1.0; atol=1e-8)
+        @test sum(abs.(Pr_closure .- Pr_purebd)) < 1e-2
+
+        # Taylor and exp-Taylor multiplier integrators should agree with the
+        # RK4 closure to better than 1e-8 at modest step counts.
+        Ptaylor = StochasticGene.transient_master_closure_taylor(problem, P0, 1.0;
+            n_steps=40, R=8)
+        Pexp = StochasticGene.transient_master_closure_exp_taylor(problem, P0, 1.0;
+            n_steps=20, R=8)
+        @test sum(abs.(Ptaylor .- Pclosure)) < 1e-8
+        @test sum(abs.(Pexp .- Pclosure)) < 1e-8
+
+        # State-dependent decay: configurations 1 and 2 have different mRNA decay.
+        decay_vec = [1.0, 1.5]
+        smu_problem = StochasticGene.TransientMasterProblemStateMu(
+            Matrix(StochasticGene.make_mat(components.elementsT, rates, components.nT)) .-
+                Matrix(StochasticGene.make_mat(components.elementsB, rates, components.nT)),
+            Matrix(StochasticGene.make_mat(components.elementsB, rates, components.nT)),
+            decay_vec,
+        )
+        Psw = StochasticGene.transient_master_strang_statewise(smu_problem, P0, 1.0, 200)
+        Psh = StochasticGene.transient_master_strang_shifted(smu_problem, P0, 1.0, 50)
+        @test isapprox(sum(Psw), 1.0; atol=1e-8)
+        @test isapprox(sum(Psh), 1.0; atol=1e-6)
+        # The two state-mu approaches should agree to within their splitting error
+        # (Strang Delta-t^2 with two halves at moderate n_steps).
+        @test sum(abs.(Psw .- Psh)) < 1e-2
     end
 
     @testset "Biowulf script / swarm emission" begin
