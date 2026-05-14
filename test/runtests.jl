@@ -107,6 +107,45 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test sum(abs.(Psw .- Psh)) < 1e-2
     end
 
+    @testset "steady-state closure-Thomas" begin
+        # Telegraph (G=2, R=0): nT=2 -- below the closure-Thomas crossover, but
+        # both solvers should still give the same steady state to LU precision.
+        transitions = ([1, 2], [2, 1])
+        G = 2
+        nhist = 30
+        decay = 1.0
+        rates = [0.3, 0.5, 8.0]
+        components = StochasticGene.MComponents(transitions, G, 0, nhist, decay, "")
+        Msparse = StochasticGene.make_mat_M(components, rates)
+
+        p_aug = StochasticGene.steady_state_vector(Msparse; solver=:augmented)
+        p_thomas = StochasticGene.steady_state_vector(Msparse; solver=:closure_thomas, nT=G)
+        @test isapprox(sum(p_thomas), 1.0; atol=1e-12)
+        @test sum(abs.(p_aug .- p_thomas)) < 1e-10
+
+        # Without nT, the solver dispatch must error.
+        @test_throws ArgumentError StochasticGene.steady_state_vector(Msparse; solver=:closure_thomas)
+
+        # GR (G=2, R=1): off-diagonal B, the regime where the closure path
+        # really earns its keep. n_T = G * 2^R = 4 in this small example;
+        # the speedup grows with R.
+        gr_components = StochasticGene.MComponents(transitions, G, 1, nhist, decay, "")
+        gr_rates = [0.3, 0.5, 2.0, 8.0]
+        Mgr = StochasticGene.make_mat_M(gr_components, gr_rates)
+        nT_gr = gr_components.nT
+        p_gr_aug = StochasticGene.steady_state_vector(Mgr; solver=:augmented)
+        p_gr_thomas = StochasticGene.steady_state_vector(Mgr; solver=:closure_thomas, nT=nT_gr)
+        @test isapprox(sum(p_gr_thomas), 1.0; atol=1e-12)
+        @test sum(abs.(p_gr_aug .- p_gr_thomas)) < 1e-10
+
+        # `steady_state` (with marginalization and allele convolution) routes
+        # through the new solver and matches the existing default.
+        nalleles = 2
+        h_default = StochasticGene.steady_state(Mgr, nT_gr, nalleles; steady_state_solver=:default)
+        h_thomas = StochasticGene.steady_state(Mgr, nT_gr, nalleles; steady_state_solver=:closure_thomas)
+        @test sum(abs.(h_default .- h_thomas)) < 1e-9
+    end
+
     @testset "Biowulf script / swarm emission" begin
         mktempdir() do dir
             script = joinpath(dir, "gene_fit.jl")

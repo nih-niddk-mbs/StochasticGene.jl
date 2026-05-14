@@ -71,15 +71,22 @@ Return a normalized steady-state vector `p` with `M * p ≈ 0` and entries summi
 
 Non-sparse `M` is converted with `sparse(M)`.
 """
-function steady_state_vector(M::SparseMatrixCSC; solver::Symbol=:default)
+function steady_state_vector(M::SparseMatrixCSC; solver::Symbol=:default, nT::Union{Nothing,Int}=nothing)
     if solver === :default || solver === :fast
         return normalized_nullspace(M)
     elseif solver === :augmented || solver === :autodiff
         return normalized_nullspace_augmented(M)
+    elseif solver === :closure_thomas
+        nT === nothing && throw(
+            ArgumentError(
+                "steady_state_vector: solver=:closure_thomas requires nT keyword argument",
+            ),
+        )
+        return normalized_nullspace_closure_thomas(M, nT)
     else
         throw(
             ArgumentError(
-                "steady_state_vector: unknown solver $(repr(solver)); use :default, :fast, :augmented, or :autodiff",
+                "steady_state_vector: unknown solver $(repr(solver)); use :default, :fast, :augmented, :autodiff, or :closure_thomas",
             ),
         )
     end
@@ -107,7 +114,7 @@ Return steady-state mRNA histogram for G and GR models via [`steady_state_vector
 steady_state(M, nT, nalleles, nhist; kwargs...) = steady_state(M, nT, nalleles; kwargs...)[1:nhist]
 
 function steady_state(M, nT, nalleles; steady_state_solver::Symbol=:default)
-    P = steady_state_vector(M; solver=steady_state_solver)
+    P = steady_state_vector(M; solver=steady_state_solver, nT=nT)
     mhist = marginalize(P, nT)
     allele_convolve(mhist, nalleles)
 end
@@ -860,6 +867,130 @@ function solve_vector(A::Matrix, b::Vector, th=1e-16, tol=1e-1)
         x = M.V * diagm(Sv) * M.U' * b
     end
     return x[:, 1] # return as vector
+end
+
+# ============================================================================
+# Closure-Thomas steady-state solver
+#
+# Block-tridiagonal solver derived from the steady-state generating-function
+# ODE `(A + zB) G(z) + mu (1-z) G'(z) = 0`. Matching coefficients of `z^n`
+# gives the three-term recurrence
+#   mu (m+1) P_{m+1} - (mu m I - A) P_m + B P_{m-1} = 0,    P_{-1} = 0,
+# a block-tridiagonal system in `m` with `n_T x n_T` blocks. We exploit this
+# structure directly via Thomas elimination, avoiding the `O((n_T (M+1))^3)`
+# dense / sparse factorization of the full joint generator.
+#
+# The closure-Thomas path matches the reflective-boundary correction that
+# `make_mat_M` applies (the extra `+B` at the cap block to conserve total
+# probability); the boundary block becomes `B R_{Mcap-1} + (A + B) - mu Mcap I`,
+# which is the same singular operator whose null space the existing
+# augmented LU solver targets. Cost: `O((Mcap+1) n_T^3)` for the forward sweep
+# plus an `O(n_T^3)` augmented solve at the cap. Beats the existing sparse LU
+# significantly once `n_T >= ~12` and the mRNA cap is moderate.
+# ============================================================================
+
+"""
+    _extract_AB_mu_from_M(M, nT)
+
+Reverse-engineer the closure-form `(A, B, mu, nhist)` from the assembled joint
+generator built by [`make_mat_M`](@ref). Assumes the standard m-major Kronecker
+layout: block `(m_julia, m_julia')` of `M` occupies rows
+`(m_julia - 1) * nT + 1 : m_julia * nT` and similar for columns.
+
+The Julia-side `m_julia = 1` block carries no decay term, so it equals the
+non-productive part `A = T - B`. The Julia-side super-diagonal block at
+`(1, 2)` is `decay * I_nT`, and the sub-diagonal block at `(2, 1)` is `B`.
+"""
+function _extract_AB_mu_from_M(M::SparseMatrixCSC, nT::Int)
+    N = size(M, 1)
+    nhist = div(N, nT)
+    nhist * nT == N || throw(ArgumentError("size(M, 1) = $N is not divisible by nT = $nT"))
+    Tv = _concrete_value_eltype(nonzeros(M))
+    A = Matrix{Tv}(undef, nT, nT)
+    @inbounds for j in 1:nT, i in 1:nT
+        A[i, j] = M[i, j]
+    end
+    mu = nhist >= 2 ? M[1, nT + 1] : zero(Tv)
+    B = Matrix{Tv}(undef, nT, nT)
+    if nhist >= 2
+        @inbounds for j in 1:nT, i in 1:nT
+            B[i, j] = M[nT + i, j]
+        end
+    else
+        fill!(B, zero(Tv))
+    end
+    return A, B, mu, nhist
+end
+
+"""
+    normalized_nullspace_closure_thomas(M::SparseMatrixCSC, nT::Int)
+
+Steady-state vector of the truncated joint generator `M` via block-Thomas
+elimination on the closure recurrence. `nT` is the hidden-state dimension
+(the block size). The returned vector is in the same m-major linear layout
+as `M`, with nonnegative entries and unit total mass.
+
+The reflective boundary correction that [`make_mat_M`](@ref) installs at the
+cap is honored: the cap block uses `(A + B) - mu * Mcap * I`, matching the
+existing augmented-LU steady state.
+
+Forward-mode AD through `ForwardDiff.Dual` works out of the box (every step
+is a dense `n_T x n_T` LU); a reverse-mode `rrule` is not yet provided, so
+Zygote-style gradients should continue to use the `:augmented` solver.
+"""
+function normalized_nullspace_closure_thomas(M::SparseMatrixCSC, nT::Int)
+    A, B, mu, nhist = _extract_AB_mu_from_M(M, nT)
+    Tv = eltype(A)
+    if nhist == 1
+        # No mRNA dimension; just the finite-state stationary distribution.
+        return _nullspace_robust_fallback(M)
+    end
+    Mcap = nhist - 1
+    Imat = Matrix{Tv}(I, nT, nT)
+    R = Vector{Matrix{Tv}}(undef, Mcap)
+    # R[1] = R_0: P_0 = R_0 P_1, with A P_0 + mu P_1 = 0.
+    R[1] = A \ (-mu .* Imat)
+    @inbounds for m in 1:(Mcap - 1)
+        Mm = B * R[m] .+ A .- (mu * m) .* Imat
+        R[m + 1] = Mm \ (-(mu * (m + 1)) .* Imat)
+    end
+    # Cap block with reflective boundary: M_Mcap = B R_{Mcap-1} + (A + B) - mu Mcap I.
+    M_cap = B * R[Mcap] .+ A .+ B .- (mu * Mcap) .* Imat
+    # M_cap is singular by mass conservation; augment with sum-of-block = 1.
+    aug = copy(M_cap)
+    @inbounds for j in 1:nT
+        aug[nT, j] = one(Tv)
+    end
+    rhs = zeros(Tv, nT)
+    rhs[nT] = one(Tv)
+    P_Mcap = aug \ rhs
+    # Back-substitute P_{m-1} = R_{m-1} P_m.
+    P_blocks = Vector{Vector{Tv}}(undef, nhist)
+    P_blocks[nhist] = P_Mcap
+    @inbounds for j in (nhist - 1):-1:1
+        P_blocks[j] = R[j] * P_blocks[j + 1]
+    end
+    # Flatten in m-major layout matching M.
+    p = Vector{Tv}(undef, size(M, 1))
+    @inbounds for m in 1:nhist, a in 1:nT
+        p[(m - 1) * nT + a] = P_blocks[m][a]
+    end
+    # Global normalization; flip sign if the kernel direction came out negative.
+    s = sum(p)
+    if isfinite(s) && s != 0
+        if s < 0
+            @inbounds for k in eachindex(p)
+                p[k] = -p[k]
+            end
+            s = -s
+        end
+        @inbounds for k in eachindex(p)
+            p[k] /= s
+        end
+        return max.(p, zero(Tv))
+    end
+    # Augmented solve degenerated; fall back to the robust nullspace path.
+    return _nullspace_robust_fallback(M)
 end
 
 
