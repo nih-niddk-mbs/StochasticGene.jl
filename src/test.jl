@@ -1260,6 +1260,70 @@ function test_fit_simrna_yield(; maxtime = 60.0, rtarget=[0.33, 0.19, 2.5, .1], 
     )
 end
 
+"""
+    test_compare_simrna_with_loss(; r, transitions, G, R, S, insertstep,
+                                    nRNA, nalleles, bins, total, tol,
+                                    onstates, dttype, ejectnumber,
+                                    yieldfactor, seed)
+
+Compare a simulated RNA histogram (with technical loss applied) against the
+chemical-master prediction with the same yield/loss model.
+
+This is a direct simulator-vs-CME parity check on the **observed** histogram space.
+
+Default model is 3221 (`G=3, R=2, S=2, insertstep=1`).
+"""
+function test_compare_simrna_with_loss(
+    ;
+    r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231],
+    transitions=([1, 2], [2, 1], [2, 3], [3, 2]),
+    G=3,
+    R=2,
+    S=2,
+    insertstep=1,
+    nRNA=150,
+    nalleles=2,
+    bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)],
+    total=10000000,
+    tol=1e-6,
+    onstates=[Int[], Int[], [2, 3], [2, 3]],
+    dttype=["ON", "OFF", "ONG", "OFFG"],
+    ejectnumber=1,
+    yieldfactor=0.5,
+    seed=7,
+)
+    Random.seed!(seed)
+    cme_vec, sim_vec = test_compare_yield(
+        ;
+        r=r,
+        transitions=transitions,
+        G=G,
+        R=R,
+        S=S,
+        insertstep=insertstep,
+        nRNA=nRNA,
+        nalleles=nalleles,
+        bins=bins,
+        total=total,
+        tol=tol,
+        onstates=onstates,
+        dttype=dttype,
+        ejectnumber=ejectnumber,
+        yieldfactor=yieldfactor,
+    )
+
+    h_cme_observed = normalize_histogram(cme_vec[1:nRNA])
+    h_sim_observed = normalize_histogram(sim_vec[1:nRNA])
+    max_abs_diff = maximum(abs.(h_cme_observed .- h_sim_observed))
+
+    return (
+        cme=h_cme_observed,
+        sim=h_sim_observed,
+        max_abs_diff=max_abs_diff,
+        nRNA_observed=nRNA,
+    )
+end
+
 
 """
     test_fit_rna(; gene, G, nalleles, propcv, fittedparam, fixedeffects, transitions, rinit, datacond, datapath, label, root, nchains)
