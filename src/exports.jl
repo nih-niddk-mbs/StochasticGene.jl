@@ -21,8 +21,13 @@ export mean, norm, normalize_histogram, mean_elongationtime, on_states, source_s
 export make_array, make_mat, prepare_rates, prepare_rates_ad, prob_Gaussian, prob_GaussianMixture, prob_Gaussian_grid
 
 # Transient RNA closure / splitting
-export TransientMasterProblem, transient_master_problem, transient_master_initial,
-    transient_master_strang, transient_master_marginal, transient_A_flow!, transient_B_flow!
+export TransientMasterProblem, TransientMasterProblemAB, TransientMasterProblemStateMu,
+    transient_master_problem, transient_master_problem_general,
+    transient_master_initial, transient_master_marginal,
+    transient_master_strang, transient_master_strang_richardson, transient_master_strang_purebd,
+    transient_master_strang_statewise, transient_master_strang_shifted,
+    transient_master_closure, transient_master_closure_taylor, transient_master_closure_exp_taylor,
+    transient_A_flow!, transient_B_flow!
 
 # Correlation Algorithms
 export CorrelationAlgorithm, StandardCorrelation, WindowedCorrelation, MultiTauCorrelation, IDLCorrelation, DEFAULT_CORRELATION_ALGORITHM
