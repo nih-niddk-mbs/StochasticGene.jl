@@ -1484,7 +1484,7 @@ function assemble_files(folder::String, files::Vector, outfile::String, header, 
 end
 
 """
-    assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false, readfunction=readml)
+    assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false, readfunction=readmedian)
 
 Assemble rate parameters from multiple files into a single CSV file.
 
@@ -1495,7 +1495,7 @@ Assemble rate parameters from multiple files into a single CSV file.
 - `cond::String`: Condition to match
 - `model::String`: Model to match
 - `multicond::Bool=false`: Whether to handle multiple conditions
-- `readfunction=readml`: Function to read rate data (default: readml for maximum likelihood)
+- `readfunction=readmedian`: Function to read rate data (default: readmedian for median values)
 
 # Returns
 - `Matrix`: Rate labels extracted from the first rate file
