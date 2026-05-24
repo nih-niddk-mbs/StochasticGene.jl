@@ -4296,7 +4296,8 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     println("aic: ", aic(fits))
     # println("aic_onstates: ", aic_onstates(fits.parml, data, model))
     if optimized != 0
-        println("Optimized ML: ", Optim.minimum(optimized))
+        println("Optimized max ll: ", -Optim.minimum(optimized))
+        println("Optimized objective (-ll): ", Optim.minimum(optimized))
         println("Optimized rates: ", exp.(Optim.minimizer(optimized)))
     end
     writeall(writefolder, fits, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples, name_override=name_override, run_spec=run_spec, inference_info=inference_info)

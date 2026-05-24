@@ -30,6 +30,18 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
+    @testset "merged-chain maximum likelihood uses log-likelihood sign" begin
+        f1 = StochasticGene.Fit(reshape([1.0], 1, 1), [-10.0], [1.0], -10.0, [0.0], [0.0], 0.0, 1, 1)
+        f2 = StochasticGene.Fit(reshape([2.0], 1, 1), [-3.0], [2.0], -3.0, [0.0], [0.0], 0.0, 1, 1)
+        parml, llml = StochasticGene.find_ml([f1, f2])
+        @test parml == [2.0]
+        @test llml == -3.0
+
+        merged = StochasticGene.merge_fit([f1, f2])
+        @test merged.parml == [2.0]
+        @test merged.llml == -3.0
+    end
+
     @testset "transient RNA closure" begin
         transitions = ([1, 2], [2, 1])
         G = 2

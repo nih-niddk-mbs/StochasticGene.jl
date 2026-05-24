@@ -860,6 +860,8 @@ function best_measure(folder::String, measure::Symbol)
     return df
 end
 
+_higher_is_better_measure(measure::Symbol) = measure in (:LogMaxLikelihood, :normalized_LL, :LogLikelihood)
+
 function best_measure(dfs::Vector, measure::Symbol)
     df = DataFrame(:Gene => [], :Winner => [], measure => [])
     ngenes = Int[]
@@ -874,7 +876,8 @@ function best_measure(dfs::Vector, measure::Symbol)
             for k in others
                 dc = dfs[k][dfs[k].Gene.==d.Gene, :]
                 if ~isempty(dc)
-                    if dc[1, measure] < l
+                    better = _higher_is_better_measure(measure) ? dc[1, measure] > l : dc[1, measure] < l
+                    if better
                         l = dc[1, measure]
                         model = dc[1, :Model]
                     end

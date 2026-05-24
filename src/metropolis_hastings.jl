@@ -11,9 +11,9 @@ Results of a Metropolis-Hastings MCMC run.
 
 # Fields
 - `param::Array`: Matrix of sampled parameter values (parameters × samples).
-- `ll::Array`: Vector of negative log-likelihoods for each sample.
+- `ll::Array`: Vector of log-likelihoods for each sample (higher is better).
 - `parml::Array`: Parameter vector with maximum likelihood.
-- `llml::Float64`: Maximum (minimum value) negative log-likelihood.
+- `llml::Float64`: Maximum log-likelihood.
 - `lppd::Array`: Log pointwise predictive density for WAIC.
 - `pwaic::Array`: Pointwise WAIC penalty terms.
 - `prior::Float64`: Sum of log prior probabilities for all samples.
@@ -343,7 +343,7 @@ Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal 
 - `logpredictions`: Initial log-likelihood predictions.
 - `param`: Initial parameter vector.
 - `parml`: Initial maximum likelihood parameter vector.
-- `ll`: Initial negative log-likelihood.
+- `ll`: Initial log-likelihood.
 - `llml`: Initial maximum likelihood value.
 - `d`: Initial proposal distribution.
 - `proposalcv`: Initial proposal covariance or scale (can be a fixed scalar or user-provided matrix).
@@ -357,8 +357,8 @@ Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal 
 # Returns
 - `param`: Final parameter vector after warmup.
 - `parml`: Maximum likelihood parameter vector found during warmup.
-- `ll`: Final negative log-likelihood.
-- `llml`: Minimum negative log-likelihood found during warmup.
+- `ll`: Final log-likelihood.
+- `llml`: Maximum log-likelihood found during warmup.
 - `d`: Final proposal distribution.
 - `proposalcv`: Final proposal covariance or scale (adapted during warmup).
 - `logpredictions`: Final log-likelihood predictions.
@@ -462,7 +462,7 @@ Run the main MCMC sampling phase, collecting samples and statistics.
 - `logpredictions`: Initial log-likelihood predictions
 - `param`: Initial parameter vector
 - `parml`: Initial maximum likelihood parameter vector
-- `ll`: Initial negative log-likelihood
+- `ll`: Initial log-likelihood
 - `llml`: Initial maximum likelihood value
 - `d`: Initial proposal distribution
 - `proposalcv`: Initial proposal covariance or scale
@@ -1365,7 +1365,8 @@ function find_ml(fits::Array)
     for i in eachindex(fits)
         llml[i] = fits[i].llml
     end
-    return fits[argmin(llml)].parml, llml[argmin(llml)]
+    imax = argmax(llml)
+    return fits[imax].parml, llml[imax]
 end
 
 """
