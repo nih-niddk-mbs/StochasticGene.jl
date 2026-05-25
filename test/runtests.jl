@@ -42,6 +42,19 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test merged.llml == -3.0
     end
 
+    @testset "NUTS ignores MH samplesteps" begin
+        opts = StochasticGene.load_options(Dict(:inference_method => :nuts, :samplesteps => 123_456))
+        @test opts isa StochasticGene.NUTSOptions
+        @test opts.n_samples == StochasticGene.NUTSOptions().n_samples
+        @test opts.n_adapts == StochasticGene.NUTSOptions().n_adapts
+
+        opts_explicit = StochasticGene.load_options(Dict(:inference_method => :nuts, :samplesteps => 123_456, :n_samples => 321))
+        @test opts_explicit.n_samples == 321
+
+        opts_warmup_alias = StochasticGene.load_options(Dict(:inference_method => :nuts, :warmupsteps => 222))
+        @test opts_warmup_alias.n_adapts == 222
+    end
+
     @testset "transient RNA closure" begin
         transitions = ([1, 2], [2, 1])
         G = 2

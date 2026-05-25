@@ -766,7 +766,7 @@ struct NUTSOptions <: Options
 end
 
 function NUTSOptions(;
-    n_samples=1000, n_adapts=1000, δ=0.8, gradient=:finite, fd_ε=1e-5, verbose=true, progress=true,
+    n_samples=100, n_adapts=100, δ=0.8, gradient=:finite, fd_ε=1e-5, verbose=true, progress=true,
     device::Symbol=:cpu, parallel::Symbol=:single,
     likelihood_executor::Symbol=HMM_STACK_AD,
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,

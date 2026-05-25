@@ -20,7 +20,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - **`parallel`** (alias **`parallelism`**): `:single`, `:threaded`, or `:distributed` (used with multi-chain NUTS/ADVI in [`run_inference`](@ref)).
 - **`gradient`**: method-specific (e.g. `:finite`, `:ForwardDiff`, `:Zygote` for NUTS/ADVI; `:none` default for MH).
 
-[`make_structures`](@ref) merges the active run dict (defaults, `fit(; key=...)` spec, and explicit keywords) and calls [`load_options`](@ref), which maps shared budgets (**`samplesteps`**, **`warmupsteps`**, **`maxtime`**, **`temp`**) onto each method’s options. Positional [`fit`](@ref) overloads accept a filtered subset of these keywords (see `_MAKE_STRUCTURES_OPTION_KW` in the source) and forward them into `make_structures`.
+[`make_structures`](@ref) merges the active run dict (defaults, `fit(; key=...)` spec, and explicit keywords) and calls [`load_options`](@ref), which builds the method-specific options. Positional [`fit`](@ref) overloads accept a filtered subset of these keywords (see `_MAKE_STRUCTURES_OPTION_KW` in the source) and forward them into `make_structures`.
 
 # Arguments
 - `burst=false`: if true then compute burst frequency
@@ -58,7 +58,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
-- `samplesteps::Int=1000000`: MH — posterior samples to collect; harmonized to NUTS `n_samples` / ADVI `maxiter` (unless `maxiter` / `n_samples` set explicitly) via [`load_options`](@ref)
+- `samplesteps::Int=1000000`: MH — posterior samples to collect; ADVI — maps to `maxiter` unless `maxiter` is set explicitly. Ignored by NUTS; use `n_samples` for NUTS.
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `splicetype=""`: RNA pathway for GRS models, (e.g., "offeject" = spliced intron is not viable)
 - `temp=1.0`: MCMC temperature (**MH**); retained in the run dict for other methods for compatibility
@@ -66,7 +66,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `t_end`, `zeromedian` (and optionally `active_fraction`, `background`). **Coupled `tracejoint`:** when `trace_specs` is empty, `make_structures` fills defaults via [`default_trace_specs_for_coupled`](@ref) from an internal default window and `zeromedian` so `data.units` lists observed units. **If you pass non-empty `trace_specs`,** `interval`, `zeromedian`, and **`t_end`** (→ effective end time for [`read_tracefiles`](@ref), same semantics as the legacy third tuple slot) control loading.
 - `dwell_specs=[]`: container of dwell-time specs per unit; each row is typically a NamedTuple (or dict-like row) with at least **`unit`**, **`onstates`**, and **`dttype`** (and any binning fields your loaders expect). When non-empty, used for dwell-time data with multiple units or observation mapping. **Coupled + non-empty `dwell_specs`:** these per-row **`onstates`** are the source of truth for the model (`load_model` calls `full_onstates_dttype_from_dwell_specs`). Single-unit dwell defaults use an empty `dttype` list when `dwell_specs` is empty; then use top-level **`onstates`** as usual.
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
-- `warmupsteps=0`: MH — warmup steps to adapt proposal covariance before sampling. Harmonized to NUTS `n_adapts` (unless `n_adapts` is set explicitly) via [`load_options`](@ref). Warmup runs before sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
+- `warmupsteps=0`: MH — warmup steps to adapt proposal covariance before sampling. For NUTS, prefer `n_adapts`; `warmupsteps` is accepted as a compatibility alias only when `n_adapts` is not set. MH warmup runs before sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
 - `writesamples=false`: write out posterior samples when supported (MH; see IO paths for other methods)
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
 - `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for **`info_<key>.jld2`** under the resolved results folder; if present, loads the merged run dict via [`read_run_spec`](@ref) and merges with defaults and any kwargs you pass (kwargs take precedence). The companion **`info_<key>.toml`** is not required for this load path. On write, both TOML (human-readable) and JLD2 (full types) are produced. Legacy keys **`traceinfo`** and **`dttype`** in an old merged spec are applied for loading then **dropped** from the persisted run dict (use **`trace_specs`** / **`dwell_specs`** going forward). With a non-empty key, optional starting rates are **`rates_<key>.txt`** under the same resolved results folder; if that file is missing and `rinit` is unset, initial rates are taken from priors via [`set_rinit`](@ref) — the positional `readrates(…, label, gene, …)` path is **not** used (it would probe a different `rates_…` stem than the key file).
@@ -134,7 +134,7 @@ NUTS on the same keyword surface:
 fits, stats, measures, data, model, options = fit(
     G = 2, R = 0, transitions = ([1,2], [2,1]),
     datatype = "rna", datapath = "data/HCT116_testdata/", gene = "MYC", datacond = "MOCK",
-    inference_method = :nuts, samplesteps = 500, warmupsteps = 250, parallel = :single, gradient = :finite,
+    inference_method = :nuts, n_samples = 500, n_adapts = 250, parallel = :single, gradient = :finite,
 )
 ```
 """
@@ -1122,8 +1122,8 @@ specification dict (typically `_current_run_spec[]` merged with explicit `sample
 
 Shared keys:
 - `inference_method`: `:mh` / [`INFERENCE_MH`](@ref), `:nuts` / [`INFERENCE_NUTS`](@ref), `:advi` / [`INFERENCE_ADVI`](@ref)
-- `samplesteps`: MH posterior samples; NUTS `n_samples`; ADVI `maxiter` unless `maxiter` is set explicitly
-- `warmupsteps`: MH warmup; NUTS `n_adapts` unless `n_adapts` is set explicitly
+- `samplesteps`: MH posterior samples; ADVI `maxiter` unless `maxiter` is set explicitly. Ignored by NUTS.
+- `warmupsteps`: MH warmup; accepted by NUTS as a compatibility alias for `n_adapts` only when `n_adapts` is not set
 - `device`: `:cpu` or `:gpu` (GPU paths may error if unsupported)
 - `parallel` (alias `parallelism`): `:single`, `:threaded`, `:distributed`
 - `gradient`: method-specific (`:none`/`:finite`/`:ForwardDiff`/`:Zygote`, with `:forward` accepted as `:ForwardDiff`)
@@ -1204,13 +1204,14 @@ function load_options(run0::AbstractDict)
             gradient_checkpoint_length=gck,
         )
     elseif inference_method == INFERENCE_NUTS || inference_method == :nuts
-        n_samples = Int(get(run, :n_samples, samplesteps))
+        nuts_defaults = NUTSOptions()
+        n_samples = Int(get(run, :n_samples, nuts_defaults.n_samples))
         n_adapts = if haskey(run, :n_adapts) && run[:n_adapts] !== nothing
             Int(run[:n_adapts])
         elseif warmupsteps > 0
             Int(warmupsteps)
         else
-            min(1000, max(1, n_samples ÷ 2))
+            nuts_defaults.n_adapts
         end
         δ = Float64(get(run, :nuts_delta, get(run, :δ, 0.8)))
         fd_ε = Float64(get(run, :fd_ε, get(run, :nuts_fd_ε, 1e-5)))
