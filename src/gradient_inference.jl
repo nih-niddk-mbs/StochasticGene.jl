@@ -242,7 +242,7 @@ function run_nuts(
 )
     ck_outer = coalesce(hmm_checkpoint_steps, options.gradient_checkpoint_length)
     with_hmm_zygote_checkpoint(ck_outer) do
-        ad = something(ad_likelihood, _default_ad_likelihood(data))
+        ad = something(ad_likelihood, options.gradient === :finite ? false : _default_ad_likelihood(data))
         ℓ = GenePosteriorLogDensity(data, model, steady_state_solver, ad, options)
         θ0 = Vector{Float64}(get_param(model))
         D = length(θ0)
@@ -356,7 +356,7 @@ function run_advi(
     zygote_trace::Bool=false,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
-    ad = something(ad_likelihood, _default_ad_likelihood(data))
+    ad = something(ad_likelihood, options.gradient === :finite ? false : _default_ad_likelihood(data))
     options.gradient in (:Zygote, :finite, :ForwardDiff) ||
         throw(ArgumentError("ADVIOptions.gradient must be :Zygote, :finite, or :ForwardDiff, got $(repr(options.gradient))"))
     options.n_mc >= 1 || throw(ArgumentError("ADVIOptions.n_mc must be ≥ 1, got $(options.n_mc)"))

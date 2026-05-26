@@ -1232,7 +1232,7 @@ function load_options(run0::AbstractDict)
         g in (:ForwardDiff, :Zygote, :finite) || throw(ArgumentError("Invalid NUTS gradient $(repr(g))"))
         lik_nuts = _parse_likelihood_executor(
             get(run, :likelihood_executor, get(run, :hmm_stack, nothing)),
-            HMM_STACK_AD,
+            g === :finite ? HMM_STACK_MH : HMM_STACK_AD,
         )
         return NUTSOptions(;
             n_samples=n_samples,

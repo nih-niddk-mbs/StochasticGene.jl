@@ -1297,7 +1297,7 @@ function predictedarray(r, data::RNAOnOffData, model::AbstractGeneTransitionMode
     else
         p_true[1:data.nRNA]
     end
-    modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates; steady_state_solver=steady_state_solver)
+    modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates; steady_state_solver=steady_state_solver, method=model.method)
     return [modelOFF, modelON, histF]
 end
 
@@ -1322,33 +1322,33 @@ This function calculates the likelihood array for RNA dwell time data using the 
 function predictedarray(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
     nRNA_true = get_nRNA_true(data.yield, data.nRNA)
     yield_val = get_yield_value(data.yield)
-    predictedarray(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver)
+    predictedarray(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver, method=model.method)
 end
 
 function predictedarray(r, data::DwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
-    predictedarray(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver)
+    predictedarray(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver, method=model.method)
 end
 
 function predictedarray(r, data::DwellTimeData, model::AbstractGRSMmodel{T}; steady_state_solver::Symbol=:default) where {T<:NamedTuple{(:coupling,)}}
     r, coupling_strength = prepare_rates_coupled(r, model.nrates, model.trait.coupling.couplingindices)
-    predictedarray(r, coupling_strength, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver)
+    predictedarray(r, coupling_strength, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver, method=model.method)
 end
 
 # --- `predictedarray_ad` entry points for `AbstractHistogramData` (Zygote / `get_rates_ad` only) ---
 
 function predictedarray_ad(r, data::DwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
-    return predictedarray_ad(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver)
+    return predictedarray_ad(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver, method=model.method)
 end
 
 function predictedarray_ad(r, data::DwellTimeData, model::AbstractGRSMmodel{T}; steady_state_solver::Symbol=:augmented) where {T<:NamedTuple{(:coupling,)}}
     r, coupling_strength = prepare_rates_coupled(r, model.nrates, model.trait.coupling.couplingindices)
-    return predictedarray_ad(r, coupling_strength, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver)
+    return predictedarray_ad(r, coupling_strength, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes; steady_state_solver=steady_state_solver, method=model.method)
 end
 
 function predictedarray_ad(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
     nRNA_true = get_nRNA_true(data.yield, data.nRNA)
     yield_val = get_yield_value(data.yield)
-    return predictedarray_ad(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver)
+    return predictedarray_ad(r, get_components(model, data), data.bins, get_reporter(model, data), data.DTtypes, model.nalleles, data.nRNA, nRNA_true, yield_val; steady_state_solver=steady_state_solver, method=model.method)
 end
 
 function predictedarray_ad(r, data::RNAOnOffData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
@@ -1367,21 +1367,21 @@ function predictedarray_ad(r, data::RNAOnOffData, model::AbstractGeneTransitionM
     else
         p_true[1:data.nRNA]
     end
-    modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates; steady_state_solver=steady_state_solver)
+    modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates; steady_state_solver=steady_state_solver, method=model.method)
     return [modelOFF, modelON, histF]
 end
 
-function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype; steady_state_solver::Symbol=:augmented)
-    return predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)
+function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype; steady_state_solver::Symbol=:augmented, method=Tsit5())
+    return predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver, method=method)
 end
 
-function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:augmented)
+function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:augmented, method=Tsit5())
     M = make_mat_M(components.mcomponents, r)
-    return [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
+    return [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver, method=method)...]
 end
 
 # Yield-aware overload: solve at nRNA_true then apply binomial loss matrix
-function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA_obs, nRNA_true, yield_val; steady_state_solver::Symbol=:augmented)
+function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA_obs, nRNA_true, yield_val; steady_state_solver::Symbol=:augmented, method=Tsit5())
     M = make_mat_M(components.mcomponents, r)
     p_true = steady_state(M, components.mcomponents.nT, nalleles, nRNA_true; steady_state_solver=steady_state_solver)
     histRNA = if yield_val < 1.0
@@ -1390,10 +1390,10 @@ function predictedarray_ad(r, components::MTComponents, bins, reporter, dttype, 
     else
         p_true[1:nRNA_obs]
     end
-    return [histRNA; predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
+    return [histRNA; predictedarray_ad(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver, method=method)...]
 end
 
-function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype; steady_state_solver::Symbol=:default)
+function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype; steady_state_solver::Symbol=:default, method=Tsit5())
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = steady_state_vector(T; solver=steady_state_solver)
@@ -1405,16 +1405,16 @@ function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype; steady_s
         if Dtype == "OFF"
             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
             nonzeros = nonzero_rows(TD)
-            h = offtimePDF(bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+            h = offtimePDF(bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros), method)
         elseif Dtype == "ON"
             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
-            h = ontimePDF(bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
+            h = ontimePDF(bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss), method)
         elseif Dtype == "OFFG"
             TD = make_mat(tcomponents.elementsTD[i], r, G)
-            h = offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsG, pssG, collect(1:G)))
+            h = offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsG, pssG, collect(1:G)), method)
         elseif Dtype == "ONG"
             TD = make_mat(tcomponents.elementsTD[i], r, G)
-            h = ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsG, pssG))
+            h = ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsG, pssG), method)
         else
             error("Unknown Dtype: $Dtype")
         end
@@ -1424,7 +1424,7 @@ function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype; steady_s
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray_ad(r, G::Int, tcomponents, bins, onstates, dttype; steady_state_solver::Symbol=:augmented)
+function predictedarray_ad(r, G::Int, tcomponents, bins, onstates, dttype; steady_state_solver::Symbol=:augmented, method=Tsit5())
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = steady_state_vector(T; solver=steady_state_solver)
@@ -1435,19 +1435,19 @@ function predictedarray_ad(r, G::Int, tcomponents, bins, onstates, dttype; stead
         Dtype == "OFF" ? begin
             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
             nonzeros = nonzero_rows(TD)
-            offtimePDF(bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+            offtimePDF(bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros), method)
         end :
         Dtype == "ON" ? begin
             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
-            ontimePDF(bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
+            ontimePDF(bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss), method)
         end :
         Dtype == "OFFG" ? begin
             TD = make_mat(tcomponents.elementsTD[i], r, G)
-            offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsG, pssG, collect(1:G)))
+            offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsG, pssG, collect(1:G)), method)
         end :
         Dtype == "ONG" ? begin
             TD = make_mat(tcomponents.elementsTD[i], r, G)
-            ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsG, pssG))
+            ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsG, pssG), method)
         end :
         error("Unknown Dtype: $Dtype")
         for (i, Dtype) in enumerate(dttype)
@@ -1467,7 +1467,7 @@ function steady_state_dist(r, components, dt; steady_state_solver::Symbol=:defau
     return (pss=pss, pssG=pssG, dt=dt)
 end
 
-function predictedarray(r, components::TDComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default)
+function predictedarray(r, components::TDComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default, method=Tsit5())
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
     p = steady_state_dist(r, components, dt; steady_state_solver=steady_state_solver)
@@ -1475,35 +1475,35 @@ function predictedarray(r, components::TDComponents, bins, reporter, dttype; ste
     for i in eachindex(sojourn)
         if dt[i]
             TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
-            push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
+            push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG), method))
         else
             TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
-            push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
+            push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i]), method))
         end
     end
     hists
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray_ad(r, components::TDComponents, bins, reporter, dttype; steady_state_solver::Symbol=:augmented)
+function predictedarray_ad(r, components::TDComponents, bins, reporter, dttype; steady_state_solver::Symbol=:augmented, method=Tsit5())
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
     p = steady_state_dist(r, components, dt; steady_state_solver=steady_state_solver)
     [
         dt[i] ?
-            dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i]), sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)) :
-            dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i])[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i]))
+            dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i]), sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG), method) :
+            dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i])[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i]), method)
         for i in eachindex(sojourn)
     ]
 end
 
-function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:default)
+function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:default, method=Tsit5())
     M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
+    [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver, method=method)...]
 end
 
 # Yield-aware overload: solve at nRNA_true then apply binomial loss matrix
-function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA_obs, nRNA_true, yield_val; steady_state_solver::Symbol=:default)
+function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA_obs, nRNA_true, yield_val; steady_state_solver::Symbol=:default, method=Tsit5())
     M = make_mat_M(components.mcomponents, r)
     p_true = steady_state(M, components.mcomponents.nT, nalleles, nRNA_true; steady_state_solver=steady_state_solver)
     histRNA = if yield_val < 1.0
@@ -1512,11 +1512,11 @@ function predictedarray(r, components::MTComponents, bins, reporter, dttype, nal
     else
         p_true[1:nRNA_obs]
     end
-    [histRNA; predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
+    [histRNA; predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver, method=method)...]
 end
 
-function predictedarray(r, components::MTComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default)
-    predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)
+function predictedarray(r, components::MTComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default, method=Tsit5())
+    predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver, method=method)
 end
 
 function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt; steady_state_solver::Symbol=:default)
@@ -1536,21 +1536,21 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
 
-function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn, dt, nonzeros, bins)
+function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn, dt, nonzeros, bins, method=Tsit5())
     if dt
         if !haskey(cache.TC, dt)
             cache.TC[dt] = make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model)
             cache.pss[dt] = steady_state_vector(cache.TC[dt]; solver=cache.steady_state_solver)
         end
         TCD = make_mat_TCD(cache.TC[dt], sojourn)
-        return dwelltimePDF(bins, TCD, sojourn, init_S(sojourn, cache.TC[dt], cache.pss[dt]))
+        return dwelltimePDF(bins, TCD, sojourn, init_S(sojourn, cache.TC[dt], cache.pss[dt]), method)
     else
         if !haskey(cache.TC, dt)
             cache.TC[dt] = make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
             cache.pss[dt] = steady_state_vector(cache.TC[dt]; solver=cache.steady_state_solver)
         end
         TCD = make_mat_TCD(cache.TC[dt], sojourn)
-        return dwelltimePDF(bins, TCD[nonzeros, nonzeros], nonzero_states(sojourn, nonzeros), init_S(sojourn, cache.TC[dt], cache.pss[dt], nonzeros))
+        return dwelltimePDF(bins, TCD[nonzeros, nonzeros], nonzero_states(sojourn, nonzeros), init_S(sojourn, cache.TC[dt], cache.pss[dt], nonzeros), method)
     end
 end
 
@@ -1561,7 +1561,7 @@ function empty_cache!(cache)
     end
 end
 
-function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype; steady_state_solver::Symbol=:default)
+function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype; steady_state_solver::Symbol=:default, method=Tsit5())
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
@@ -1572,7 +1572,7 @@ function predictedarray(r, coupling_strength, components::TCoupledComponents{Vec
         dt = occursin.("G", dttype[α])
         h = Vector[]
         for i in eachindex(sojourn[α])
-            hdt = compute_dwelltime!(cache, α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α][i], dt[i], nonzeros[α][i], bins[α][i])
+            hdt = compute_dwelltime!(cache, α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α][i], dt[i], nonzeros[α][i], bins[α][i], method)
             push!(h, hdt)
         end
         push!(hists, h)
@@ -1584,7 +1584,7 @@ end
 # Full stack dwell-time prediction.
 # r::Vector{Vector{Float64}} (per-unit rates), coupling_strength::Vector{Float64} (γ values).
 # Sojourn sets come from reporter (same pattern as TDComponents); components store filtered elements.
-function predictedarray(r, coupling_strength, components::TDCoupledFullComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default)
+function predictedarray(r, coupling_strength, components::TDCoupledFullComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default, method=Tsit5())
     sojourn_full, _ = reporter
     coupling_rates = [coupling_strength[k] * r[components.targets[k][1]][components.targets[k][2]]
                       for k in eachindex(components.targets)]
@@ -1601,7 +1601,7 @@ function predictedarray(r, coupling_strength, components::TDCoupledFullComponent
             s = sum(init)
             (iszero(s) || !isfinite(s)) && continue
             init = init / s
-            push!(h, dwelltimePDF(bins[α][i], TCD[soj, soj], 1:length(soj), init))
+            push!(h, dwelltimePDF(bins[α][i], TCD[soj, soj], 1:length(soj), init, method))
         end
         push!(hists, h)
     end
@@ -1609,7 +1609,7 @@ function predictedarray(r, coupling_strength, components::TDCoupledFullComponent
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray_ad(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype; steady_state_solver::Symbol=:augmented)
+function predictedarray_ad(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype; steady_state_solver::Symbol=:augmented, method=Tsit5())
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
@@ -1618,7 +1618,7 @@ function predictedarray_ad(r, coupling_strength, components::TCoupledComponents{
         [
             compute_dwelltime!(
                 CoupledDTCache(Dict(), Dict(), steady_state_solver), α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model,
-                sojourn[α][i], occursin("G", dttype[α][i]), nonzeros[α][i], bins[α][i]
+                sojourn[α][i], occursin("G", dttype[α][i]), nonzeros[α][i], bins[α][i], method
             )
             for i in eachindex(sojourn[α])
         ]

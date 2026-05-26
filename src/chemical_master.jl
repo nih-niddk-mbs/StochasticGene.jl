@@ -148,10 +148,10 @@ ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method=Tsi
 
 offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method=Tsit5()) = dwelltimePDF(tin, TI, onstates, SIinit, method)
 
-function offonPDF(t::Vector, r::Vector, T::AbstractMatrix, TA::AbstractMatrix, TI::AbstractMatrix, nT::Int, elementsT::Vector, onstates::Vector; steady_state_solver::Symbol=:default)
+function offonPDF(t::Vector, r::Vector, T::AbstractMatrix, TA::AbstractMatrix, TI::AbstractMatrix, nT::Int, elementsT::Vector, onstates::Vector; steady_state_solver::Symbol=:default, method=Tsit5())
     pss = steady_state_vector(T; solver=steady_state_solver)
     nonzeros = nonzero_rows(TI)
-    offtimePDF(t, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), init_SI(r, onstates, elementsT, pss, nonzeros)), ontimePDF(t, TA, off_states(nT, onstates), init_SA(r, onstates, elementsT, pss))
+    offtimePDF(t, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), init_SI(r, onstates, elementsT, pss, nonzeros), method), ontimePDF(t, TA, off_states(nT, onstates), init_SA(r, onstates, elementsT, pss), method)
 end
 
 """
@@ -318,7 +318,18 @@ time_evolve(t,M::Matrix,Sinit::Vector)
 
 Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
 """
+function _time_evolve_method(method)
+    if method isa Tuple
+        return _time_evolve_method(first(method))
+    elseif method isa Integer
+        return method == 1 ? Tsit5() : nothing
+    else
+        return method
+    end
+end
+
 function time_evolve(t, Q::AbstractMatrix, S0::Vector, method)
+    method = _time_evolve_method(method)
     if isnothing(method)
         return time_evolve_eig(t, Q, S0)
     else
@@ -861,5 +872,3 @@ function solve_vector(A::Matrix, b::Vector, th=1e-16, tol=1e-1)
     end
     return x[:, 1] # return as vector
 end
-
-

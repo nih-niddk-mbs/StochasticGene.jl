@@ -748,7 +748,7 @@ Options for `run_nuts` (NUTS/AdvancedHMC).
 - `verbose`, `progress`: passed to AdvancedHMC.sample (`progress` defaults to `true`, enabling AdvancedHMC’s ProgressMeter sampling bar; set `nuts_progress=false` in [`fit`](@ref) / run-spec when running many parallel chains)
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
-- `likelihood_executor::Symbol`: likelihood track for AD-friendly modalities (default [`HMM_STACK_AD`](@ref)).
+- `likelihood_executor::Symbol`: likelihood track for modalities with dual implementations (`:fast` for finite-difference NUTS, [`HMM_STACK_AD`](@ref) for AD gradients).
 - `gradient_checkpoint_length::Union{Nothing,Int}`: optional frame chunk size for reverse-mode through long trace likelihoods.
 """
 struct NUTSOptions <: Options
@@ -768,7 +768,7 @@ end
 function NUTSOptions(;
     n_samples=100, n_adapts=100, δ=0.8, gradient=:finite, fd_ε=1e-5, verbose=true, progress=true,
     device::Symbol=:cpu, parallel::Symbol=:single,
-    likelihood_executor::Symbol=HMM_STACK_AD,
+    likelihood_executor::Symbol=(gradient === :finite ? HMM_STACK_MH : HMM_STACK_AD),
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
     max_depth=nothing,  # unused here; kept for benchmark/API compatibility with AdvancedHMC-style kwargs
 )
