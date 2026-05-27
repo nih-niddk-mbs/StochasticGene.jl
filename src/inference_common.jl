@@ -78,6 +78,7 @@ function _nuts_options_progress(options::NUTSOptions, progress::Bool)
         fd_ε=options.fd_ε,
         verbose=options.verbose,
         progress=progress,
+        max_depth=options.max_depth,
         device=options.device,
         parallel=options.parallel,
         likelihood_executor=options.likelihood_executor,

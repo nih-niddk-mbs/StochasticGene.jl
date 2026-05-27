@@ -913,7 +913,7 @@ end
 # Keywords accepted on positional `fit(...; kw...)` and forwarded into [`make_structures`](@ref) (then [`load_options`](@ref)).
 const _MAKE_STRUCTURES_OPTION_KW = (
     :inference_method, :device, :parallel, :parallelism, :gradient,
-    :n_mc, :maxiter, :n_samples, :n_adapts, :nuts_delta, :δ, :fd_ε, :nuts_fd_ε,
+    :n_mc, :maxiter, :n_samples, :n_adapts, :nuts_delta, :δ, :fd_ε, :nuts_fd_ε, :max_depth, :nuts_max_depth,
     :verbose, :progress, :nuts_verbose, :nuts_progress,
     :time_limit, :advi_time_limit, :σ_floor, :advi_σ_floor, :init_s_raw, :advi_init_s_raw,
     :advi_verbose, :advi_n_mc, :zygote_trace,
@@ -1217,6 +1217,8 @@ function load_options(run0::AbstractDict)
         fd_ε = Float64(get(run, :fd_ε, get(run, :nuts_fd_ε, 1e-5)))
         verbose = Bool(get(run, :verbose, get(run, :nuts_verbose, true)))
         progress = Bool(get(run, :progress, get(run, :nuts_progress, true)))
+        max_depth = get(run, :max_depth, get(run, :nuts_max_depth, nuts_defaults.max_depth))
+        max_depth = max_depth === nothing ? nothing : Int(max_depth)
         g = if gradient === nothing
             :finite
         elseif gradient === :forward
@@ -1242,6 +1244,7 @@ function load_options(run0::AbstractDict)
             fd_ε=fd_ε,
             verbose=verbose,
             progress=progress,
+            max_depth=max_depth,
             device=device,
             parallel=parallel,
             likelihood_executor=lik_nuts,
@@ -4256,6 +4259,7 @@ function print_inference_options_info(options::NUTSOptions)
     println("  n_samples: ", options.n_samples, ", n_adapts: ", options.n_adapts, ", δ: ", options.δ, ", gradient: ", options.gradient,
         ", fd_ε: ", options.fd_ε)
     println("  verbose: ", options.verbose, ", progress: ", options.progress, " (ProgressMeter bar when true and nchains==1)")
+    println("  max_depth: ", options.max_depth === nothing ? "default" : options.max_depth)
     println("  device: ", options.device, ", parallel: ", options.parallel, ", likelihood_executor: ", options.likelihood_executor,
         ", gradient_checkpoint_length: ", options.gradient_checkpoint_length === nothing ? "default" : options.gradient_checkpoint_length)
     return nothing

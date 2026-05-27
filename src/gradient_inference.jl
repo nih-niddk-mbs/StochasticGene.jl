@@ -286,7 +286,12 @@ function run_nuts(
             throw(_nuts_start_failure_error("step-size search", err, θ0, options))
         end
         integrator = Leapfrog(ϵ)
-        kernel = HMCKernel(Trajectory{MultinomialTS}(integrator, GeneralisedNoUTurn()))
+        termination = if options.max_depth === nothing
+            GeneralisedNoUTurn()
+        else
+            GeneralisedNoUTurn(max_depth=options.max_depth)
+        end
+        kernel = HMCKernel(Trajectory{MultinomialTS}(integrator, termination))
         adaptor = StanHMCAdaptor(MassMatrixAdaptor(metric), StepSizeAdaptor(options.δ, integrator))
 
         samples_θ, st = try

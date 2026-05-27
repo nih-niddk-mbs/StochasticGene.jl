@@ -746,6 +746,7 @@ Options for `run_nuts` (NUTS/AdvancedHMC).
 - `gradient`: :finite (default), :ForwardDiff, :Zygote
 - `fd_ε`: finite-difference step when `gradient === :finite`
 - `verbose`, `progress`: passed to AdvancedHMC.sample (`progress` defaults to `true`, enabling AdvancedHMC’s ProgressMeter sampling bar; set `nuts_progress=false` in [`fit`](@ref) / run-spec when running many parallel chains)
+- `max_depth`: optional NUTS tree-depth cap; `nothing` uses AdvancedHMC's default
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
 - `likelihood_executor::Symbol`: likelihood track for modalities with dual implementations (`:fast` for finite-difference NUTS, [`HMM_STACK_AD`](@ref) for AD gradients).
@@ -759,6 +760,7 @@ struct NUTSOptions <: Options
     fd_ε::Float64
     verbose::Bool
     progress::Bool
+    max_depth::Union{Nothing,Int}
     device::Symbol  # :cpu, :gpu
     parallel::Symbol  # :single, :threaded, :distributed
     likelihood_executor::Symbol
@@ -770,10 +772,11 @@ function NUTSOptions(;
     device::Symbol=:cpu, parallel::Symbol=:single,
     likelihood_executor::Symbol=(gradient === :finite ? HMM_STACK_MH : HMM_STACK_AD),
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
-    max_depth=nothing,  # unused here; kept for benchmark/API compatibility with AdvancedHMC-style kwargs
+    max_depth=nothing,
 )
     gck = gradient_checkpoint_length === nothing ? nothing : Int(gradient_checkpoint_length)
-    NUTSOptions(n_samples, n_adapts, Float64(δ), gradient, Float64(fd_ε), verbose, progress, device, parallel, likelihood_executor, gck)
+    md = max_depth === nothing ? nothing : Int(max_depth)
+    NUTSOptions(n_samples, n_adapts, Float64(δ), gradient, Float64(fd_ε), verbose, progress, md, device, parallel, likelihood_executor, gck)
 end
 
 """
