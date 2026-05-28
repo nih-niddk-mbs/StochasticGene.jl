@@ -522,6 +522,23 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         end
     end
 
+    @testset "coupled CSV comma-token parser" begin
+        conns, gammas, ties, modes = StochasticGene.csv_row_to_connections_simple(
+            "11,Rsum1",
+            "<0,>0",
+            "",
+            "",
+            "23",
+            ">0",
+            (3, 3),
+            (3, 3),
+        )
+        @test conns == [(1, 1, 2, 1), (1, 4, 2, 1), (1, 5, 2, 1), (1, 6, 2, 1), (2, 2, 1, 3)]
+        @test gammas == [-0.1, 0.1, 0.1, 0.1, 0.1]
+        @test modes == [:inhibit, :activate, :activate, :activate, :activate]
+        @test ties == [[2, 3, 4]]
+    end
+
     @testset "stage-native make_fitscript helpers" begin
         mktempdir() do dir
             csv_path = joinpath(dir, "keys.csv")

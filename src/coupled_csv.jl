@@ -167,18 +167,27 @@ function csv_row_to_connections_simple(e1_states, e1_sign, e2_states, e2_sign, g
     function _append_direction!(states, sign, β, α)
         s = strip(string(states))
         isempty(s) && return
-        conns_dir = _parse_code(s, β, α)
-        isempty(conns_dir) && return
-        mode = parse_coupling_sign_csv(sign)
-        γ = default_coupling_gamma_csv(mode)
-        len_before = length(connections)
-        append!(connections, conns_dir)
-        append!(gammas, fill(γ, length(conns_dir)))
-        append!(modes, fill(mode, length(conns_dir)))
-        if startswith(s, "R") && !startswith(s, "Rany") && !startswith(s, "Rsum")
-            push!(tie_groups, collect(len_before + 1:len_before + length(conns_dir)))
-        elseif tie_rsum && startswith(s, "Rsum") && length(conns_dir) > 1
-            push!(tie_groups, collect(len_before + 1:len_before + length(conns_dir)))
+        tokens = [strip(string(t)) for t in split(s, ',')]
+        filter!(!isempty, tokens)
+        isempty(tokens) && return
+        signs = [strip(string(t)) for t in split(strip(string(sign)), ',')]
+        if length(signs) != 1 && length(signs) != length(tokens)
+            throw(ArgumentError("sign count does not match state token count for states=$(repr(states)), sign=$(repr(sign))"))
+        end
+        for (j, token) in enumerate(tokens)
+            conns_dir = _parse_code(token, β, α)
+            isempty(conns_dir) && continue
+            mode = parse_coupling_sign_csv(length(signs) == 1 ? signs[1] : signs[j])
+            γ = default_coupling_gamma_csv(mode)
+            len_before = length(connections)
+            append!(connections, conns_dir)
+            append!(gammas, fill(γ, length(conns_dir)))
+            append!(modes, fill(mode, length(conns_dir)))
+            if startswith(token, "R") && !startswith(token, "Rany") && !startswith(token, "Rsum")
+                push!(tie_groups, collect(len_before + 1:len_before + length(conns_dir)))
+            elseif tie_rsum && startswith(token, "Rsum") && length(conns_dir) > 1
+                push!(tie_groups, collect(len_before + 1:len_before + length(conns_dir)))
+            end
         end
     end
 
