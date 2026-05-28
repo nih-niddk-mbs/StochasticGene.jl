@@ -55,6 +55,13 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test opts_warmup_alias.n_adapts == 222
     end
 
+    @testset "coupling transforms support ForwardDiff" begin
+        @test isfinite(StochasticGene.ForwardDiff.derivative(StochasticGene.coupling_inhibitory_inv, 0.2))
+        @test isfinite(StochasticGene.ForwardDiff.derivative(StochasticGene.coupling_inhibitory_fwd, -0.2))
+        @test isfinite(StochasticGene.ForwardDiff.derivative(x -> StochasticGene.logit_range(x, -1.0, 1.0), 0.2))
+        @test isfinite(StochasticGene.ForwardDiff.derivative(y -> StochasticGene.invlogit_range(y, -1.0, 1.0), 0.2))
+    end
+
     @testset "transient RNA closure" begin
         transitions = ([1, 2], [2, 1])
         G = 2

@@ -1860,7 +1860,9 @@ The logit transform is defined as `log(x) - log(1 - x)`.
 - `Float64` or `Array`: The logit-transformed value or array.
 """
 logit(x::Float64) = log(x) - log(1 - x)
+logit(x::Real) = log(x) - log(one(x) - x)
 logit(x::Array) = log.(x) .- log.(1 .- x)
+logit(x::AbstractArray) = logit.(x)
 
 """
     invlogit(x::Float64)
@@ -1888,7 +1890,9 @@ The inverse logit transform is defined as `1 / (1 + exp(-x))`.
 - `Float64` or `Array`: The inverse logit-transformed value or array.
 """
 invlogit(x::Float64) = 1 / (1 + exp(-x))
+invlogit(x::Real) = inv(one(x) + exp(-x))
 invlogit(x::Array) = 1 ./ (1 .+ exp.(-x))
+invlogit(x::AbstractArray) = invlogit.(x)
 
 """
     logit_range(x, a, b)
@@ -1897,9 +1901,13 @@ invlogit(x::Array) = 1 ./ (1 .+ exp.(-x))
 Map (a, b) ↔ ℝ via logit on (0, 1): forward maps x ∈ (a, b) to y = logit((x - a) / (b - a)); inverse maps y to a + (b - a) * invlogit(y).
 """
 logit_range(x::Float64, a::Float64, b::Float64) = logit((x - a) / (b - a))
+logit_range(x::Real, a::Real, b::Real) = logit((x - a) / (b - a))
 logit_range(x::Array, a::Float64, b::Float64) = logit.((x .- a) ./ (b - a))
+logit_range(x::AbstractArray, a::Real, b::Real) = logit_range.(x, a, b)
 invlogit_range(y::Float64, a::Float64, b::Float64) = a + (b - a) * invlogit(y)
+invlogit_range(y::Real, a::Real, b::Real) = a + (b - a) * invlogit(y)
 invlogit_range(y::Array, a::Float64, b::Float64) = a .+ (b - a) .* invlogit.(y)
+invlogit_range(y::AbstractArray, a::Real, b::Real) = invlogit_range.(y, a, b)
 
 """
     coupling_inhibitory_fwd(x)
@@ -1908,9 +1916,13 @@ invlogit_range(y::Array, a::Float64, b::Float64) = a .+ (b - a) .* invlogit.(y)
 Transform for inhibitory coupling γ ∈ (-1, 0): forward = logit(γ + 1), inverse = invlogit(y) - 1.
 """
 coupling_inhibitory_fwd(x::Float64) = logit(x + 1.0)
+coupling_inhibitory_fwd(x::Real) = logit(x + one(x))
 coupling_inhibitory_fwd(x::Array) = logit.(x .+ 1.0)
+coupling_inhibitory_fwd(x::AbstractArray) = coupling_inhibitory_fwd.(x)
 coupling_inhibitory_inv(y::Float64) = invlogit(y) - 1.0
+coupling_inhibitory_inv(y::Real) = invlogit(y) - one(y)
 coupling_inhibitory_inv(y::Array) = invlogit.(y) .- 1.0
+coupling_inhibitory_inv(y::AbstractArray) = coupling_inhibitory_inv.(y)
 
 """
     logsumexp(u::Array, v::Array)
