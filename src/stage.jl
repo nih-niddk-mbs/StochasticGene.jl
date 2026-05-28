@@ -901,6 +901,173 @@ function make_fitscript(
     return scriptpath
 end
 
+function _stage_spec_to_dict(spec)
+    if spec isa NamedTuple
+        return Dict{Symbol,Any}(k => getproperty(spec, k) for k in keys(spec))
+    elseif spec isa AbstractDict
+        return Dict{Symbol,Any}(Symbol(k) => v for (k, v) in pairs(spec))
+    else
+        throw(ArgumentError("run specs must be Dict/NamedTuple values, got $(typeof(spec))"))
+    end
+end
+
+function _stage_spec_string(spec::Dict{Symbol,Any}, key::Symbol, default::AbstractString)::String
+    v = get(spec, key, default)
+    v === nothing && return default
+    return String(v)
+end
+
+function _stage_specs_by_key(specs_by_key::AbstractDict; key_field::Symbol=:key)
+    out = Dict{String,Dict{Symbol,Any}}()
+    for (raw_key, raw_spec) in pairs(specs_by_key)
+        spec = _stage_spec_to_dict(raw_spec)
+        key = String(raw_key)
+        spec_key = get(spec, key_field, key)
+        if spec_key !== nothing && !isempty(String(spec_key)) && String(spec_key) != key
+            throw(ArgumentError("spec key $(repr(spec_key)) does not match dictionary key $(repr(key))"))
+        end
+        spec[key_field] = key
+        out[key] = spec
+    end
+    return out
+end
+
+function _stage_specs_by_key(specs::AbstractVector; key_field::Symbol=:key)
+    out = Dict{String,Dict{Symbol,Any}}()
+    for raw_spec in specs
+        spec = _stage_spec_to_dict(raw_spec)
+        haskey(spec, key_field) || throw(ArgumentError("vector run specs must contain $(repr(key_field))"))
+        key = String(spec[key_field])
+        isempty(key) && throw(ArgumentError("run spec key must be non-empty"))
+        out[key] = spec
+    end
+    return out
+end
+
+function _stage_write_run_spec_file(key::AbstractString, spec::Dict{Symbol,Any}; resultfolder::AbstractString, root::AbstractString)
+    rf = String(resultfolder)
+    isempty(rf) && throw(ArgumentError("resultfolder must be provided in the spec or as a keyword"))
+    rr = folder_path(rf, String(root), "results"; make=true)
+    toml_path = joinpath(rr, "info_" * sanitize_for_filename(String(key)) * ".toml")
+    open(toml_path, "w") do io
+        write(io, "# StochasticGene key-based run spec\n")
+        write(io, "# Full Julia values are stored in the companion .jld2 file.\n")
+        write(io, "key = " * repr(String(key)) * "\n")
+    end
+    write_run_spec_jld2(toml_path, spec)
+    return (; toml=toml_path, jld2=info_jld2_path(toml_path))
+end
+
+"""
+    stage_write_run_specs(specs; resultfolder="", root=".", filedir=".", juliafile="fitscript",
+        commandfile=nothing, swarmfile=nothing, nchains=2, nthreads=1, ...)
+
+Persist key-based run specs and emit runnable key scripts.
+
+`specs` may be either a dictionary keyed by model key or a vector of Dict/NamedTuple specs containing
+`:key`. Each spec is written as `results/<resultfolder>/info_<key>.toml` plus the companion `.jld2`
+consumed by `fit(; key=...)`. Scripts are emitted with the existing [`make_fitscript`](@ref), so legacy
+`write_fitfile_key` behavior and overrides remain unchanged.
+
+When `commandfile` is provided, a scheduler-agnostic command file is written. When `swarmfile` is
+provided, `<swarmfile>.swarm` is written with the same command format.
+"""
+function stage_write_run_specs(
+    specs;
+    resultfolder::AbstractString="",
+    root::AbstractString=".",
+    filedir::AbstractString=".",
+    juliafile::String="fitscript",
+    src::AbstractString="",
+    commandfile::Union{Nothing,AbstractString}=nothing,
+    swarmfile::Union{Nothing,AbstractString}=nothing,
+    nchains::Integer=2,
+    nthreads::Integer=1,
+    nprocs::Union{Nothing,Integer}=nothing,
+    julia_bin::AbstractString="julia",
+    project::AbstractString="",
+    sysimage::AbstractString="",
+    extra_flags::AbstractVector{<:AbstractString}=String[],
+    key_field::Symbol=:key,
+    key_order=nothing,
+    write_specs::Bool=true,
+    write_scripts::Bool=true,
+    kwargs...,
+)
+    specmap = _stage_specs_by_key(specs; key_field=key_field)
+    keys_ordered = if key_order === nothing
+        sort!(collect(keys(specmap)))
+    else
+        [String(k) for k in key_order]
+    end
+    for k in keys_ordered
+        haskey(specmap, k) || throw(ArgumentError("key_order contains unknown key $(repr(k))"))
+    end
+
+    spec_files = NamedTuple{(:key, :toml, :jld2),Tuple{String,String,String}}[]
+    scripts = String[]
+    command_scripts = String[]
+    for k in keys_ordered
+        spec = specmap[k]
+        rf = _stage_spec_string(spec, :resultfolder, String(resultfolder))
+        rt = _stage_spec_string(spec, :root, String(root))
+        if write_specs
+            paths = _stage_write_run_spec_file(k, spec; resultfolder=rf, root=rt)
+            push!(spec_files, (; key=k, toml=paths.toml, jld2=paths.jld2))
+        end
+        if write_scripts
+            script = make_fitscript(
+                k;
+                juliafile=juliafile,
+                filedir=filedir,
+                src=src,
+                resultfolder=rf,
+                root=rt,
+                kwargs...,
+            )
+            push!(scripts, script)
+            push!(command_scripts, basename(script))
+        end
+    end
+
+    commandfiles = String[]
+    np = nprocs === nothing ? Int(nchains) : Int(nprocs)
+    if commandfile !== nothing
+        push!(
+            commandfiles,
+            make_commandfile(
+                command_scripts;
+                commandfile=String(commandfile),
+                filedir=filedir,
+                julia_bin=julia_bin,
+                nthreads=nthreads,
+                nprocs=np,
+                project=project,
+                sysimage=sysimage,
+                extra_flags=extra_flags,
+            ),
+        )
+    end
+    if swarmfile !== nothing
+        sfile = endswith(String(swarmfile), ".swarm") ? String(swarmfile) : String(swarmfile) * ".swarm"
+        push!(
+            commandfiles,
+            make_commandfile(
+                command_scripts;
+                commandfile=sfile,
+                filedir=filedir,
+                julia_bin=julia_bin,
+                nthreads=nthreads,
+                nprocs=np,
+                project=project,
+                sysimage=sysimage,
+                extra_flags=extra_flags,
+            ),
+        )
+    end
+    return (; keys=keys_ordered, specs=spec_files, scripts=scripts, commandfiles=commandfiles)
+end
+
 """
     make_fitscripts_from_csv(csv_path; key_col="Model_name", skip_empty=true, juliafile="fitscript", filedir=".", src="", kwargs...) -> Vector{String}
 
@@ -1156,4 +1323,3 @@ function make_fitscripts_and_swarm_from_csv(
     )
     return (; swarm=out.commandfile, scripts=out.scripts)
 end
-

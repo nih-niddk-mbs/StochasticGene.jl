@@ -613,6 +613,39 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             )
             @test isfile(both_cmd.commandfile)
             @test length(both_cmd.scripts) == 2
+
+            staged_root = joinpath(dir, "stage_root")
+            spec = Dict(
+                :key => "toy-model",
+                :resultfolder => "keyed-results",
+                :root => staged_root,
+                :datatype => "tracejoint",
+                :gene => "MYC",
+                :inference_method => :advi,
+            )
+            staged = stage_write_run_specs(
+                Dict("toy-model" => spec);
+                filedir=joinpath(dir, "stage_emit"),
+                juliafile="fitkey",
+                swarmfile="fit",
+                nchains=4,
+                nthreads=1,
+            )
+            @test staged.keys == ["toy-model"]
+            @test length(staged.specs) == 1
+            @test isfile(staged.specs[1].toml)
+            @test isfile(staged.specs[1].jld2)
+            loaded = StochasticGene.read_run_spec(staged.specs[1].toml)
+            @test loaded[:key] == "toy-model"
+            @test loaded[:inference_method] == :advi
+            @test isfile(only(staged.scripts))
+            script_text = read(only(staged.scripts), String)
+            @test occursin("fit(; key=\"toy-model\"", script_text)
+            @test occursin("resultfolder=\"keyed-results\"", script_text)
+            @test isfile(only(staged.commandfiles))
+            swarm_text = read(only(staged.commandfiles), String)
+            @test occursin("-p 4", swarm_text)
+            @test occursin("fitkey_toy-model.jl", swarm_text)
         end
     end
 
