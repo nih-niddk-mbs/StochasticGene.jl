@@ -229,15 +229,18 @@ end
 function _format_fit_override(k::Symbol, v)::Union{String,Nothing}
     v === nothing && return nothing
     v isa AbstractString && return "$k=\"$(escape_string(String(v)))\""
-    v isa Real && return "$k=$v"
+    v isa Symbol && return "$k=$(repr(v))"
     v isa Bool && return "$k=$v"
+    v isa Real && return "$k=$v"
+    (v isa Tuple || v isa NamedTuple || v isa AbstractVector) && return "$k=$(repr(v))"
     return nothing
 end
 
 """
     write_fitfile_key(fitfile, key::String; src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, ...)
 
-Writes a script that runs `fit(; key=key, ...)` with optional overrides. Only String, Real, and Bool overrides are written.
+Writes a script that runs `fit(; key=key, ...)` with optional overrides. Script-safe scalar,
+symbol, tuple, named-tuple, and vector overrides are written.
 """
 function write_fitfile_key(fitfile, key::String; src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, kwargs...)
     f = open(fitfile, "w")

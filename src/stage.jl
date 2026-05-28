@@ -958,6 +958,30 @@ function _stage_write_run_spec_file(key::AbstractString, spec::Dict{Symbol,Any};
     return (; toml=toml_path, jld2=info_jld2_path(toml_path))
 end
 
+const _STAGE_DEFAULT_SCRIPT_OVERRIDE_KEYS = (
+    :nchains, :datatype, :datapath, :gene, :cell, :datacond,
+    :G, :R, :S, :insertstep, :hierarchical,
+    :maxtime, :propcv, :ratetype, :samplesteps, :warmupsteps,
+    :writesamples, :prerun, :splicetype, :datacol,
+    :inference_method, :gradient, :parallel, :device,
+    :n_samples, :n_adapts, :nuts_delta, :fd_ε, :max_depth, :nuts_verbose, :nuts_progress,
+    :maxiter, :n_mc, :σ_floor, :init_s_raw, :advi_verbose, :advi_time_limit, :zygote_trace,
+    :likelihood_executor, :gradient_checkpoint_length,
+)
+
+function _stage_script_overrides_from_spec(spec::Dict{Symbol,Any}, keys)
+    out = Dict{Symbol,Any}()
+    keys === nothing && return out
+    for raw_key in keys
+        k = Symbol(raw_key)
+        haskey(spec, k) || continue
+        v = spec[k]
+        v === nothing && continue
+        out[k] = v
+    end
+    return out
+end
+
 """
     stage_write_run_specs(specs; resultfolder="", root=".", filedir=".", juliafile="fitscript",
         commandfile=nothing, swarmfile=nothing, nchains=2, nthreads=1, ...)
@@ -992,6 +1016,7 @@ function stage_write_run_specs(
     key_order=nothing,
     write_specs::Bool=true,
     write_scripts::Bool=true,
+    script_override_keys=_STAGE_DEFAULT_SCRIPT_OVERRIDE_KEYS,
     kwargs...,
 )
     specmap = _stage_specs_by_key(specs; key_field=key_field)
@@ -1016,6 +1041,10 @@ function stage_write_run_specs(
             push!(spec_files, (; key=k, toml=paths.toml, jld2=paths.jld2))
         end
         if write_scripts
+            script_kwargs = merge(
+                _stage_script_overrides_from_spec(spec, script_override_keys),
+                Dict{Symbol,Any}(pairs(kwargs)),
+            )
             script = make_fitscript(
                 k;
                 juliafile=juliafile,
@@ -1023,7 +1052,7 @@ function stage_write_run_specs(
                 src=src,
                 resultfolder=rf,
                 root=rt,
-                kwargs...,
+                script_kwargs...,
             )
             push!(scripts, script)
             push!(command_scripts, basename(script))

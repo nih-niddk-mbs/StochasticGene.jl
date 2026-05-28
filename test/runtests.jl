@@ -639,6 +639,8 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                 :datatype => "tracejoint",
                 :gene => "MYC",
                 :inference_method => :advi,
+                :maxtime => 123.0,
+                :propcv => 0.15,
             )
             staged = stage_write_run_specs(
                 Dict("toy-model" => spec);
@@ -659,6 +661,9 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             script_text = read(only(staged.scripts), String)
             @test occursin("fit(; key=\"toy-model\"", script_text)
             @test occursin("resultfolder=\"keyed-results\"", script_text)
+            @test occursin("inference_method=:advi", script_text)
+            @test occursin("maxtime=123.0", script_text)
+            @test occursin("propcv=0.15", script_text)
             @test isfile(only(staged.commandfiles))
             swarm_text = read(only(staged.commandfiles), String)
             @test occursin("-p 4", swarm_text)
