@@ -697,8 +697,10 @@ Options for Metropolis-Hastings MCMC.
 # Fields
 - `samplesteps::Int64`: Number of MCMC samples to collect.
 - `warmupsteps::Int64`: Number of warmup (burn-in) steps.
+- `sample_stride::Int64`: Number of MH proposal steps between stored posterior samples.
 - `maxtime::Float64`: Maximum allowed runtime (seconds).
 - `temp::Float64`: Temperature for MCMC.
+- `merge_max_memory::Int64`: Approximate byte budget for multi-chain merge/statistics arrays.
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
 - `gradient::Symbol`: Gradient type (:none, :finite, :ForwardDiff, :Zygote)
@@ -713,8 +715,10 @@ Options for Metropolis-Hastings MCMC.
 struct MHOptions <: Options
     samplesteps::Int64
     warmupsteps::Int64
+    sample_stride::Int64
     maxtime::Float64
     temp::Float64
+    merge_max_memory::Int64
     device::Symbol  # :cpu, :gpu
     parallel::Symbol  # :single, :threaded, :distributed
     gradient::Symbol
@@ -724,13 +728,20 @@ end
 
 function MHOptions(
     samplesteps::Integer, warmupsteps::Integer, maxtime::Real, temp::Real;
+    sample_stride::Integer=1,
+    merge_max_memory::Integer=48 * 1024^3,
     device::Symbol=:cpu, parallel::Symbol=:single, gradient::Symbol=:none,
     likelihood_executor::Symbol=HMM_STACK_MH,
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
 )
     gck = gradient_checkpoint_length === nothing ? nothing : Int(gradient_checkpoint_length)
+    stride = Int64(sample_stride)
+    stride > 0 || throw(ArgumentError("sample_stride must be positive, got $(repr(sample_stride))"))
+    merge_mem = Int64(merge_max_memory)
+    merge_mem > 0 || throw(ArgumentError("merge_max_memory must be positive, got $(repr(merge_max_memory))"))
     MHOptions(
-        Int64(samplesteps), Int64(warmupsteps), Float64(maxtime), Float64(temp),
+        Int64(samplesteps), Int64(warmupsteps), stride, Float64(maxtime), Float64(temp),
+        merge_mem,
         device, parallel, gradient, likelihood_executor, gck,
     )
 end

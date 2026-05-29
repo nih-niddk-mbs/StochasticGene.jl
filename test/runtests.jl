@@ -55,6 +55,19 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test opts_warmup_alias.n_adapts == 222
     end
 
+    @testset "MH thinning options" begin
+        opts = StochasticGene.load_options(Dict(:inference_method => :mh, :samplestep => 10, :merge_max_gb => 2))
+        @test opts isa StochasticGene.MHOptions
+        @test opts.sample_stride == 10
+        @test opts.merge_max_memory == 2 * 1024^3
+        @test_throws ArgumentError StochasticGene.MHOptions(1, 0, 1.0, 1.0; sample_stride=0)
+
+        fit = StochasticGene.Fit(reshape(collect(1.0:20.0), 2, 10), collect(1.0:10.0), [1.0, 2.0], 10.0, zeros(1), zeros(1), 0.0, 5, 10)
+        thinned = StochasticGene.memory_aware_thin([fit], 200)
+        @test thinned[1].param == fit.param[:, [1, 4, 7, 10]]
+        @test thinned[1].ll == fit.ll[[1, 4, 7, 10]]
+    end
+
     @testset "coupling transforms support ForwardDiff" begin
         @test isfinite(StochasticGene.ForwardDiff.derivative(StochasticGene.coupling_inhibitory_inv, 0.2))
         @test isfinite(StochasticGene.ForwardDiff.derivative(StochasticGene.coupling_inhibitory_fwd, -0.2))

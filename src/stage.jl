@@ -961,7 +961,7 @@ end
 const _STAGE_DEFAULT_SCRIPT_OVERRIDE_KEYS = (
     :nchains, :datatype, :datapath, :gene, :cell, :datacond,
     :G, :R, :S, :insertstep, :hierarchical,
-    :maxtime, :propcv, :ratetype, :samplesteps, :warmupsteps,
+    :maxtime, :propcv, :ratetype, :samplesteps, :warmupsteps, :sample_stride, :merge_max_memory, :merge_max_gb,
     :writesamples, :prerun, :splicetype, :datacol,
     :inference_method, :gradient, :parallel, :device,
     :n_samples, :n_adapts, :nuts_delta, :fd_ε, :max_depth, :nuts_verbose, :nuts_progress,

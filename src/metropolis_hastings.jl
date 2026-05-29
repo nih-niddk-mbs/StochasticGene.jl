@@ -159,7 +159,7 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionMod
             sd = run_chains(data, model, options, nchains)
             chain = extract_chain(sd)
             waic = pooled_waic(chain)
-            fits = merge_fit(chain)
+            fits = merge_fit(chain, options.merge_max_memory)
             stats = compute_stats(fits.param, model)
             rhat = vec(compute_rhat(chain))
             ess, geweke, mcse = compute_measures(chain)
@@ -468,11 +468,12 @@ Run the main MCMC sampling phase, collecting samples and statistics.
 - `proposalcv`: Initial proposal covariance or scale
 - `data`: Experimental data structure
 - `model`: Model structure
-- `samplesteps`: Number of MCMC samples to collect
+- `samplesteps`: Total number of MH sampling steps to run
 - `temp`: Temperature for MCMC
 - `t1`: Start time
 - `maxtime`: Maximum allowed time for sampling
 - `SLAB`: Slab size for dynamic array allocation (default: 10000)
+- `mh_options.sample_stride`: Store every `sample_stride`-th sample
 
 # Returns
 - `Fit`: Structure containing MCMC samples and statistics
@@ -484,14 +485,16 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     lppd = fill(-Inf, length(logpredictions))
     accepttotal = 0
     prior = logprior(param, model)
-    step = 0
+    stored = 0
+    total_step = 0
     diag_done = false
-    while step < samplesteps && time() - t1 < maxtime
-        step += 1
+    sample_stride = mh_options === nothing ? 1 : mh_options.sample_stride
+    while total_step < samplesteps && time() - t1 < maxtime
+        total_step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp; hmm_stack=hmm_stack, mh_options=mh_options)
 
-        # One-time diagnostic when acceptance is near zero after first 5000 steps
-        if !diag_done && step >= 5000 && accepttotal <= max(1, step ÷ 50000)
+        # One-time diagnostic when acceptance is near zero after first 5000 proposal steps.
+        if !diag_done && total_step >= 5000 && accepttotal <= max(1, total_step ÷ 50000)
             diag_done = true
             paramt_d, _ = proposal(d, proposalcv, model)
             if !instant_reject(paramt_d, model)
@@ -499,26 +502,31 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
                 llt_d, _ = _mh_loglikelihood(paramt_d, data, model, _mh_likelihood_options(mh_options, hmm_stack))
                 log_ratio_d = (llt_d + priort_d - ll - prior) / temp
                 Δ = isempty(param) ? 0.0 : maximum(abs.(paramt_d .- param))
-                @warn "Low acceptance diagnostic (step=$step, accept=$accepttotal): current ll=$ll, prior=$prior; proposed ll=$llt_d, prior=$priort_d; log_accept_ratio=$log_ratio_d; max|Δparam|=$Δ. If log_ratio is very negative or -Inf, proposals are far from posterior support (try smaller propcv or check prior/likelihood)."
+                @warn "Low acceptance diagnostic (step=$total_step, accept=$accepttotal): current ll=$ll, prior=$prior; proposed ll=$llt_d, prior=$priort_d; log_accept_ratio=$log_ratio_d; max|Δparam|=$Δ. If log_ratio is very negative or -Inf, proposals are far from posterior support (try smaller propcv or check prior/likelihood)."
             end
         end
 
-        if step > length(llout)
-            parout = hcat(parout, Matrix{Float64}(undef, length(param), SLAB))
-            resize!(llout, length(llout) + SLAB)
-        end
+        accepttotal += accept
 
         if ll > llml
             llml, parml = ll, param
         end
-        parout[:, step] = param
-        llout[step] = ll
-        accepttotal += accept
-        lppd, pwaic = update_waic(lppd, pwaic, logpredictions)
+
+        should_store = (total_step % sample_stride == 0) || (total_step == samplesteps) || (time() - t1 >= maxtime)
+        if should_store
+            stored += 1
+            if stored > length(llout)
+                parout = hcat(parout, Matrix{Float64}(undef, length(param), SLAB))
+                resize!(llout, length(llout) + SLAB)
+            end
+            parout[:, stored] = param
+            llout[stored] = ll
+            lppd, pwaic = update_waic(lppd, pwaic, logpredictions)
+        end
     end
-    pwaic = step > 1 ? pwaic[3] / (step - 1) : pwaic[3]
-    lppd .-= log(step)
-    Fit(parout[:, 1:step], llout[1:step], parml, llml, lppd, pwaic, prior, accepttotal, step)
+    pwaic = stored > 1 ? pwaic[3] / (stored - 1) : pwaic[3]
+    lppd .-= log(stored)
+    Fit(parout[:, 1:stored], llout[1:stored], parml, llml, lppd, pwaic, prior, accepttotal, total_step)
 end
 
 
@@ -1463,21 +1471,23 @@ function memory_aware_thin(fits::Vector{Fit}, max_memory::Int=48 * 1024^3)
     # First estimate total memory usage
     total_bytes = estimate_memory_usage(fits)
 
-    # If we're already below the limit, no need to thin
-    if total_bytes < max_memory
+    # Merging allocates a second set of arrays while the original chains are still live.
+    if 2 * total_bytes <= max_memory
         return fits
     end
-    @warn "Thinning chains to fit within memory limit."
+    @warn "Thinning chains before merge to fit within memory limit." total_mib=round(total_bytes / 1024^2; digits=2) max_mib=round(max_memory / 1024^2; digits=2)
 
-    # Calculate required thinning factor
-    required_thinning = ceil(Int, total_bytes / max_memory)
+    # Leave room for the merged arrays in addition to the per-chain arrays.
+    required_thinning = max(1, ceil(Int, 2 * total_bytes / max_memory))
 
     # Apply thinning to each chain
     thinned_fits = similar(fits)
     for i in 1:length(fits)
         f = fits[i]
-        param = f.param[:, 1:size(f.param, 2):required_thinning]
-        ll = f.ll[1:length(f.ll):required_thinning]
+        n = size(f.param, 2)
+        keep = n == 0 ? Int[] : unique!([collect(1:required_thinning:n); n])
+        param = f.param[:, keep]
+        ll = f.ll[keep]
         thinned_fits[i] = Fit(param, ll, f.parml, f.llml, f.lppd, f.pwaic, f.prior, f.accept, f.total)
     end
 

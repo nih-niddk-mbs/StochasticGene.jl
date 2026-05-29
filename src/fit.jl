@@ -59,6 +59,8 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `samplesteps::Int=1000000`: MH — posterior samples to collect; ADVI — maps to `maxiter` unless `maxiter` is set explicitly. Ignored by NUTS; use `n_samples` for NUTS.
+- `sample_stride::Int=1`: MH only — store every `sample_stride`-th posterior sample from the `samplesteps` total MH steps. Aliases: `samplestep`, `thin`, `thin_interval`, `thinning`, `sample_interval`, `sample_every`.
+- `merge_max_memory`: MH multi-chain merge/statistics memory budget in bytes. Alias `merge_max_gb` accepts GiB.
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `splicetype=""`: RNA pathway for GRS models, (e.g., "offeject" = spliced intron is not viable)
 - `temp=1.0`: MCMC temperature (**MH**); retained in the run dict for other methods for compatibility
@@ -1124,6 +1126,8 @@ Shared keys:
 - `inference_method`: `:mh` / [`INFERENCE_MH`](@ref), `:nuts` / [`INFERENCE_NUTS`](@ref), `:advi` / [`INFERENCE_ADVI`](@ref)
 - `samplesteps`: MH posterior samples; ADVI `maxiter` unless `maxiter` is set explicitly. Ignored by NUTS.
 - `warmupsteps`: MH warmup; accepted by NUTS as a compatibility alias for `n_adapts` only when `n_adapts` is not set
+- `sample_stride`: MH thinning interval; aliases are accepted for legacy/personal scripts. `samplesteps` remains the total MH sampling steps.
+- `merge_max_memory` / `merge_max_gb`: approximate memory budget for multi-chain merge/statistics arrays.
 - `device`: `:cpu` or `:gpu` (GPU paths may error if unsupported)
 - `parallel` (alias `parallelism`): `:single`, `:threaded`, `:distributed`
 - `gradient`: method-specific (`:none`/`:finite`/`:ForwardDiff`/`:Zygote`, with `:forward` accepted as `:ForwardDiff`)
@@ -1185,6 +1189,24 @@ function load_options(run0::AbstractDict)
 
     samplesteps = Int(get(run, :samplesteps, 1_000_000))
     warmupsteps = Int(get(run, :warmupsteps, 0))
+    sample_stride = Int(get(run, :sample_stride,
+        get(run, :samplestep,
+            get(run, :thin,
+                get(run, :thin_interval,
+                    get(run, :thinning,
+                        get(run, :sample_interval,
+                            get(run, :sample_every, 1))))))))
+    merge_max_memory = if haskey(run, :merge_max_memory) && run[:merge_max_memory] !== nothing
+        Int(run[:merge_max_memory])
+    elseif haskey(run, :stats_max_memory) && run[:stats_max_memory] !== nothing
+        Int(run[:stats_max_memory])
+    elseif haskey(run, :merge_max_gb) && run[:merge_max_gb] !== nothing
+        Int(ceil(Float64(run[:merge_max_gb]) * 1024^3))
+    elseif haskey(run, :stats_max_gb) && run[:stats_max_gb] !== nothing
+        Int(ceil(Float64(run[:stats_max_gb]) * 1024^3))
+    else
+        48 * 1024^3
+    end
     maxtime = Float64(get(run, :maxtime, 60.0))
     temp = Float64(get(run, :temp, 1.0))
 
@@ -1199,6 +1221,8 @@ function load_options(run0::AbstractDict)
         gh isa Symbol || throw(ArgumentError("MH gradient must be a Symbol or nothing, got $(repr(gh))"))
         return MHOptions(
             samplesteps, warmupsteps, maxtime, temp;
+            sample_stride=sample_stride,
+            merge_max_memory=merge_max_memory,
             device=device, parallel=parallel, gradient=gh,
             likelihood_executor=lik_mh,
             gradient_checkpoint_length=gck,
@@ -4248,7 +4272,8 @@ Print one block of inference-specific settings (MCMC vs NUTS vs ADVI) after the 
 """
 function print_inference_options_info(options::MHOptions)
     println("inference: Metropolis–Hastings (MH)")
-    println("  samplesteps: ", options.samplesteps, ", warmupsteps: ", options.warmupsteps, ", wall maxtime (s): ", options.maxtime, ", temperature: ", options.temp)
+    println("  samplesteps: ", options.samplesteps, ", warmupsteps: ", options.warmupsteps, ", sample_stride: ", options.sample_stride, ", wall maxtime (s): ", options.maxtime, ", temperature: ", options.temp)
+    println("  merge_max_memory: ", round(options.merge_max_memory / 1024^3; digits=2), " GiB")
     println("  device: ", options.device, ", parallel: ", options.parallel, ", likelihood_executor: ", options.likelihood_executor,
         ", gradient_checkpoint_length: ", options.gradient_checkpoint_length === nothing ? "default" : options.gradient_checkpoint_length)
     return nothing
