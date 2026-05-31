@@ -68,6 +68,14 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test thinned[1].ll == fit.ll[[1, 4, 7, 10]]
     end
 
+    @testset "info environment metadata includes package identity" begin
+        env = StochasticGene._stochasticgene_environment_info()
+        @test env["julia_version"] == string(VERSION)
+        @test env["stochasticgene_version"] == string(Base.pkgversion(StochasticGene))
+        @test env["stochasticgene_uuid"] == string(Base.PkgId(StochasticGene).uuid)
+        @test env["threads"] == Threads.nthreads()
+    end
+
     @testset "coupling transforms support ForwardDiff" begin
         @test isfinite(StochasticGene.ForwardDiff.derivative(StochasticGene.coupling_inhibitory_inv, 0.2))
         @test isfinite(StochasticGene.ForwardDiff.derivative(StochasticGene.coupling_inhibitory_fwd, -0.2))

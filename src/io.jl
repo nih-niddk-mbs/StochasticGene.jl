@@ -2510,6 +2510,26 @@ function write_info(file::String, fits, data, model, labels; run_spec=nothing)
     write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels)
 end
 
+function _stochasticgene_environment_info()
+    sg_version = try
+        v = Base.pkgversion(StochasticGene)
+        v === nothing ? "unknown" : string(v)
+    catch
+        "unknown"
+    end
+    sg_uuid = try
+        string(Base.PkgId(StochasticGene).uuid)
+    catch
+        "unknown"
+    end
+    return Dict(
+        "julia_version" => string(VERSION),
+        "stochasticgene_version" => sg_version,
+        "stochasticgene_uuid" => sg_uuid,
+        "threads" => Threads.nthreads(),
+    )
+end
+
 """
     write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
 
@@ -2548,7 +2568,7 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
         _write_toml_table(io, Dict("rate_labels" => rate_labels_vec, "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0), "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),), "  ")
         println(io, "")
         println(io, "[environment]")
-        _write_toml_table(io, Dict("julia_version" => string(VERSION), "threads" => Threads.nthreads()), "  ")
+        _write_toml_table(io, _stochasticgene_environment_info(), "  ")
     end
 end
 
@@ -4809,5 +4829,4 @@ function create_combined_files_h3_latent(outfolder::AbstractString;
     end
     outfiles
 end
-
 
