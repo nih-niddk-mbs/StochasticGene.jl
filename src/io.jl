@@ -1483,6 +1483,81 @@ function assemble_files(folder::String, files::Vector, outfile::String, header, 
     end
 end
 
+function key_resultfiles(folder::String, resultname::String)
+    files = get_resultfiles(folder, resultname)
+    filter(files) do file
+        stem, suffix = get_suffix(file)
+        suffix == "txt" && length(split(stem, "_")) == 2
+    end
+end
+
+function _key_summary_header(header)
+    h = copy(header)
+    h[1] = "Model"
+    return h
+end
+
+function assemble_files_key(folder::String, files::Vector, outfile::String, header, readfunction)
+    isempty(files) && return nothing
+    f = open(outfile, "w")
+    writedlm(f, header, ',')
+    for file in sort(files)
+        key_label = get_key(file)
+        r = readfunction(joinpath(folder, file))
+        writedlm(f, [key_label r], ',')
+    end
+    close(f)
+    return outfile
+end
+
+"""
+    assemble_rates_key(folder::String; outfile=joinpath(folder, "rates_key.csv"), readfunction=readml)
+
+Assemble key-based `rates_<key>.txt` files into one CSV, labeling each row by key.
+"""
+function assemble_rates_key(folder::String; outfile::String=joinpath(folder, "rates_key.csv"), readfunction=readml)
+    ratefiles = key_resultfiles(folder, "rates")
+    isempty(ratefiles) && return nothing
+    labels = readdlm(joinpath(folder, ratefiles[1]), ',', header=true)[2]
+    assemble_files_key(folder, ratefiles, outfile, _key_summary_header(ratelabels(labels)), readfunction)
+end
+
+"""
+    assemble_measures_key(folder::String; outfile=joinpath(folder, "measures_key.csv"))
+
+Assemble key-based `measures_<key>.txt` files into one diagnostics CSV, labeling each row by key.
+"""
+function assemble_measures_key(folder::String; outfile::String=joinpath(folder, "measures_key.csv"))
+    header = ["Model" "LogMaxLikelihood" "normalized_LL" "n_obs" "n_params" "Deviance" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Samples" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
+    assemble_files_key(folder, key_resultfiles(folder, "measures"), outfile, header, readmeasures)
+end
+
+"""
+    assemble_stats_key(folder::String; outfile=joinpath(folder, "stats_key.csv"))
+
+Assemble key-based `param-stats_<key>.txt` files into one CSV, labeling each row by key.
+"""
+function assemble_stats_key(folder::String; outfile::String=joinpath(folder, "stats_key.csv"))
+    statfiles = key_resultfiles(folder, "param-stats")
+    isempty(statfiles) && return nothing
+    labels = readdlm(joinpath(folder, statfiles[1]), ',', header=true)[2]
+    assemble_files_key(folder, statfiles, outfile, _key_summary_header(statlabels(labels)), readstats)
+end
+
+"""
+    assemble_all_key(folder::String)
+
+Assemble key-based rates, measures, and parameter-stat files in `folder`.
+Writes `rates_key.csv`, `measures_key.csv`, and `stats_key.csv` when matching inputs exist.
+"""
+function assemble_all_key(folder::String)
+    (
+        rates=assemble_rates_key(folder),
+        measures=assemble_measures_key(folder),
+        stats=assemble_stats_key(folder),
+    )
+end
+
 """
     assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false, readfunction=readmedian)
 
@@ -4829,4 +4904,3 @@ function create_combined_files_h3_latent(outfolder::AbstractString;
     end
     outfiles
 end
-

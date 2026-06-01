@@ -149,7 +149,11 @@ using Random
 
 export
     assemble_all,
+    assemble_all_key,
+    assemble_measures_key,
     assemble_measures_model,
+    assemble_rates_key,
+    assemble_stats_key,
     CSV,
     DataFrame,
     datapdf,

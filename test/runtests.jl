@@ -433,6 +433,70 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         end
     end
 
+    @testset "key-based summary assembly" begin
+        mktempdir() do dir
+            write(joinpath(dir, "rates_alpha.txt"), "k1,k2\n1.0,2.0\n")
+            write(joinpath(dir, "rates_beta.txt"), "k1,k2\n3.0,4.0\n")
+
+            stat_rows = [
+                "k1,k2",
+                "1.0,2.0",
+                "0.1,0.2",
+                "1.1,2.1",
+                "0.3,0.4",
+                "0.5,0.6",
+                "0.7,0.8",
+                "1.5,2.5",
+            ]
+            write(joinpath(dir, "param-stats_alpha.txt"), join(stat_rows, "\n") * "\n")
+
+            measure_rows = String[]
+            for i in 1:12
+                row = zeros(12)
+                if i == 1
+                    row[1:4] .= [10.0, 0.5, 100.0, 2.0]
+                    row[10:12] .= [20.0, 1.0, 30.0]
+                elseif i == 2
+                    row[1] = 4.0
+                elseif i == 3
+                    row[1:2] .= [5.0, 10.0]
+                elseif i == 4
+                    row[1] = 1.0
+                elseif i == 9
+                    row[1] = 1.23
+                elseif i == 10
+                    row[1] = 99.0
+                elseif i == 11
+                    row[1] = 0.2
+                elseif i == 12
+                    row[1] = 0.03
+                end
+                push!(measure_rows, join(string.(row), ","))
+            end
+            write(joinpath(dir, "measures_alpha.txt"), join(measure_rows, "\n") * "\n")
+
+            out = assemble_all_key(dir)
+            @test basename(out.rates) == "rates_key.csv"
+            @test basename(out.measures) == "measures_key.csv"
+            @test basename(out.stats) == "stats_key.csv"
+
+            rates = DataFrame(CSV.File(joinpath(dir, "rates_key.csv")))
+            @test names(rates)[1] == "Model"
+            @test rates.Model == ["alpha", "beta"]
+            @test rates.k1 == [1.0, 3.0]
+
+            measures = DataFrame(CSV.File(joinpath(dir, "measures_key.csv")))
+            @test measures.Model == ["alpha"]
+            @test measures.Rhat == [1.23]
+
+            stats = DataFrame(CSV.File(joinpath(dir, "stats_key.csv")))
+            @test names(stats)[1] == "Model"
+            @test stats.Model == ["alpha"]
+            @test stats.k1_Mean == [1.0]
+            @test stats[!, "k2_CI97.5"] == [2.5]
+        end
+    end
+
     @testset "stage_combine_rates (number_of_parameters, new_params, write_out, force)" begin
         mktempdir() do dir
             p1 = joinpath(dir, "a.txt")
