@@ -810,6 +810,14 @@ function proposal_dist(param::Vector, cv::Float64, model)
     end
     product_distribution(d)
 end
+function proposal_dist(param::Vector, cv::Float64, model::GRSMmodel, fittedparam::AbstractVector)
+    length(param) == length(fittedparam) || error("proposal_dist: parameter length $(length(param)) does not match fitted parameter index length $(length(fittedparam))")
+    d = Vector{Normal{Float64}}(undef, 0)
+    for i in eachindex(param)
+        push!(d, Normal(param[i], proposal_scale_for_fittedparam(cv, model, fittedparam[i], param[i])))
+    end
+    product_distribution(d)
+end
 function proposal_dist(param::Vector, cv::Vector, model)
     d = Vector{Normal{Float64}}(undef, 0)
     for i in eachindex(param)
@@ -830,7 +838,7 @@ function proposal_dist(param::Vector, cv::Matrix, model, indiv=0.001)
         # Joint proposal for hyperparameters
         hyper_proposal = MvNormal(param[1:n_hyper], cv)
         # Independent proposals for individual-level parameters
-        indiv_proposals = proposal_dist(param[n_hyper+1:n_param], indiv, model)
+        indiv_proposals = proposal_dist(param[n_hyper+1:n_param], indiv, model, model.fittedparam[n_hyper+1:n_param])
         # Combine into a product distribution
         return [hyper_proposal; indiv_proposals]
     else
@@ -853,13 +861,17 @@ Returns a Float64.
 """
 proposal_scale(cv::Float64, model::AbstractGeneTransitionModel, i=1, param=1.) = sqrt(log(1 + cv^2))
 
-function proposal_scale(cv::Float64, model::GRSMmodel, i, param)
-        f = model.transforms.f_cv[i]
+function proposal_scale_for_fittedparam(cv::Float64, model::GRSMmodel, fittedparam::Integer, param)
+        f = model.transforms.f_cv[fittedparam]
         if f == sigmanormal
             return f(param, cv)
         else
             return f(cv)
         end
+end
+
+function proposal_scale(cv::Float64, model::GRSMmodel, i, param)
+        proposal_scale_for_fittedparam(cv, model, model.fittedparam[i], param)
 end
 """
     mhfactor(param, d, paramt, dt)
