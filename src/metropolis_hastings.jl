@@ -514,7 +514,7 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
         # One-time diagnostic when acceptance is near zero after first 5000 proposal steps.
         if !diag_done && total_step >= 5000 && accepttotal <= max(1, total_step ÷ 50000)
             diag_done = true
-            paramt_d, _ = proposal(d, proposalcv, model)
+            paramt_d, _ = proposal(param, d, proposalcv, model)
             if !instant_reject(paramt_d, model)
                 priort_d = logprior(paramt_d, model)
                 llt_d, _ = _mh_loglikelihood(paramt_d, data, model, _mh_likelihood_options(mh_options, hmm_stack))
@@ -615,7 +615,7 @@ returns 1,logpredictionst,paramt,llt,priort,dt if accept
 ll is log-likelihood (NOT negative log-likelihood)
 """
 function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp; hmm_stack::Symbol=HMM_STACK_MH, mh_options::Union{Nothing,MHOptions}=nothing)
-    paramt, dt = proposal(d, proposalcv, model)
+    paramt, dt = proposal(param, d, proposalcv, model)
     if instant_reject(paramt, model)
         return 0, logpredictions, param, ll, prior, d
     end
@@ -776,6 +776,8 @@ function initial_proposal(model)
 end
 
 
+proposal(param, d, cv, model) = proposal(d, cv, model)
+
 function proposal(d::Distribution, cv, model)
     param = rand(d)
     return param, proposal_dist(param, cv, model)
@@ -787,6 +789,31 @@ function proposal(d::Vector{T}, cv, model) where {T<:Distribution}
         param = vcat(param..., rand(d[i]))
     end
     return param, proposal_dist(param, cv, model)
+end
+
+function proposal(param::Vector, d::Vector{T}, cv::Tuple, model::GRSMmodel) where {T<:Distribution}
+    if !(hastrait(model, :hierarchical) && cv[1] isa AbstractMatrix)
+        return proposal(d, cv, model)
+    end
+    paramt = copy(param)
+    core_cov, indiv_cv = cv
+    ncore = size(core_cov, 1)
+    hierarchy = model.trait.hierarchical
+
+    if rand() < 0.5
+        paramt[1:ncore] .= rand(MvNormal(param[1:ncore], core_cov))
+    else
+        nind = hierarchy.nindividualparams
+        individual = rand(1:hierarchy.nindividuals)
+        first_tail_index = (individual - 1) * nind + 1
+        last_tail_index = individual * nind
+        block = collect((ncore + first_tail_index):(ncore + last_tail_index))
+        fittedblock = model.fittedparam[block]
+        block_proposal = proposal_dist(param[block], Float64(indiv_cv), model, fittedblock)
+        paramt[block] .= rand(block_proposal)
+    end
+
+    return paramt, proposal_dist(paramt, cv, model)
 end
 
 
