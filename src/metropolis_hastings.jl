@@ -979,6 +979,7 @@ end
 returns Fit structure merged from multiple runs
 """
 merge_fit(chain::Array{Tuple,1}) = merge_fit(collate_fit(chain))
+merge_fit(chain::Array{Tuple,1}, max_memory::Int) = merge_fit(collate_fit(chain), max_memory)
 
 function merge_fit_old(fits::Array{Fit,1})
     param = merge_param(fits)
