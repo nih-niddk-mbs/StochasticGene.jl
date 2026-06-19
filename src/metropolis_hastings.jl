@@ -767,7 +767,7 @@ function initial_proposal(model)
     if length(param) > 100
         if hastrait(model, :hierarchical)
             hierarchy = model.trait.hierarchical
-            @info "initial_proposal: hierarchical model uses an expanded parameter vector" sampled_params=length(param) core_fitted_params=num_fitted_core_params(model) individual_params_per_trace=hierarchy.nindividualparams ntraces=hierarchy.nindividuals total_rates=length(model.rates)
+            @debug "initial_proposal: hierarchical model uses an expanded parameter vector" sampled_params=length(param) core_fitted_params=num_fitted_core_params(model) individual_params_per_trace=hierarchy.nindividualparams ntraces=hierarchy.nindividuals total_rates=length(model.rates)
         else
             @warn "initial_proposal: large parameter vector" sampled_params=length(param) fitted_params=length(model.fittedparam) total_rates=length(model.rates) rate_type=typeof(model.rates)
         end
