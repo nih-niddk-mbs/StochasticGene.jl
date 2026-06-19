@@ -373,6 +373,21 @@ When `proposalcv` is a scalar (not user-provided), the function adapts periodica
 
 This ensures proposal distributions quickly converge to optimal acceptance rates, improving MCMC efficiency especially with expensive likelihood evaluations.
 """
+function adaptation_covariance_samples(parout::AbstractMatrix, step::Int, model)
+    if hastrait(model, :hierarchical)
+        ncore = num_fitted_core_params(model)
+        if !(1 <= ncore <= size(parout, 1))
+            error("warmup: hierarchical core fitted parameter count $ncore is incompatible with sampled parameter count $(size(parout, 1))")
+        end
+        return @view(parout[1:ncore, 1:step]), ncore
+    end
+    return @view(parout[:, 1:step]), size(parout, 1)
+end
+
+individual_propcv(proposalcv::Tuple) = abs(Float64(proposalcv[2]))
+individual_propcv(proposalcv::Real) = abs(Float64(proposalcv))
+individual_propcv(proposalcv) = 0.001
+
 function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime; hmm_stack::Symbol=HMM_STACK_MH, mh_options::Union{Nothing,MHOptions}=nothing)
     parout = Array{Float64,2}(undef, length(param), samplesteps)
     prior = logprior(param, model)
@@ -383,8 +398,9 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     # Adapt ~3 times during warmup phase (not too frequently with small warmup)
     last_adapt_step = 0
     adapt_interval = max(500, samplesteps ÷ 5)  # Every ~1/5 of warmup steps (more frequent)
-    min_accepts = 2 * length(param)
-    d_param = length(param)
+    _, d_cov = adaptation_covariance_samples(parout, 1, model)
+    min_accepts = 2 * d_cov
+    d_accept = length(param)
     
     while step < samplesteps && time() - t1 < maxtime
         step += 1
@@ -406,15 +422,16 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
             accepttotal_pre_adapt = accepttotal
             steps_pre_adapt = step
             
-            covparam = cov(parout[:, 1:step]')
+            cov_samples, d_cov = adaptation_covariance_samples(parout, step, model)
+            covparam = cov(cov_samples')
             # Optimal acceptance rate scales with dimensionality (Roberts & Rosenthal)
             # d=1: 0.44, d=5: ~0.30, d>>1: 0.234
             # Use: target ≈ min(0.44, 0.234 + 0.206/sqrt(d))
-            acceptance_target = min(0.44, 0.234 + 0.206 / sqrt(max(1, d_param)))
+            acceptance_target = min(0.44, 0.234 + 0.206 / sqrt(max(1, d_accept)))
             current_rate = accepttotal / step
             
             # Compute base scaling
-            scaling = (2.38^2) / d_param
+            scaling = (2.38^2) / d_cov
             
             # Adaptive scaling: adjust by (target / current)^2 to converge toward target
             # If current_rate > target: increase scaling to reduce acceptance
@@ -434,17 +451,18 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
                 
                 if cond_ok
                     # Try full covariance if well-conditioned
-                    proposalcv_new = covparam * scaling
+                    cov_new = covparam * scaling
+                    proposalcv_new = hastrait(model, :hierarchical) ? (cov_new, individual_propcv(proposalcv)) : cov_new
                     d_new = proposal_dist(param, proposalcv_new, model)
-                    @info "Updated proposal covariance (scaled)" adapt_step=step curr_acceptance=current_rate
+                    @info "Updated proposal covariance (scaled)" adapt_step=step curr_acceptance=current_rate covariance_params=d_cov sampled_params=length(param)
                     proposalcv = proposalcv_new
                     d = d_new
                 else
                     # Fallback: use scaled diagonal covariance if full cov is ill-conditioned
                     diag_cov = Diagonal(diag(covparam) * scaling)
-                    proposalcv = diag_cov
-                    d = proposal_dist(param, diag_cov, model)
-                    @info "Updated proposal covariance (scaled diagonal)" adapt_step=step cond_number=cond(covparam)
+                    proposalcv = hastrait(model, :hierarchical) ? (diag_cov, individual_propcv(proposalcv)) : diag_cov
+                    d = proposal_dist(param, proposalcv, model)
+                    @info "Updated proposal covariance (scaled diagonal)" adapt_step=step cond_number=cond(covparam) covariance_params=d_cov sampled_params=length(param)
                 end
             end
         end
@@ -747,7 +765,12 @@ function initial_proposal(model)
     param = get_param(model)
     d = proposal_dist(param, model.proposal, model)
     if length(param) > 100
-        @warn "initial_proposal: param vector has $(length(param)) elements (expected ~7). model.fittedparam has $(length(model.fittedparam)) elements. model.rates has $(length(model.rates)) elements ($(typeof(model.rates)). This may indicate a dimension mismatch!"
+        if hastrait(model, :hierarchical)
+            hierarchy = model.trait.hierarchical
+            @info "initial_proposal: hierarchical model uses an expanded parameter vector" sampled_params=length(param) core_fitted_params=num_fitted_core_params(model) individual_params_per_trace=hierarchy.nindividualparams ntraces=hierarchy.nindividuals total_rates=length(model.rates)
+        else
+            @warn "initial_proposal: large parameter vector" sampled_params=length(param) fitted_params=length(model.fittedparam) total_rates=length(model.rates) rate_type=typeof(model.rates)
+        end
     end
     return param, d
 end
@@ -1033,11 +1056,14 @@ function compute_stats(param_samp::Array{Float64,2}, model)
     end
     # Thin samples in sampling space for proposal covariance calculation
     param_samp_thin = thin_columns(param_samp)
-    if size(param_samp_thin, 1) > 100
-        @warn "compute_stats: param_samp has $(size(param_samp, 1)) rows, param_samp_thin has $(size(param_samp_thin, 1)) rows. Expected ~7. This will create a $(size(param_samp_thin, 1))×$(size(param_samp_thin, 1)) covariance matrix!"
-    end
     if typeof(model) <: AbstractGRSMmodel && hastrait(model, :hierarchical)
         nrates = num_fitted_core_params(model)
+        if !(1 <= nrates <= size(param_samp_thin, 1))
+            error("compute_stats: hierarchical core fitted parameter count $nrates is incompatible with sampled parameter count $(size(param_samp_thin, 1))")
+        end
+        if size(param_samp_thin, 1) > nrates
+            @info "compute_stats: hierarchical sample includes individual parameters; proposal covariance uses the core fitted block" sampled_params=size(param_samp_thin, 1) core_cov_params=nrates samples=size(param_samp_thin, 2)
+        end
         corparam = cor(param_samp_thin[1:nrates, :]')
         covparam = cov(param_samp_thin[1:nrates, :]')
         # Sanity check: covparam should be (nrates × nrates), not (n_samples × n_samples)
@@ -1045,6 +1071,9 @@ function compute_stats(param_samp::Array{Float64,2}, model)
             error("compute_stats: covparam has shape $(size(covparam)), expected ($nrates, $nrates). Matrix orientation error in covariance calculation!")
         end
     else
+        if size(param_samp_thin, 1) > 100
+            @warn "compute_stats: non-hierarchical sample has a large parameter count; proposal covariance will be dense" sampled_params=size(param_samp, 1) thinned_params=size(param_samp_thin, 1) covariance_shape=(size(param_samp_thin, 1), size(param_samp_thin, 1))
+        end
         corparam = cor(param_samp_thin')
         covparam = cov(param_samp_thin')
         # Sanity check: covparam should be (d × d), not (n_samples × n_samples)

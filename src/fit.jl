@@ -1094,7 +1094,22 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype_context, transitions, R, S, insertstep, noisepriors, coupling, grid)
     proposal_key = _current_name_override[] === nothing ? nothing : _current_name_override[]
-    propcv = get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions; name_override=proposal_key)
+    proposal_fittedparam = fittedparam
+    if !isempty(hierarchical)
+        n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors) +
+                       ncoupling(coupling) +
+                       (isnothing(grid) ? 0 : 1)
+        fittedindividual = hierarchical[2]
+        fittedshared = setdiff(fittedparam, fittedindividual)
+        proposal_fittedparam, _, _ = make_fitted_hierarchical(
+            fittedshared,
+            hierarchical[1],
+            fittedindividual,
+            n_all_params,
+            length(data.trace[1]),
+        )
+    end
+    propcv = get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, proposal_fittedparam, transitions; name_override=proposal_key)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
     run = if _current_run_spec[] === nothing
         Dict{Symbol,Any}()
