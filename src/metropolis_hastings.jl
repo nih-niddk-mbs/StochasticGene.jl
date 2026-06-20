@@ -791,14 +791,6 @@ function proposal(d::Vector{T}, cv, model) where {T<:Distribution}
     return param, proposal_dist(param, cv, model)
 end
 
-function proposal(param::Vector, d::Vector{T}, cv::Tuple, model::GRSMmodel) where {T<:Distribution}
-    if !(hastrait(model, :hierarchical) && cv[1] isa AbstractMatrix)
-        return proposal(d, cv, model)
-    end
-    paramt = rand(d)
-    return paramt, proposal_dist(paramt, cv, model)
-end
-
 
 """
 proposal_dist(param, cv, model)
