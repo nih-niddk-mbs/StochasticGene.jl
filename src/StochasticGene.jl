@@ -383,6 +383,7 @@ export
     write_dataframes_only,
     write_histograms,
     write_ONOFFhistograms,
+    write_ONOFFhistograms_key,
     write_residency_G_folder,
     write_RNAhistogram,
     write_traces,

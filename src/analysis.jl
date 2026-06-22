@@ -1901,6 +1901,83 @@ function write_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
     end
 end
 
+"""
+    write_ONOFFhistograms_key(folder; bins=collect(1.0:200.0), ratetype="median", root=".", simulate=false)
+
+Key-based front-end for individual ON/OFF dwell-time histograms. Walks the resolved results
+folder for `info_*.jld2`, reads the matching `rates_<key>.txt`, and uses the stored run spec
+metadata instead of parsing legacy rate filenames.
+
+Coupled/joint fits are skipped because this histogram is defined for a single individual model;
+use `write_joint_residence_prob_onoff_key` for joint ON/OFF residence probabilities.
+"""
+function write_ONOFFhistograms_key(
+    folder::String;
+    bins=collect(1.0:200.0),
+    ratetype::String="median",
+    root::String=".",
+    simulate::Bool=false,
+)
+    results_dir = folder_path(folder, root, "results")
+    df = DataFrame(
+        key=String[],
+        ratefile=String[],
+        outfile=String[],
+        status=String[],
+    )
+
+    ninfo = 0
+    for (result_root, _, files) in walkdir(results_dir)
+        for f in files
+            if occursin("info", f) && endswith(f, ".jld2")
+                ninfo += 1
+                info_path = joinpath(result_root, f)
+                key = get_key(f)
+                ratefile = joinpath(result_root, "rates_" * key * ".txt")
+                outfile = joinpath(result_root, "ONOFF_" * key * ".csv")
+
+                if !isfile(ratefile)
+                    @warn "write_ONOFFhistograms_key: missing rates file for key=$key at $ratefile; skipping"
+                    push!(df, (key, ratefile, outfile, "missing rates"))
+                    continue
+                end
+
+                info = read_run_spec(info_path)
+                required = (:transitions, :G, :R, :S, :insertstep)
+                missing = [k for k in required if !haskey(info, k)]
+                if !isempty(missing)
+                    @warn "write_ONOFFhistograms_key: run spec missing $(missing) for key=$key; skipping"
+                    push!(df, (key, ratefile, outfile, "missing metadata"))
+                    continue
+                end
+
+                if info[:G] isa Tuple
+                    @info "write_ONOFFhistograms_key: skipping coupled/joint key=$key"
+                    push!(df, (key, ratefile, outfile, "skipped coupled"))
+                    continue
+                end
+
+                r = readrates(ratefile, get_row(ratetype))
+                write_ONOFFhistograms(
+                    r,
+                    info[:transitions],
+                    info[:G],
+                    info[:R],
+                    info[:S],
+                    info[:insertstep],
+                    bins;
+                    outfile=outfile,
+                    simulate=simulate,
+                )
+                push!(df, (key, ratefile, outfile, "wrote"))
+            end
+        end
+    end
+
+    ninfo == 0 && @warn "write_ONOFFhistograms_key: no info_*.jld2 files found under $(abspath(results_dir))"
+    return df
+end
+
 
 function write_RNAhistogram(r, transitions, G::Int, R::Int, decayrate::Float64, nalleles::Int, nRNA::Int; outfile::String="", splicetype="", ejectnumber=1)
     mcomponents = MComponents(transitions, G, R, nRNA, decayrate, splicetype, ejectnumber)
