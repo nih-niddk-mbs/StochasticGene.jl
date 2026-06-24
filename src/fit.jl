@@ -4322,6 +4322,25 @@ end
 
 Write out run results and print final loglikelihood and deviance. When invoked from the top-level `fit(; key=..., ...)`, writes info_<stem>.toml for reproducibility (run_spec/name_override are taken from internal refs).
 """
+function summary_rhat(measures::Measures, model)
+    if model isa AbstractGRSMmodel
+        labels = vec(rlabels(model))
+        if maximum(model.fittedparam) <= length(labels) && length(measures.rhat) == length(model.fittedparam)
+            fitted_labels = labels[model.fittedparam]
+            transition_hyper = findall(fitted_labels) do label
+                (!hastrait(model, :hierarchical) || startswith(label, "hyper_")) &&
+                    !occursin("noiseparam", label) &&
+                    !occursin("Decay", label) &&
+                    !occursin("GridProb", label)
+            end
+            if !isempty(transition_hyper)
+                return maximum(measures.rhat[transition_hyper])
+            end
+        end
+    end
+    return maximum(measures.rhat)
+end
+
 function finalize(data, model, fits, stats, measures, temp, writefolder, optimized, burst, writesamples; inference_info=nothing)
     run_spec = _current_run_spec[]
     name_override = _current_name_override[]
@@ -4333,7 +4352,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     if is_histogram_compatible(data)
         println("Deviance: ", deviance(fits, data, model))
     end
-    println("rhat: ", maximum(measures.rhat))
+    println("rhat: ", summary_rhat(measures, model))
     println("ess: ", minimum(measures.ess))
     println("geweke: ", maximum(measures.geweke))
     println("mcse: ", maximum(measures.mcse))
