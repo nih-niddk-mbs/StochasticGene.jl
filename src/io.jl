@@ -3153,8 +3153,9 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, 
 
     # Calculate normalized LL
     normalized_ll = fits.llml / n_obs
+    ll_quantiles = all(isfinite, fits.ll) ? quantile(fits.ll, [0.025; 0.5; 0.975]) : fill(NaN, 3)
 
-    writedlm(f, [fits.llml normalized_ll Int(n_obs) Int(n_params) mean(fits.ll) std(fits.ll) quantile(fits.ll, [0.025; 0.5; 0.975])' measures.waic[1] measures.waic[2] aic(fits)], ',')
+    writedlm(f, [fits.llml normalized_ll Int(n_obs) Int(n_params) mean(fits.ll) std(fits.ll) ll_quantiles' measures.waic[1] measures.waic[2] aic(fits)], ',')
     writedlm(f, dev, ',')
     writedlm(f, [fits.accept fits.total], ',')
     writedlm(f, temp, ',')
