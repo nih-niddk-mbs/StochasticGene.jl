@@ -227,9 +227,9 @@ function build_coupled_fit_spec_from_csv_cells(
     gene::AbstractString="MYC",
     cell::AbstractString="HBEC",
     datacond::Union{AbstractVector{<:AbstractString},AbstractVector{String}}=["gene", "enhancer"],
-    noisepriors=([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2]),
+    noisepriors=([-0.011295, 0.053569, 0.322406, 0.124341], [-0.004966, 0.118037, 0.607264, 0.223634]),
     elongationtime::Tuple=(20.0, 5.0),
-    initprior::Float64=0.1,
+    initprior::Float64=0.2,
     hierarchical::Bool=true,
     interval::Float64=5.0 / 3.0,
     tracetime::Float64=-1.0,
@@ -250,7 +250,7 @@ function build_coupled_fit_spec_from_csv_cells(
     decayrate::Float64=1.0,
 )
     if noisepriors === nothing || noisepriors == [] || (noisepriors isa AbstractVector && isempty(noisepriors))
-        noisepriors = ([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2])
+        noisepriors = ([-0.011295, 0.053569, 0.322406, 0.124341], [-0.004966, 0.118037, 0.607264, 0.223634])
     end
     if probfn === nothing || probfn isa Function
         probfn = (prob_Gaussian, prob_Gaussian)
@@ -265,17 +265,17 @@ function build_coupled_fit_spec_from_csv_cells(
 
     # Base rate + noise priors (two units), then coupling block (matches makescriptcoupled template)
     priormean = Float64[fill(0.001, 2); fill(0.01, length(transitions[1]) - 2); initprior; fill(R[1] / elongationtime[1], R[1]); fill(0.05, max(0, S[1] - insertstep[1] + 1)); 0.03165055618995184; noisepriors[1]]
-    priorcv = Float64[fill(1.0, length(transitions[1])); 1.0; fill(0.1, R[1]); fill(0.1, max(0, S[1] - insertstep[1] + 1)); 1.0; [0.1, 0.1, 0.1, 0.1]]
+    priorcv = Float64[fill(1.0, length(transitions[1])); 0.25; fill(0.25, R[1]); fill(0.2, max(0, S[1] - insertstep[1] + 1)); 0.1; [0.2, 0.2, 0.1, 0.1]]
     for i in 2:length(R)
         priormean = vcat(priormean, Float64[fill(0.01, length(transitions[i])); initprior; fill(R[i] / elongationtime[i], R[i]); fill(0.05, max(0, S[i] - insertstep[i] + 1)); 1.0; noisepriors[i]])
-        priorcv = vcat(priorcv, Float64[fill(1.0, length(transitions[i])); 1.0; fill(0.1, R[i]); fill(0.1, max(0, S[i] - insertstep[i] + 1)); 1.0; [0.1, 0.1, 0.01, 0.1]])
+        priorcv = vcat(priorcv, Float64[fill(1.0, length(transitions[i])); 0.25; fill(0.25, R[i]); fill(0.2, max(0, S[i] - insertstep[i] + 1)); 0.1; [0.2, 0.2, 0.1, 0.1]])
     end
     priormean = vcat(priormean, coupling_prior_mean)
     priorcv = vcat(priorcv, fill(10.0, ncoupling))
 
-    hypercv_base = Float64[fill(1.0, length(transitions[1])); 1.0; fill(0.1, R[1] - 1); 1.0; fill(1.0, max(0, S[1] - insertstep[1] + 1)); 1.0; fill(0.25, 4)]
+    hypercv_base = Float64[fill(1.0, length(transitions[1])); 1.0; fill(0.25, R[1] - 1); 1.0; fill(1.0, max(0, S[1] - insertstep[1] + 1)); 1.0; fill(0.25, 4)]
     for i in 2:length(R)
-        hypercv_base = vcat(hypercv_base, Float64[fill(1.0, length(transitions[i])); 1.0; fill(0.1, R[i] - 1); 1.0; fill(1.0, max(0, S[i] - insertstep[i] + 1)); 1.0; fill(0.25, 4)])
+        hypercv_base = vcat(hypercv_base, Float64[fill(1.0, length(transitions[i])); 1.0; fill(0.25, R[i] - 1); 1.0; fill(1.0, max(0, S[i] - insertstep[i] + 1)); 1.0; fill(0.25, 4)])
     end
     h = if hierarchical
         priormean = vcat(priormean, vcat(hypercv_base, fill(1.0, ncoupling)))

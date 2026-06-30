@@ -146,6 +146,8 @@ const _current_name_override = Ref{Any}(nothing)
 
 const _FIT_DEFAULTS = (
     rinit=nothing,
+    init_ratefile=nothing,
+    prefer_legacy_ratefile=false,
     nchains=2,
     datatype="rna",
     datapath="HCT116_testdata/",
@@ -196,6 +198,34 @@ const _FIT_DEFAULTS = (
     parallel=:single,
     gradient=nothing,
 )
+
+function _resolve_init_ratefile(init_ratefile, results_dir::AbstractString)
+    init_ratefile === nothing && return nothing
+    path = String(init_ratefile)
+    isempty(strip(path)) && return nothing
+    isabspath(path) ? path : joinpath(results_dir, path)
+end
+
+function _legacy_ratefile_candidate(merged::AbstractDict, results_dir::AbstractString, hierarchical)
+    datatype = string(merged[:datatype])
+    cell = string(merged[:cell])
+    datacond = merged[:datacond]
+    cond = datacond isa AbstractVector ? join(string.(datacond), "-") : string(datacond)
+    transition_type = string(get(merged, :TransitionType, "nstate"))
+    hflag = !isempty(hierarchical)
+    label = datatype * "-" * cell * "-" * transition_type * (hflag ? "-h" : "") * "_" * cond
+    return get_resultfile(
+        "rates",
+        results_dir,
+        label,
+        merged[:gene],
+        merged[:G],
+        merged[:R],
+        merged[:S],
+        merged[:insertstep],
+        merged[:nalleles],
+    )
+end
 
 """
     fit_default_spec() -> Dict{Symbol,Any}
@@ -333,9 +363,25 @@ function fit(; key=nothing, kwargs...)
     run_spec[:label] = label
     if rinit === nothing && use_key
         rr = folder_path(resultfolder, root, "results")
+        init_ratefile = _resolve_init_ratefile(get(merged, :init_ratefile, nothing), rr)
         rates_path = joinpath(rr, "rates_" * key_str * ".txt")
-        if isfile(rates_path)
+        legacy_rates_path = _legacy_ratefile_candidate(merged, rr, hierarchical)
+        if init_ratefile !== nothing
+            if isfile(init_ratefile)
+                println("Using initial rates from ", init_ratefile)
+                rinit = readrates(init_ratefile, get_row(ratetype))
+            else
+                println("Initial rate file not found: ", init_ratefile)
+                rinit = Float64[]
+            end
+        elseif Bool(get(merged, :prefer_legacy_ratefile, false)) && isfile(legacy_rates_path)
+            println("Using legacy initial rates from ", legacy_rates_path)
+            rinit = readrates(legacy_rates_path, get_row(ratetype))
+        elseif isfile(rates_path)
             rinit = readrates(rates_path, get_row(ratetype))
+        elseif isfile(legacy_rates_path)
+            println("Using legacy initial rates from ", legacy_rates_path)
+            rinit = readrates(legacy_rates_path, get_row(ratetype))
         else
             # Stay key-based: do not use `fit(nchains,…)` → `readrates(…, label, gene, …)` (different
             # `rates_…` stem). Empty `rinit` → default init from priors in `set_rinit`.
