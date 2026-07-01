@@ -404,6 +404,11 @@ function _is_noise_fittedparam(model, fitted::Integer)
     base_idx in _noise_parameter_indices(model.nrates, model.reporter)
 end
 
+function _hierarchical_top_level_param_count(model)
+    hastrait(model, :hierarchical) || return length(get_param(model))
+    model.trait.hierarchical.paramstart - 1
+end
+
 function _initial_jitter_scale(options::MHOptions, model, i::Integer, ncore::Integer)
     scale = options.init_jitter
     if hastrait(model, :hierarchical) && i > ncore
@@ -423,7 +428,7 @@ function jitter_initial_proposal(param, d, proposalcv, model, options::MHOptions
         return param, d
     end
     isempty(param) && return param, d
-    ncore = hastrait(model, :hierarchical) ? num_fitted_core_params(model) : length(param)
+    ncore = hastrait(model, :hierarchical) ? _hierarchical_top_level_param_count(model) : length(param)
     jittered = copy(param)
     for i in eachindex(jittered)
         scale = _initial_jitter_scale(options, model, i, ncore)
@@ -477,9 +482,9 @@ This ensures proposal distributions quickly converge to optimal acceptance rates
 """
 function adaptation_covariance_samples(parout::AbstractMatrix, step::Int, model)
     if hastrait(model, :hierarchical)
-        ncore = num_fitted_core_params(model)
+        ncore = _hierarchical_top_level_param_count(model)
         if !(1 <= ncore <= size(parout, 1))
-            error("warmup: hierarchical core fitted parameter count $ncore is incompatible with sampled parameter count $(size(parout, 1))")
+            error("warmup: hierarchical top-level fitted parameter count $ncore is incompatible with sampled parameter count $(size(parout, 1))")
         end
         return @view(parout[1:ncore, 1:step]), ncore
     end
@@ -1174,12 +1179,12 @@ function compute_stats(param_samp::Array{Float64,2}, model)
     # Thin samples in sampling space for proposal covariance calculation
     param_samp_thin = thin_columns(param_samp)
     if typeof(model) <: AbstractGRSMmodel && hastrait(model, :hierarchical)
-        nrates = num_fitted_core_params(model)
+        nrates = _hierarchical_top_level_param_count(model)
         if !(1 <= nrates <= size(param_samp_thin, 1))
-            error("compute_stats: hierarchical core fitted parameter count $nrates is incompatible with sampled parameter count $(size(param_samp_thin, 1))")
+            error("compute_stats: hierarchical top-level fitted parameter count $nrates is incompatible with sampled parameter count $(size(param_samp_thin, 1))")
         end
         if size(param_samp_thin, 1) > nrates
-            @info "compute_stats: hierarchical sample includes individual parameters; proposal covariance uses the core fitted block" sampled_params=size(param_samp_thin, 1) core_cov_params=nrates samples=size(param_samp_thin, 2)
+            @info "compute_stats: hierarchical sample includes individual parameters; proposal covariance uses the top-level fitted block" sampled_params=size(param_samp_thin, 1) top_level_cov_params=nrates samples=size(param_samp_thin, 2)
         end
         corparam = cor(param_samp_thin[1:nrates, :]')
         covparam = cov(param_samp_thin[1:nrates, :]')
