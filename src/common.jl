@@ -701,6 +701,11 @@ Options for Metropolis-Hastings MCMC.
 - `maxtime::Float64`: Maximum allowed runtime (seconds).
 - `temp::Float64`: Temperature for MCMC.
 - `merge_max_memory::Int64`: Approximate byte budget for multi-chain merge/statistics arrays.
+- `init_jitter::Float64`: Initial sampling-space jitter for each MH chain. `0.0` disables jitter.
+- `init_jitter_individual::Float64`: Initial jitter for hierarchical individual-level parameters. `0.0` uses `init_jitter`.
+- `init_jitter_noise::Float64`: Initial jitter for noise parameters. `0.0` uses `init_jitter`.
+- `proposal_cv_rates::Float64`: Optional scalar proposal CV for rate parameters. `0.0` uses `propcv`.
+- `proposal_cv_noise::Float64`: Optional scalar proposal CV for noise parameters. `0.0` uses `proposal_cv_rates` / `propcv`.
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
 - `gradient::Symbol`: Gradient type (:none, :finite, :ForwardDiff, :Zygote)
@@ -719,6 +724,11 @@ struct MHOptions <: Options
     maxtime::Float64
     temp::Float64
     merge_max_memory::Int64
+    init_jitter::Float64
+    init_jitter_individual::Float64
+    init_jitter_noise::Float64
+    proposal_cv_rates::Float64
+    proposal_cv_noise::Float64
     device::Symbol  # :cpu, :gpu
     parallel::Symbol  # :single, :threaded, :distributed
     gradient::Symbol
@@ -730,6 +740,11 @@ function MHOptions(
     samplesteps::Integer, warmupsteps::Integer, maxtime::Real, temp::Real;
     sample_stride::Integer=1,
     merge_max_memory::Integer=48 * 1024^3,
+    init_jitter::Real=0.0,
+    init_jitter_individual::Real=0.0,
+    init_jitter_noise::Real=0.0,
+    proposal_cv_rates::Real=0.0,
+    proposal_cv_noise::Real=0.0,
     device::Symbol=:cpu, parallel::Symbol=:single, gradient::Symbol=:none,
     likelihood_executor::Symbol=HMM_STACK_MH,
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
@@ -739,9 +754,19 @@ function MHOptions(
     stride > 0 || throw(ArgumentError("sample_stride must be positive, got $(repr(sample_stride))"))
     merge_mem = Int64(merge_max_memory)
     merge_mem > 0 || throw(ArgumentError("merge_max_memory must be positive, got $(repr(merge_max_memory))"))
+    jitter = Float64(init_jitter)
+    jitter >= 0.0 || throw(ArgumentError("init_jitter must be nonnegative, got $(repr(init_jitter))"))
+    jitter_individual = Float64(init_jitter_individual)
+    jitter_individual >= 0.0 || throw(ArgumentError("init_jitter_individual must be nonnegative, got $(repr(init_jitter_individual))"))
+    jitter_noise = Float64(init_jitter_noise)
+    jitter_noise >= 0.0 || throw(ArgumentError("init_jitter_noise must be nonnegative, got $(repr(init_jitter_noise))"))
+    pcv_rates = Float64(proposal_cv_rates)
+    pcv_rates >= 0.0 || throw(ArgumentError("proposal_cv_rates must be nonnegative, got $(repr(proposal_cv_rates))"))
+    pcv_noise = Float64(proposal_cv_noise)
+    pcv_noise >= 0.0 || throw(ArgumentError("proposal_cv_noise must be nonnegative, got $(repr(proposal_cv_noise))"))
     MHOptions(
         Int64(samplesteps), Int64(warmupsteps), stride, Float64(maxtime), Float64(temp),
-        merge_mem,
+        merge_mem, jitter, jitter_individual, jitter_noise, pcv_rates, pcv_noise,
         device, parallel, gradient, likelihood_executor, gck,
     )
 end

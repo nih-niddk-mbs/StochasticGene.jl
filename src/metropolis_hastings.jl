@@ -299,21 +299,22 @@ Run the Metropolis-Hastings MCMC algorithm for a given model and data.
 - `waic`: Watanabe-Akaike Information Criterion tuple
 """
 function metropolis_hastings(data, model, options)
-    param, d = initial_proposal(model)
+    proposalcv = effective_initial_proposalcv(model.proposal, model, options)
+    param, d = initial_proposal(model, proposalcv)
+    param, d = jitter_initial_proposal(param, d, proposalcv, model, options)
     stack = options.likelihood_executor
     ll, logpredictions = _mh_loglikelihood(param, data, model, options)
     maxtime = options.maxtime
     totalsteps = options.warmupsteps + options.samplesteps
     parml = param
     llml = ll
-    proposalcv = model.proposal
     # Skip warmup if proposal covariance was successfully loaded from file
     # (indicated by model.proposal being a Tuple with (matrix, scalar))
-    skip_warmup_due_to_loaded_cov = (model.proposal isa Tuple)
+    skip_warmup_due_to_loaded_cov = (proposalcv isa Tuple)
     if options.warmupsteps > 0 && !skip_warmup_due_to_loaded_cov
         println("Warmup")
         param, parml, ll, llml, d, proposalcv, logpredictions = warmup(
-            logpredictions, param, param, ll, ll, d, model.proposal, data, model,
+            logpredictions, param, param, ll, ll, d, proposalcv, data, model,
             options.warmupsteps, options.temp, time(), maxtime * options.warmupsteps / totalsteps;
             hmm_stack=stack,
             mh_options=options,
@@ -331,6 +332,107 @@ function metropolis_hastings(data, model, options)
     )
     waic = compute_waic(fits.lppd, fits.pwaic, data)
     return fits, waic
+end
+
+function _noise_parameter_indices(nrates::Integer, reporter::HMMReporter)
+    Set(nrates+1:nrates+reporter.n)
+end
+
+function _noise_parameter_indices(nrates::AbstractVector{<:Integer}, reporter::AbstractVector{<:HMMReporter})
+    inds = Set{Int}()
+    offset = 0
+    for i in eachindex(nrates)
+        union!(inds, offset+nrates[i]+1:offset+nrates[i]+reporter[i].n)
+        offset += nrates[i] + reporter[i].n
+    end
+    inds
+end
+
+function _noise_parameter_indices(nrates, reporter)
+    Set{Int}()
+end
+
+function _base_parameter_index(idx::Integer, nbase::Integer)
+    nbase <= 0 && return idx
+    mod1(idx, nbase)
+end
+
+function _proposal_cv_at(proposalcv::AbstractVector, i::Integer, default_cv::Real)
+    Float64(proposalcv[i])
+end
+
+function _proposal_cv_at(proposalcv, i::Integer, default_cv::Real)
+    Float64(default_cv)
+end
+
+function _proposal_cv_vector(default_cv::Real, model, options::MHOptions)
+    return _proposal_cv_vector(default_cv, default_cv, model, options)
+end
+
+function _proposal_cv_vector(default_cv, fallback_cv::Real, model, options::MHOptions)
+    noise_inds = model isa AbstractGRSMmodel ?
+                 _noise_parameter_indices(model.nrates, model.reporter) :
+                 Set{Int}()
+    nbase = model isa AbstractGRSMmodel ? num_all_parameters(model) : 0
+    cv = Vector{Float64}(undef, length(model.fittedparam))
+    for i in eachindex(model.fittedparam)
+        base_idx = _base_parameter_index(model.fittedparam[i], nbase)
+        inherited_cv = _proposal_cv_at(default_cv, i, fallback_cv)
+        rate_cv = options.proposal_cv_rates > 0.0 ? options.proposal_cv_rates : inherited_cv
+        noise_cv = options.proposal_cv_noise > 0.0 ? options.proposal_cv_noise : rate_cv
+        cv[i] = base_idx in noise_inds ? noise_cv : rate_cv
+    end
+    cv
+end
+
+function effective_initial_proposalcv(proposalcv, model, options::MHOptions)
+    (options.proposal_cv_rates > 0.0 || options.proposal_cv_noise > 0.0) || return proposalcv
+    if proposalcv isa Tuple || proposalcv isa AbstractMatrix
+        @warn "proposal_cv_rates/proposal_cv_noise ignored because proposal covariance is matrix-based"
+        return proposalcv
+    end
+    fallback_cv = proposalcv isa AbstractVector ? one(Float64) : Float64(proposalcv)
+    cv = _proposal_cv_vector(proposalcv, fallback_cv, model, options)
+    @info "Using split proposal CV" proposal_cv_rates=options.proposal_cv_rates proposal_cv_noise=options.proposal_cv_noise nparams=length(cv)
+    return cv
+end
+
+function _is_noise_fittedparam(model, fitted::Integer)
+    model isa AbstractGRSMmodel || return false
+    nbase = num_all_parameters(model)
+    base_idx = _base_parameter_index(fitted, nbase)
+    base_idx in _noise_parameter_indices(model.nrates, model.reporter)
+end
+
+function _initial_jitter_scale(options::MHOptions, model, i::Integer, ncore::Integer)
+    scale = options.init_jitter
+    if hastrait(model, :hierarchical) && i > ncore
+        scale = options.init_jitter_individual > 0.0 ? options.init_jitter_individual : scale
+    end
+    if model isa AbstractGRSMmodel
+        fitted = i <= length(model.fittedparam) ? model.fittedparam[i] : 0
+        if _is_noise_fittedparam(model, fitted)
+            scale = options.init_jitter_noise > 0.0 ? options.init_jitter_noise : scale
+        end
+    end
+    return scale
+end
+
+function jitter_initial_proposal(param, d, proposalcv, model, options::MHOptions)
+    if options.init_jitter <= 0.0 && options.init_jitter_individual <= 0.0 && options.init_jitter_noise <= 0.0
+        return param, d
+    end
+    isempty(param) && return param, d
+    ncore = hastrait(model, :hierarchical) ? num_fitted_core_params(model) : length(param)
+    jittered = copy(param)
+    for i in eachindex(jittered)
+        scale = _initial_jitter_scale(options, model, i, ncore)
+        scale > 0.0 || continue
+        jittered[i] += scale * randn()
+    end
+    d = proposal_dist(jittered, proposalcv, model)
+    @info "Applied initial MH jitter" init_jitter=options.init_jitter init_jitter_individual=options.init_jitter_individual init_jitter_noise=options.init_jitter_noise nparams=length(param)
+    return jittered, d
 end
 
 
@@ -761,9 +863,9 @@ initial_proposal(model)
 return parameters to be fitted and an initial proposal distribution
 
 """
-function initial_proposal(model)
+function initial_proposal(model, proposalcv=model.proposal)
     param = get_param(model)
-    d = proposal_dist(param, model.proposal, model)
+    d = proposal_dist(param, proposalcv, model)
     if length(param) > 100
         if hastrait(model, :hierarchical)
             hierarchy = model.trait.hierarchical
@@ -821,6 +923,7 @@ function proposal_dist(param::Vector, cv::Float64, model::GRSMmodel, fittedparam
     product_distribution(d)
 end
 function proposal_dist(param::Vector, cv::Vector, model)
+    length(cv) == length(param) || throw(ArgumentError("Vector proposal CV length $(length(cv)) must match sampled parameter length $(length(param))"))
     d = Vector{Normal{Float64}}(undef, 0)
     for i in eachindex(param)
         push!(d, Normal(param[i], proposal_scale(cv[i], model, i, param[i])))

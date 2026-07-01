@@ -54,12 +54,14 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
-- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution. If positive, uses this fixed value. If negative (e.g., `-0.01`), attempts to load the proposal covariance matrix from a previous fit with the same model. If loading succeeds, warmup is automatically skipped (even if `warmupsteps > 0` is set). If loading fails or file doesn't exist, falls back to `abs(propcv)` and warmup proceeds normally. Loading validates that model parameters match exactly (G, R, S, transitions, fittedparam, nalleles, etc.). This enables efficient proposal reuse when running multiple chains or extensions with expensive likelihood evaluations.
+- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution. `proposal_cv` is accepted as an alias. If a vector is supplied, each sampled parameter uses its own CV. If positive scalar, uses this fixed value. If negative scalar (e.g., `-0.01`), attempts to load the proposal covariance matrix from a previous fit with the same model. If loading succeeds, warmup is automatically skipped (even if `warmupsteps > 0` is set). If loading fails or file doesn't exist, falls back to `abs(propcv)` and warmup proceeds normally. Loading validates that model parameters match exactly (G, R, S, transitions, fittedparam, nalleles, etc.). This enables efficient proposal reuse when running multiple chains or extensions with expensive likelihood evaluations.
+- `proposal_cv_rates::Real=0.0`, `proposal_cv_noise::Real=0.0`: MH only — optional split initial proposal CVs for rate versus noise parameters. `0.0` means use `propcv`; `proposal_cv_noise=0.0` inherits the rate CV.
 - `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `samplesteps::Int=1000000`: MH — posterior samples to collect; ADVI — maps to `maxiter` unless `maxiter` is set explicitly. Ignored by NUTS; use `n_samples` for NUTS.
 - `sample_stride::Int=1`: MH only — store every `sample_stride`-th posterior sample from the `samplesteps` total MH steps. Aliases: `samplestep`, `thin`, `thin_interval`, `thinning`, `sample_interval`, `sample_every`.
+- `init_jitter::Real=0.0`: MH only — add per-chain Gaussian jitter in sampling coordinates before the initial likelihood evaluation. `init_jitter_individual` overrides this for hierarchical individual-level parameters, and `init_jitter_noise` overrides it for fitted noise parameters.
 - `merge_max_memory`: MH multi-chain merge/statistics memory budget in bytes. Alias `merge_max_gb` accepts GiB.
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `splicetype=""`: RNA pathway for GRS models, (e.g., "offeject" = spliced intron is not viable)
@@ -178,9 +180,15 @@ const _FIT_DEFAULTS = (
     hierarchical=tuple(),
     ratetype="median",
     propcv=0.01,
+    proposal_cv_rates=0.0,
+    proposal_cv_noise=0.0,
     maxtime=60.0,
     samplesteps=1000000,
     warmupsteps=0,
+    sample_stride=1,
+    init_jitter=0.0,
+    init_jitter_individual=0.0,
+    init_jitter_noise=0.0,
     temp=1.0,
     temprna=1.0,
     burst=false,
@@ -297,6 +305,9 @@ function fit(; key=nothing, kwargs...)
                 # JLD2 exists but failed to load; use kwargs only
             end
         end
+    end
+    if haskey(merged, :proposal_cv) && merged[:proposal_cv] !== nothing
+        merged[:propcv] = merged[:proposal_cv]
     end
     delete!(merged, :infolder)  # legacy key from old info TOMLs; ignored
     delete!(merged, :inlabel)   # legacy key from old info TOMLs; ignored
@@ -424,6 +435,9 @@ function fit(rinit, nchains::Int, datatype, datapath, gene, cell, datacond, resu
     println(now())
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     kwp = Dict{Symbol,Any}(pairs(kwargs))
+    if haskey(kwp, :proposal_cv)
+        propcv = pop!(kwp, :proposal_cv)
+    end
     leg_ti = pop!(kwp, :legacy_traceinfo, nothing)
     leg_dt = pop!(kwp, :legacy_dttype, nothing)
     if haskey(kwp, :traceinfo)
@@ -966,6 +980,8 @@ const _MAKE_STRUCTURES_OPTION_KW = (
     :time_limit, :advi_time_limit, :σ_floor, :advi_σ_floor, :init_s_raw, :advi_init_s_raw,
     :advi_verbose, :advi_n_mc, :zygote_trace,
     :likelihood_executor, :gradient_checkpoint_length, :hmm_stack, :hmm_checkpoint_steps,
+    :init_jitter, :init_jitter_individual, :init_jitter_noise,
+    :proposal_cv_rates, :proposal_cv_noise,
 )
 
 function _make_structures_option_kwargs(; kwargs...)
@@ -1270,6 +1286,11 @@ function load_options(run0::AbstractDict)
     end
     maxtime = Float64(get(run, :maxtime, 60.0))
     temp = Float64(get(run, :temp, 1.0))
+    init_jitter = Float64(get(run, :init_jitter, 0.0))
+    init_jitter_individual = Float64(get(run, :init_jitter_individual, 0.0))
+    init_jitter_noise = Float64(get(run, :init_jitter_noise, 0.0))
+    proposal_cv_rates = Float64(get(run, :proposal_cv_rates, 0.0))
+    proposal_cv_noise = Float64(get(run, :proposal_cv_noise, 0.0))
 
     gck = _parse_gradient_checkpoint_length(run)
     lik_mh = _parse_likelihood_executor(
@@ -1284,6 +1305,11 @@ function load_options(run0::AbstractDict)
             samplesteps, warmupsteps, maxtime, temp;
             sample_stride=sample_stride,
             merge_max_memory=merge_max_memory,
+            init_jitter=init_jitter,
+            init_jitter_individual=init_jitter_individual,
+            init_jitter_noise=init_jitter_noise,
+            proposal_cv_rates=proposal_cv_rates,
+            proposal_cv_noise=proposal_cv_noise,
             device=device, parallel=parallel, gradient=gh,
             likelihood_executor=lik_mh,
             gradient_checkpoint_length=gck,
@@ -4334,6 +4360,8 @@ Print one block of inference-specific settings (MCMC vs NUTS vs ADVI) after the 
 function print_inference_options_info(options::MHOptions)
     println("inference: Metropolis–Hastings (MH)")
     println("  samplesteps: ", options.samplesteps, ", warmupsteps: ", options.warmupsteps, ", sample_stride: ", options.sample_stride, ", wall maxtime (s): ", options.maxtime, ", temperature: ", options.temp)
+    println("  init_jitter: ", options.init_jitter, ", init_jitter_individual: ", options.init_jitter_individual, ", init_jitter_noise: ", options.init_jitter_noise)
+    println("  proposal_cv_rates: ", options.proposal_cv_rates, ", proposal_cv_noise: ", options.proposal_cv_noise)
     println("  merge_max_memory: ", round(options.merge_max_memory / 1024^3; digits=2), " GiB")
     println("  device: ", options.device, ", parallel: ", options.parallel, ", likelihood_executor: ", options.likelihood_executor,
         ", gradient_checkpoint_length: ", options.gradient_checkpoint_length === nothing ? "default" : options.gradient_checkpoint_length)
@@ -4438,6 +4466,12 @@ Load or generate proposal coefficient of variation for MCMC sampling.
 - Scales covariance by `2.38^2 / n_parameters` for optimal MCMC acceptance rate (~23.4% for high-dimensional)
 """
 function get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, fittedparam, Gtransitions; name_override=nothing)
+    if propcv isa AbstractVector
+        length(propcv) == length(fittedparam) || throw(ArgumentError("Vector propcv length $(length(propcv)) must match fitted parameter count $(length(fittedparam))"))
+        all(x -> x > 0.0, propcv) || throw(ArgumentError("Vector propcv entries must all be positive"))
+        println("Using vector propcv with ", length(propcv), " entries")
+        return Float64.(propcv)
+    end
     if propcv < 0.0
         proposal_cov_files = String[]
         # Prefer the key-based covariance written by fit(; key=...) / writeall(name_override=...).
