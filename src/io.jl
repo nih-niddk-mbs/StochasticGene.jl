@@ -3121,7 +3121,7 @@ Write fit measures into a file.
   - Row 8: MCSE values
   - Row 9: Maximum Rhat
   - Row 10: Minimum ESS
-  - Row 11: Maximum Geweke
+  - Row 11: Maximum absolute Geweke
   - Row 12: Maximum MCSE
 """
 function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, data, model)
@@ -3165,8 +3165,15 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, 
     writedlm(f, measures.mcse', ',')
     writedlm(f, maximum(measures.rhat), ',')
     writedlm(f, minimum(measures.ess), ',')
-    writedlm(f, maximum(measures.geweke), ',')
+    writedlm(f, maximum(abs.(measures.geweke)), ',')
     writedlm(f, maximum(measures.mcse), ',')
+    summaries = diagnostic_group_summaries(data, model, measures)
+    if !(length(summaries) == 1 && summaries[1].group == :all_parameters)
+        writedlm(f, ["diagnostic_group" "n_params" "rhat_max" "ess_min" "geweke_max_abs" "mcse_max"], ',')
+        for s in summaries
+            writedlm(f, [String(s.group) s.nparams s.rhat_max s.ess_min s.geweke_max_abs s.mcse_max], ',')
+        end
+    end
     close(f)
 end
 

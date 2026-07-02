@@ -68,6 +68,33 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test thinned[1].ll == fit.ll[[1, 4, 7, 10]]
     end
 
+    @testset "trace diagnostics are grouped by parameter role" begin
+        data = StochasticGene.TraceData("trace", "gene", 1.0, ([1.0 2.0; 1.5 2.5], [], [0.0], 1), Int[])
+        transitions = ([1, 2], [2, 1])
+        noisepriors = [50.0, 5.0, 50.0, 5.0]
+        rates = [0.1, 0.2, 0.3, 0.4, 1.0, noisepriors...]
+        fittedparam = [1, 2, 3, 4, 6, 7, 8, 9]
+        model = StochasticGene.load_model(
+            data, rates, rates, fittedparam, tuple(), transitions, 2, 1, 0, 1,
+            "", 1, 10.0, Int[], 1.0, 0.01, StochasticGene.prob_Gaussian,
+            noisepriors, StochasticGene.Tsit5(), tuple(), tuple(), nothing,
+        )
+        measures = StochasticGene.Measures(
+            (1.0, 0.1),
+            fill(1.01, length(fittedparam)),
+            fill(100.0, length(fittedparam)),
+            collect(1.0:length(fittedparam)),
+            fill(0.01, length(fittedparam)),
+        )
+
+        summaries = StochasticGene.diagnostic_group_summaries(data, model, measures)
+        @test [s.group for s in summaries] == [:transition_rates, :noise_parameters]
+        @test summaries[1].indices == [1, 2, 3, 4]
+        @test summaries[2].indices == [5, 6, 7, 8]
+        @test summaries[1].geweke_max_abs == 4.0
+        @test summaries[2].geweke_max_abs == 8.0
+    end
+
     @testset "info environment metadata includes package identity" begin
         env = StochasticGene._stochasticgene_environment_info()
         @test env["julia_version"] == string(VERSION)

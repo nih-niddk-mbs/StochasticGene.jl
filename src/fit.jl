@@ -4396,20 +4396,66 @@ end
 
 Write out run results and print final loglikelihood and deviance. When invoked from the top-level `fit(; key=..., ...)`, writes info_<stem>.toml for reproducibility (run_spec/name_override are taken from internal refs).
 """
+function _has_trace_observations(data)
+    data isa AbstractTraceData && return true
+    data isa CombinedData || return false
+    any(getfield(data.legs, modality) isa AbstractTraceData for modality in combined_modalities(data))
+end
+
+function _diagnostic_label_class(label::AbstractString)
+    occursin("noiseparam", label) && return :noise_parameters
+    occursin("Coupling", label) && return :coupling_parameters
+    occursin("GridProb", label) && return :grid_parameters
+    occursin("Decay", label) && return :decay_parameters
+    return :transition_rates
+end
+
+function diagnostic_groups(data, model)
+    if !_has_trace_observations(data) || !(model isa AbstractGRSMmodel)
+        return [(:all_parameters, collect(eachindex(model.fittedparam)))]
+    end
+    labels = vec(rlabels(model))
+    if isempty(model.fittedparam) || maximum(model.fittedparam) > length(labels)
+        return [(:all_parameters, collect(eachindex(model.fittedparam)))]
+    end
+    fitted_labels = labels[model.fittedparam]
+    order = (:transition_rates, :noise_parameters, :coupling_parameters, :grid_parameters, :decay_parameters)
+    grouped = Pair{Symbol, Vector{Int}}[]
+    for group in order
+        idx = findall(label -> _diagnostic_label_class(label) == group, fitted_labels)
+        isempty(idx) || push!(grouped, group => idx)
+    end
+    isempty(grouped) ? [(:all_parameters, collect(eachindex(model.fittedparam)))] : grouped
+end
+
+function _measure_group_summary(measures::Measures, idx::AbstractVector{<:Integer})
+    rhat = measures.rhat[idx]
+    ess = measures.ess[idx]
+    geweke = measures.geweke[idx]
+    mcse = measures.mcse[idx]
+    (
+        nparams=length(idx),
+        rhat_max=maximum(rhat),
+        ess_min=minimum(ess),
+        geweke_max_abs=maximum(abs.(geweke)),
+        mcse_max=maximum(mcse),
+    )
+end
+
+function diagnostic_group_summaries(data, model, measures::Measures)
+    groups = diagnostic_groups(data, model)
+    [(group=group, indices=idx, _measure_group_summary(measures, idx)...) for (group, idx) in groups if !isempty(idx)]
+end
+
 function summary_rhat(measures::Measures, model)
     if model isa AbstractGRSMmodel
         labels = vec(rlabels(model))
-        if maximum(model.fittedparam) <= length(labels) && length(measures.rhat) == length(model.fittedparam)
+        if !isempty(model.fittedparam) &&
+                maximum(model.fittedparam) <= length(labels) &&
+                length(measures.rhat) == length(model.fittedparam)
             fitted_labels = labels[model.fittedparam]
-            transition_hyper = findall(fitted_labels) do label
-                (!hastrait(model, :hierarchical) || startswith(label, "hyper_")) &&
-                    !occursin("noiseparam", label) &&
-                    !occursin("Decay", label) &&
-                    !occursin("GridProb", label)
-            end
-            if !isempty(transition_hyper)
-                return maximum(measures.rhat[transition_hyper])
-            end
+            transition = findall(label -> _diagnostic_label_class(label) == :transition_rates, fitted_labels)
+            isempty(transition) || return maximum(measures.rhat[transition])
         end
     end
     return maximum(measures.rhat)
@@ -4426,10 +4472,16 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     if is_histogram_compatible(data)
         println("Deviance: ", deviance(fits, data, model))
     end
-    println("rhat: ", summary_rhat(measures, model))
-    println("ess: ", minimum(measures.ess))
-    println("geweke: ", maximum(measures.geweke))
-    println("mcse: ", maximum(measures.mcse))
+    for s in diagnostic_group_summaries(data, model, measures)
+        println(
+            string(s.group), " diagnostics: ",
+            "rhat=", s.rhat_max,
+            ", ess=", s.ess_min,
+            ", geweke_abs=", s.geweke_max_abs,
+            ", mcse=", s.mcse_max,
+            " (n=", s.nparams, ")",
+        )
+    end
     println("waic: ", measures.waic)
     println("aic: ", aic(fits))
     # println("aic_onstates: ", aic_onstates(fits.parml, data, model))
