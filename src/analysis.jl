@@ -2954,11 +2954,35 @@ println(df)
 - `residenceprob_G_dataframe`: Formats residence probabilities as a DataFrame
 - `decompose_model`: Extracts model parameters from filename
 """
+function _residency_model_from_run_spec(info::AbstractDict, nnoiseparams_default)
+    for k in (:G, :R, :S, :insertstep, :transitions)
+        haskey(info, k) || return nothing
+    end
+    G = info[:G]
+    R = info[:R]
+    S = info[:S]
+    insertstep = info[:insertstep]
+    transitions = info[:transitions]
+    nnoiseparams = haskey(info, :noisepriors) ? length(info[:noisepriors]) : nnoiseparams_default
+    return (; G, R, S, insertstep, transitions, nnoiseparams)
+end
+
 function write_residency_G(file, ratetype="median", transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), nnoiseparams=4)
     println(file)
     r = readrates(file, get_row(ratetype))
-    parts = fields(basename(file))
-    G, R, S, insertstep = decompose_model(parts.model)
+    key_info = read_run_spec_for_rates_file(file)
+    model_info = key_info === nothing ? nothing : _residency_model_from_run_spec(key_info, nnoiseparams)
+    if model_info === nothing
+        parts = fields(basename(file))
+        G, R, S, insertstep = decompose_model(parts.model)
+    else
+        G = model_info.G
+        R = model_info.R
+        S = model_info.S
+        insertstep = model_info.insertstep
+        transitions = model_info.transitions
+        nnoiseparams = model_info.nnoiseparams
+    end
     out = replace(file, "rates" => "residencyG", ".txt" => ".csv")
     if G isa Int
         CSV.write(out, DataFrame(residenceprob_G_dataframe(r, G)))
@@ -2971,12 +2995,12 @@ function write_residency_G(file, ratetype="median", transitions=(([1, 2], [2, 1]
     end
 end
 
-function write_residency_G_folder(folder)
+function write_residency_G_folder(folder; ratetype="median")
     for (root, dirs, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f)
+            if startswith(f, "rates_") && endswith(f, ".txt")
                 file = joinpath(root, f)
-                write_residency_G(file)
+                write_residency_G(file, ratetype)
             end
         end
     end
