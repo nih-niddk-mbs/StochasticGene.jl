@@ -9,7 +9,9 @@ export simulator, simulate_trace, simulate_trace_data, simulate_trace_vector, si
 
 # Data Types
 export RNAData, RNADwellTimeData, RNAOnOffData, TraceData, TraceRNAData,
-    AbstractCombinedData, CombinedData, combined_modalities, reconstruct_tracerna
+    AbstractCombinedData, CombinedData, combined_modalities, reconstruct_tracerna,
+    DatasetSpec, HierarchyNode, HierarchySpec, MultiDatasetData,
+    hierarchy_node_names, hierarchy_parameter_levels
 
 # Data Handling
 export load_data, load_model, write_histograms, write_traces, write_dataframes

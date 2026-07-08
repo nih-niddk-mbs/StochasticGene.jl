@@ -354,6 +354,153 @@ function reconstruct_tracerna(b::CombinedData{NT}) where {NT<:NamedTuple{(:rna, 
     return TraceRNAData(t.label, t.gene, t.interval, t.trace, r.nRNA, r.histRNA, r.yield, t.units)
 end
 
+# --- Recursive hierarchy/data-collection vocabulary ---
+#
+# These types are intentionally passive. They describe how separately loaded datasets
+# should be grouped for future hierarchical parameter sharing without changing the
+# existing `hierarchical=(nhypersets, fittedindividual, fixedindividual)` behavior.
+
+"""
+    DatasetSpec
+
+Description of one input dataset before it is loaded.
+
+`DatasetSpec` is a small data-wrangling record: it keeps the dataset's own
+`datatype`, `datapath`, `datacond`, and optional per-dataset loader settings
+together with a metadata table used by recursive hierarchies. For example,
+metadata can record `sample = :ThreePrime`, `replicate = :rep1`, or any other
+category that a [`HierarchyNode`](@ref) uses as its `key`.
+
+The type is deliberately permissive so existing `fit` keyword values can be
+stored unchanged. It does not load data and does not alter existing fit paths.
+"""
+struct DatasetSpec
+    name::Symbol
+    datatype::Any
+    datapath::Any
+    datacond::Any
+    metadata::NamedTuple
+    trace_specs::Any
+    dwell_specs::Any
+end
+
+DatasetSpec(name::Symbol, datatype, datapath, datacond;
+            metadata::NamedTuple=NamedTuple(),
+            trace_specs=[],
+            dwell_specs=[]) =
+    DatasetSpec(name, datatype, datapath, datacond, metadata, trace_specs, dwell_specs)
+
+DatasetSpec(name::AbstractString, datatype, datapath, datacond; kwargs...) =
+    DatasetSpec(Symbol(name), datatype, datapath, datacond; kwargs...)
+
+"""
+    HierarchyNode
+
+One node in a recursive hierarchy used to assign datasets/observations to
+parameter-sharing levels.
+
+Fields:
+- `name`: stable level name, e.g. `:top`, `:group`, `:individual`.
+- `key`: metadata key used to assign children at this level. The root can use
+  `nothing`.
+- `levels`: allowed level values. An empty vector means levels can be discovered
+  from data metadata later.
+- `children`: nested [`HierarchyNode`](@ref)s.
+
+This type only describes the hierarchy tree. Parameter ownership is stored on
+[`HierarchySpec`](@ref), not on the node, so the same tree can be reused with
+different sharing rules.
+"""
+struct HierarchyNode
+    name::Symbol
+    key::Union{Nothing,Symbol}
+    levels::Vector{Any}
+    children::Vector{HierarchyNode}
+end
+
+HierarchyNode(name::Symbol; key=nothing, levels=[], children=HierarchyNode[]) =
+    HierarchyNode(name, key === nothing ? nothing : Symbol(key), collect(levels), collect(children))
+
+HierarchyNode(name::AbstractString; kwargs...) = HierarchyNode(Symbol(name); kwargs...)
+
+"""
+    HierarchySpec
+
+Recursive hierarchy plus a parameter-scope map.
+
+`parameter_scope` maps parameter families or concrete parameter identifiers to
+the hierarchy node that owns them. Examples:
+
+```julia
+HierarchySpec(
+    HierarchyNode(:top, children=[
+        HierarchyNode(:group, key=:sample, levels=[:ThreePrime, :FivePrime],
+            children=[HierarchyNode(:individual, key=:trace_id)])
+    ]);
+    parameter_scope=Dict(:G => :top, :R => :group, :noise => :individual),
+)
+```
+
+The current implementation stores the specification only. Later fitting code can
+compile this declarative form into explicit parameter indices while preserving
+the existing tuple-based hierarchical path.
+"""
+struct HierarchySpec
+    root::HierarchyNode
+    parameter_scope::Dict{Any,Symbol}
+end
+
+HierarchySpec(root::HierarchyNode; parameter_scope=Dict{Any,Symbol}()) =
+    HierarchySpec(root, Dict{Any,Symbol}(parameter_scope))
+
+"""
+    MultiDatasetData
+
+Loaded datasets plus their hierarchy metadata.
+
+`MultiDatasetData` is the loaded counterpart to a vector of [`DatasetSpec`](@ref)
+objects. Each entry in `datasets` is an existing StochasticGene data object
+(`RNAData`, `TraceData`, `CombinedData`, etc.), and `metadata[i]` stores the
+hierarchy categories for `datasets[i]`.
+
+No likelihood behavior is attached to this type yet; it is an additive container
+for the recursive hierarchy work.
+"""
+struct MultiDatasetData{D<:AbstractVector,M<:AbstractVector} <: AbstractExperimentalData
+    datasets::D
+    metadata::M
+    names::Vector{Symbol}
+end
+
+function MultiDatasetData(datasets::AbstractVector, metadata::AbstractVector; names=nothing)
+    length(datasets) == length(metadata) ||
+        throw(ArgumentError("MultiDatasetData requires one metadata entry per dataset"))
+    names_out = names === nothing ? [Symbol(:dataset_, i) for i in eachindex(datasets)] : Symbol.(names)
+    length(names_out) == length(datasets) ||
+        throw(ArgumentError("MultiDatasetData requires one name per dataset"))
+    return MultiDatasetData(datasets, metadata, names_out)
+end
+
+"""
+    hierarchy_node_names(node)
+
+Return node names in pre-order. Useful for validation and tests.
+"""
+function hierarchy_node_names(node::HierarchyNode)
+    names = Symbol[node.name]
+    for child in node.children
+        append!(names, hierarchy_node_names(child))
+    end
+    return names
+end
+
+"""
+    hierarchy_parameter_levels(spec)
+
+Return the unique hierarchy levels referenced by `spec.parameter_scope`.
+"""
+hierarchy_parameter_levels(spec::HierarchySpec) = unique(collect(values(spec.parameter_scope)))
+
 # Helper functions for yield Union type
 """
     get_yield_value(yield::Union{Float64, Tuple{Float64, Int}})

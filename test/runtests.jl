@@ -30,6 +30,41 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
+    @testset "recursive hierarchy vocabulary is passive and composable" begin
+        spec3 = DatasetSpec(
+            :ThreePrime,
+            :trace,
+            "data/3Prime",
+            "3Prime";
+            metadata=(sample=:ThreePrime, replicate=:rep1),
+            trace_specs=[(unit=1, interval=1.0, start=1.0, t_end=-1.0, zeromedian=true)],
+        )
+        @test spec3.name == :ThreePrime
+        @test spec3.metadata.sample == :ThreePrime
+        @test spec3.trace_specs[1].unit == 1
+
+        hierarchy = HierarchySpec(
+            HierarchyNode(:top, children=[
+                HierarchyNode(:group, key=:sample, levels=[:ThreePrime, :FivePrime], children=[
+                    HierarchyNode(:individual, key=:trace_id),
+                ]),
+            ]);
+            parameter_scope=Dict(:G => :top, :R => :group, :noise => :individual),
+        )
+        @test hierarchy_node_names(hierarchy.root) == [:top, :group, :individual]
+        @test Set(hierarchy_parameter_levels(hierarchy)) == Set([:top, :group, :individual])
+
+        rna = StochasticGene.RNAData("rna", "MYC", 3, [1.0, 2.0, 1.0], 1.0)
+        multidata = MultiDatasetData(
+            [rna, rna],
+            [(sample=:ThreePrime,), (sample=:FivePrime,)];
+            names=[:ThreePrime, :FivePrime],
+        )
+        @test multidata.names == [:ThreePrime, :FivePrime]
+        @test multidata.metadata[2].sample == :FivePrime
+        @test_throws ArgumentError MultiDatasetData([rna], [(sample=:ThreePrime,), (sample=:FivePrime,)])
+    end
+
     @testset "merged-chain maximum likelihood uses log-likelihood sign" begin
         f1 = StochasticGene.Fit(reshape([1.0], 1, 1), [-10.0], [1.0], -10.0, [0.0], [0.0], 0.0, 1, 1)
         f2 = StochasticGene.Fit(reshape([2.0], 1, 1), [-3.0], [2.0], -3.0, [0.0], [0.0], 0.0, 1, 1)
