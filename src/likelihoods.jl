@@ -1091,6 +1091,49 @@ function get_reporter(model::AbstractGeneTransitionModel, data)
     return model.reporter
 end
 
+function _recursive_group_rates(r, group_indices::Vector{Vector{Int}})
+    [r[idx] for idx in group_indices]
+end
+
+function ll_hmm_trace_recursive(
+    param,
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel;
+    steady_state_solver::Symbol=:default,
+    hmm_stack::Symbol=HMM_STACK_MH,
+)
+    trait = model.trait.recursive_hierarchy
+    components = get_components(model, data)
+    reporter = get_reporter(model, data)
+    components isa TComponents ||
+        throw(ArgumentError("recursive_hierarchy likelihood currently supports flat single-unit TComponents; got $(typeof(components))"))
+    reporter isa HMMReporter ||
+        throw(ArgumentError("recursive_hierarchy likelihood currently supports a single HMMReporter; got $(typeof(reporter))"))
+    traces = data.trace[1]
+    length(traces) == length(trait.cache_plan.assignments) ||
+        throw(ArgumentError("recursive_hierarchy assignment count $(length(trait.cache_plan.assignments)) must match trace count $(length(traces))"))
+    off_weight = length(data.trace) >= 3 ? data.trace[3] : 0.0
+    has_off_weight = off_weight isa Number ? off_weight > 0 : any(x -> x > 0, off_weight)
+    if has_off_weight
+        throw(ArgumentError("recursive_hierarchy likelihood does not yet support off/background trace weighting; use active_fraction=1.0 for this first path"))
+    end
+    kf = _hmm_kolmogorov_fn(hmm_stack)
+    r = hmm_stack === HMM_STACK_AD ? get_rates_ad(param, model) : get_rates(param, model)
+    transition_rates = _recursive_group_rates(r, trait.transition_group_parameter_indices)
+    emission_params = _recursive_group_rates(r, trait.emission_group_parameter_indices)
+    ap_cache = [
+        make_ap(rt, data.interval, components, model.method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
+        for rt in transition_rates
+    ]
+    d_cache = [set_d(ep, reporter) for ep in emission_params]
+    return _tracewise_indexed_logpredictions(traces, hmm_stack) do i, tr
+        tg = trait.cache_plan.assignment_transition_group[i]
+        eg = trait.cache_plan.assignment_emission_group[i]
+        a, p0 = ap_cache[tg]
+        _ll_hmm_single_trace_contrib(a, p0, d_cache[eg], tr, hmm_stack)
+    end
+end
+
 function ll_hmm_trace(
     param,
     data,
@@ -1100,6 +1143,13 @@ function ll_hmm_trace(
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
     with_hmm_zygote_checkpoint(hmm_checkpoint_steps) do
+        if hastrait(model, :recursive_hierarchy)
+            return ll_hmm_trace_recursive(
+                param, data, model;
+                steady_state_solver=steady_state_solver,
+                hmm_stack=hmm_stack,
+            )
+        end
         r = hmm_stack === HMM_STACK_AD ? prepare_rates_ad(param, model) : prepare_rates(param, model)
         components = get_components(model, data)
         reporter = get_reporter(model, data)

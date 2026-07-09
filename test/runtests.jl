@@ -14,6 +14,7 @@
 # when validating the full stack (e.g. after end-to-end AD is confirmed).
 
 using Random
+using DelimitedFiles
 using StochasticGene
 using Test
 
@@ -49,19 +50,190 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                     HierarchyNode(:individual, key=:trace_id),
                 ]),
             ]);
-            parameter_scope=Dict(:G => :top, :R => :group, :noise => :individual),
+            parameter_scope=Dict(:G => :top, :initiation => :top, :R => :group, :decay => :top, :noise => :individual),
         )
         @test hierarchy_node_names(hierarchy.root) == [:top, :group, :individual]
         @test Set(hierarchy_parameter_levels(hierarchy)) == Set([:top, :group, :individual])
+        path3 = hierarchy_path(hierarchy, (sample=:ThreePrime, trace_id=:trace001))
+        @test path3 == (top=:top, group=:ThreePrime, individual=:trace001)
+        groups3 = hierarchy_parameter_groups(hierarchy, path3)
+        @test groups3[:G] == (top=:top,)
+        @test groups3[:initiation] == (top=:top,)
+        @test groups3[:R] == (top=:top, group=:ThreePrime)
+        @test groups3[:decay] == (top=:top,)
+        @test groups3[:noise] == (top=:top, group=:ThreePrime, individual=:trace001)
+        @test_throws ArgumentError hierarchy_path(hierarchy, (sample=:OtherPrime, trace_id=:trace001))
+        @test_throws ArgumentError hierarchy_path(hierarchy, (sample=:ThreePrime,))
 
         rna = StochasticGene.RNAData("rna", "MYC", 3, [1.0, 2.0, 1.0], 1.0)
         multidata = MultiDatasetData(
             [rna, rna],
-            [(sample=:ThreePrime,), (sample=:FivePrime,)];
+            [(sample=:ThreePrime, trace_id=:trace001), (sample=:FivePrime, trace_id=:trace002)];
             names=[:ThreePrime, :FivePrime],
         )
         @test multidata.names == [:ThreePrime, :FivePrime]
         @test multidata.metadata[2].sample == :FivePrime
+        assignments = hierarchy_assignments(hierarchy, multidata)
+        @test assignments[1] isa HierarchyAssignment
+        @test assignments[1].dataset == :ThreePrime
+        @test assignments[1].parameter_groups[:G] == assignments[2].parameter_groups[:G]
+        @test assignments[1].parameter_groups[:R] != assignments[2].parameter_groups[:R]
+        @test assignments[1].parameter_groups[:noise] != assignments[2].parameter_groups[:noise]
+
+        trace_specs = [
+            DatasetSpec(:ThreePrime_trace001, :trace, "data/3Prime", "gene"; metadata=(sample=:ThreePrime, trace_id=:trace001)),
+            DatasetSpec(:ThreePrime_trace002, :trace, "data/3Prime", "gene"; metadata=(sample=:ThreePrime, trace_id=:trace002)),
+            DatasetSpec(:FivePrime_trace001, :trace, "data/5Prime", "gene"; metadata=(sample=:FivePrime, trace_id=:trace003)),
+            DatasetSpec(:FivePrime_trace002, :trace, "data/5Prime", "gene"; metadata=(sample=:FivePrime, trace_id=:trace004)),
+        ]
+        plan = recursive_hierarchy_cache_plan(
+            hierarchy,
+            trace_specs;
+            transition_families=[:G, :initiation, :R],
+            emission_families=[:noise],
+        )
+        @test plan isa RecursiveHierarchyCachePlan
+        @test plan.assignment_transition_group == [1, 1, 2, 2]
+        @test plan.assignment_emission_group == [1, 2, 3, 4]
+        @test n_transition_rate_groups(plan) == 2
+        @test n_emission_groups(plan) == 4
+        @test plan.transition_group_keys == [
+            (top=:top, group=:ThreePrime),
+            (top=:top, group=:FivePrime),
+        ]
+        @test length(plan.emission_group_keys) == 4
+        @test_throws ArgumentError recursive_hierarchy_cache_plan(
+            assignments;
+            transition_families=[:missing_family],
+            emission_families=[:noise],
+        )
+        recursive_spec = (
+            cache_plan=plan,
+            rate_families=Dict(
+                :G => collect(1:4),
+                :initiation => [5],
+                :R => collect(6:8),
+                :decay => [9],
+                :noise => collect(10:13),
+            ),
+        )
+        trace_data = StochasticGene.TraceData(
+            "recursive",
+            "MYC",
+            1.0,
+            ([fill(0.1, 4), fill(0.2, 4), fill(0.3, 4), fill(0.4, 4)], [], 0.0, 1),
+        )
+        base_rates = [fill(0.1, 4); 0.2; fill(0.3, 3); 1.0; 0.0; 0.1; 0.5; 0.2]
+        model = StochasticGene.load_model(
+            trace_data,
+            base_rates,
+            base_rates,
+            collect(1:13),
+            tuple(),
+            ([1, 2], [2, 1], [2, 3], [3, 2]),
+            3,
+            3,
+            0,
+            1,
+            "",
+            1,
+            fill(1.0, 13),
+            Int[],
+            1.0,
+            0.01,
+            StochasticGene.prob_Gaussian,
+            [0.0, 0.1, 0.5, 0.2],
+            StochasticGene.Tsit5(),
+            tuple(),
+            tuple(),
+            nothing;
+            recursive_hierarchy=recursive_spec,
+        )
+        @test StochasticGene.hastrait(model, :recursive_hierarchy)
+        @test length(model.rates) == 28
+        @test model.trait.recursive_hierarchy.assignment_parameter_indices[6, 1] ==
+              model.trait.recursive_hierarchy.assignment_parameter_indices[6, 2]
+        @test model.trait.recursive_hierarchy.assignment_parameter_indices[6, 1] !=
+              model.trait.recursive_hierarchy.assignment_parameter_indices[6, 3]
+        @test model.trait.recursive_hierarchy.assignment_parameter_indices[10, 1] !=
+              model.trait.recursive_hierarchy.assignment_parameter_indices[10, 2]
+
+        mktempdir() do root
+            d3 = joinpath(root, "data", "3Prime")
+            d5 = joinpath(root, "data", "5Prime")
+            mkpath(d3)
+            mkpath(d5)
+            for i in 1:2
+                writedlm(joinpath(d3, "gene_trace$(i).txt"), [1:6 fill(0.0, 6) fill(0.1 * i, 6)])
+                writedlm(joinpath(d5, "gene_trace$(i).txt"), [1:6 fill(0.0, 6) fill(0.2 * i, 6)])
+            end
+            keyed_recursive = (
+                kind=:recursive,
+                levels=hierarchy,
+                datasets=DatasetSpec[
+                    DatasetSpec(:ThreePrime_gene, :trace, "3Prime", "gene"; metadata=(sample=:ThreePrime,)),
+                    DatasetSpec(:FivePrime_gene, :trace, "5Prime", "gene"; metadata=(sample=:FivePrime,)),
+                ],
+                transition_families=[:G, :initiation, :R, :decay],
+                emission_families=[:noise],
+                rate_families=recursive_spec.rate_families,
+            )
+            data2, model2, _ = StochasticGene.make_structures(
+                base_rates,
+                :trace,
+                "unused",
+                "MYC",
+                "cell",
+                "gene",
+                "results",
+                "recursive-real-smoke",
+                collect(1:13),
+                tuple(),
+                ([1, 2], [2, 1], [2, 3], [3, 2]),
+                3,
+                3,
+                0,
+                1,
+                tuple(),
+                nothing,
+                root,
+                1.0,
+                6.0,
+                base_rates,
+                fill(1.0, 13),
+                1,
+                Int[],
+                1.0,
+                "",
+                StochasticGene.prob_Gaussian,
+                [0.0, 0.1, 0.5, 0.2],
+                keyed_recursive,
+                "ml",
+                0.01,
+                10,
+                0,
+                1.0,
+                1.0,
+                StochasticGene.Tsit5(),
+                false,
+                3,
+                1,
+                1.0,
+                [],
+                [],
+            )
+            @test length(data2.trace[1]) == 4
+            @test data2.trace[3] == 0.0
+            @test StochasticGene.hastrait(model2, :recursive_hierarchy)
+            @test n_transition_rate_groups(model2.trait.recursive_hierarchy.cache_plan) == 2
+            @test n_emission_groups(model2.trait.recursive_hierarchy.cache_plan) == 4
+        end
+
+        specs = [
+            spec3,
+            DatasetSpec(:FivePrime, :trace, "data/5Prime", "5Prime"; metadata=(sample=:FivePrime, replicate=:rep1)),
+        ]
+        @test_throws ArgumentError hierarchy_assignments(hierarchy, specs)
         @test_throws ArgumentError MultiDatasetData([rna], [(sample=:ThreePrime,), (sample=:FivePrime,)])
     end
 

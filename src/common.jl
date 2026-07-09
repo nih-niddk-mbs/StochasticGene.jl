@@ -454,6 +454,166 @@ HierarchySpec(root::HierarchyNode; parameter_scope=Dict{Any,Symbol}()) =
     HierarchySpec(root, Dict{Any,Symbol}(parameter_scope))
 
 """
+    HierarchyAssignment
+
+Resolved hierarchy membership for one dataset.
+
+Fields:
+- `dataset`: dataset name.
+- `path`: named tuple mapping hierarchy node names to the dataset's level at
+  that node, e.g. `(top=:top, group=:ThreePrime, individual=:cell_001)`.
+- `parameter_groups`: map from each `HierarchySpec.parameter_scope` key to the
+  hierarchy prefix that owns that parameter. For example, if `:R => :group`,
+  the group key is `(top=:top, group=:ThreePrime)`.
+"""
+struct HierarchyAssignment
+    dataset::Symbol
+    path::NamedTuple
+    parameter_groups::Dict{Any,NamedTuple}
+end
+
+"""
+    RecursiveHierarchyCachePlan
+
+Compiled, data-independent cache plan for recursive hierarchical likelihoods.
+
+The plan is intentionally general: callers choose which parameter families alter
+the transition matrix (`transition_families`) and which alter the emission model
+(`emission_families`). The compiler then derives the minimal group IDs from the
+resolved hierarchy assignments. No 3Prime/5Prime assumptions are embedded here.
+
+Fields:
+- `assignments`: one [`HierarchyAssignment`](@ref) per dataset/trace-like item.
+- `transition_families`: families whose parameters change transition matrices.
+- `emission_families`: families whose parameters change emission distributions.
+- `transition_group_keys`: unique group keys for transition-cache entries.
+- `emission_group_keys`: unique group keys for emission-cache entries.
+- `assignment_transition_group`: transition group index per assignment.
+- `assignment_emission_group`: emission group index per assignment.
+"""
+struct RecursiveHierarchyCachePlan
+    assignments::Vector{HierarchyAssignment}
+    transition_families::Vector{Any}
+    emission_families::Vector{Any}
+    transition_group_keys::Vector{NamedTuple}
+    emission_group_keys::Vector{NamedTuple}
+    assignment_transition_group::Vector{Int}
+    assignment_emission_group::Vector{Int}
+end
+
+"""
+    RecursiveHierarchyTrait
+
+Model trait for recursive hierarchical likelihoods.
+
+This trait is the bridge between `fit.jl` and `likelihoods.jl`: `fit.jl`
+attaches a compiled [`RecursiveHierarchyCachePlan`](@ref), and the likelihood
+uses it to cache transition matrices by transition-rate group and dispatch
+emissions by emission group.
+"""
+struct RecursiveHierarchyTrait
+    cache_plan::RecursiveHierarchyCachePlan
+    rate_families::Dict{Any,Vector{Int}}
+    initial_values::Dict{Any,Any}
+    parameter_base_indices::Vector{Int}
+    assignment_parameter_indices::Matrix{Int}
+    transition_group_parameter_indices::Vector{Vector{Int}}
+    emission_group_parameter_indices::Vector{Vector{Int}}
+end
+
+RecursiveHierarchyTrait(cache_plan::RecursiveHierarchyCachePlan, rate_families::Dict{Any,Vector{Int}}) =
+    RecursiveHierarchyTrait(cache_plan, rate_families, Dict{Any,Any}(), Int[], Matrix{Int}(undef, 0, 0), Vector{Int}[], Vector{Int}[])
+
+RecursiveHierarchyTrait(cache_plan::RecursiveHierarchyCachePlan, rate_families::Dict{Any,Vector{Int}}, initial_values::AbstractDict) =
+    RecursiveHierarchyTrait(cache_plan, rate_families, Dict{Any,Any}(pairs(initial_values)), Int[], Matrix{Int}(undef, 0, 0), Vector{Int}[], Vector{Int}[])
+
+function _normalize_rate_families_for_trait(rate_families)
+    d = Dict{Any,Vector{Int}}()
+    for (k, v) in pairs(rate_families)
+        d[k] = collect(Int, v)
+    end
+    return d
+end
+
+function _base_parameter_families(rate_families::AbstractDict, nbase::Integer)
+    owners = Vector{Any}(undef, nbase)
+    assigned = falses(nbase)
+    for (family, inds) in pairs(rate_families)
+        for i in inds
+            1 <= i <= nbase || throw(ArgumentError("rate family $(repr(family)) contains index $i outside 1:$nbase"))
+            assigned[i] && throw(ArgumentError("base parameter index $i belongs to more than one rate family"))
+            owners[i] = family
+            assigned[i] = true
+        end
+    end
+    missing = findall(!, assigned)
+    isempty(missing) || throw(ArgumentError("recursive_hierarchy rate_families must cover every base parameter index; missing $(repr(missing))"))
+    return owners
+end
+
+"""
+    compile_recursive_hierarchy_trait(cache_plan, rate_families, nbase; transition_indices, emission_indices)
+
+Create the parameter-index layout for a recursive hierarchy. The resulting trait
+maps each base parameter slot and assignment to a global parameter index, and
+precomputes the indices needed for transition-matrix and emission caches.
+"""
+function compile_recursive_hierarchy_trait(
+    cache_plan::RecursiveHierarchyCachePlan,
+    rate_families::AbstractDict,
+    nbase::Integer;
+    transition_indices=1:nbase,
+    emission_indices=Int[],
+)
+    rate_families_out = _normalize_rate_families_for_trait(rate_families)
+    family_for_base = _base_parameter_families(rate_families_out, nbase)
+    nassign = length(cache_plan.assignments)
+    assignment_parameter_indices = Matrix{Int}(undef, nbase, nassign)
+    parameter_base_indices = Int[]
+    parameter_lookup = Dict{Tuple{Any,NamedTuple,Int},Int}()
+    for aidx in 1:nassign
+        groups = cache_plan.assignments[aidx].parameter_groups
+        for base_idx in 1:nbase
+            family = family_for_base[base_idx]
+            haskey(groups, family) ||
+                throw(ArgumentError("assignment $(cache_plan.assignments[aidx].dataset) has no parameter group for family $(repr(family))"))
+            key = (family, groups[family], base_idx)
+            pidx = get(parameter_lookup, key, 0)
+            if pidx == 0
+                push!(parameter_base_indices, base_idx)
+                pidx = length(parameter_base_indices)
+                parameter_lookup[key] = pidx
+            end
+            assignment_parameter_indices[base_idx, aidx] = pidx
+        end
+    end
+
+    transition_group_parameter_indices = Vector{Int}[]
+    for gid in 1:n_transition_rate_groups(cache_plan)
+        aidx = findfirst(==(gid), cache_plan.assignment_transition_group)
+        aidx === nothing && throw(ArgumentError("transition group $gid has no assignments"))
+        push!(transition_group_parameter_indices, assignment_parameter_indices[collect(transition_indices), aidx])
+    end
+
+    emission_group_parameter_indices = Vector{Int}[]
+    for gid in 1:n_emission_groups(cache_plan)
+        aidx = findfirst(==(gid), cache_plan.assignment_emission_group)
+        aidx === nothing && throw(ArgumentError("emission group $gid has no assignments"))
+        push!(emission_group_parameter_indices, assignment_parameter_indices[collect(emission_indices), aidx])
+    end
+
+    return RecursiveHierarchyTrait(
+        cache_plan,
+        rate_families_out,
+        Dict{Any,Any}(),
+        parameter_base_indices,
+        assignment_parameter_indices,
+        transition_group_parameter_indices,
+        emission_group_parameter_indices,
+    )
+end
+
+"""
     MultiDatasetData
 
 Loaded datasets plus their hierarchy metadata.
@@ -500,6 +660,207 @@ end
 Return the unique hierarchy levels referenced by `spec.parameter_scope`.
 """
 hierarchy_parameter_levels(spec::HierarchySpec) = unique(collect(values(spec.parameter_scope)))
+
+function _metadata_value(metadata, key::Symbol)
+    if metadata isa NamedTuple
+        haskey(metadata, key) && return metadata[key]
+    elseif metadata isa AbstractDict
+        haskey(metadata, key) && return metadata[key]
+    end
+    hasproperty(metadata, key) && return getproperty(metadata, key)
+    throw(ArgumentError("hierarchy metadata is missing key $(repr(key))"))
+end
+
+function _push_hierarchy_path!(names::Vector{Symbol}, values::Vector{Any}, node::HierarchyNode, metadata)
+    node.name in names &&
+        throw(ArgumentError("hierarchy node names must be unique; found duplicate $(repr(node.name))"))
+    value = node.key === nothing ? node.name : _metadata_value(metadata, node.key)
+    if !isempty(node.levels) && value ∉ node.levels
+        throw(ArgumentError(
+            "metadata value $(repr(value)) for hierarchy node $(repr(node.name)) is not in allowed levels $(repr(node.levels))",
+        ))
+    end
+    push!(names, node.name)
+    push!(values, value)
+    for child in node.children
+        _push_hierarchy_path!(names, values, child, metadata)
+    end
+    return nothing
+end
+
+"""
+    hierarchy_path(spec, metadata)
+
+Resolve one metadata row against a recursive hierarchy, returning a named tuple
+from hierarchy node names to level values.
+"""
+function hierarchy_path(spec::HierarchySpec, metadata)
+    names = Symbol[]
+    values = Any[]
+    _push_hierarchy_path!(names, values, spec.root, metadata)
+    return NamedTuple{Tuple(names)}(Tuple(values))
+end
+
+function _hierarchy_prefix(path::NamedTuple, level::Symbol)
+    path_keys = collect(keys(path))
+    i = findfirst(==(level), path_keys)
+    i === nothing && throw(ArgumentError("hierarchy level $(repr(level)) is not present in path $(repr(path_keys))"))
+    prefix_keys = Tuple(path_keys[1:i])
+    prefix_values = Tuple(values(path))[1:i]
+    return NamedTuple{prefix_keys}(prefix_values)
+end
+
+"""
+    hierarchy_parameter_groups(spec, path)
+
+For one resolved hierarchy `path`, return the owning group key for each
+parameter scope in `spec.parameter_scope`.
+"""
+function hierarchy_parameter_groups(spec::HierarchySpec, path::NamedTuple)
+    groups = Dict{Any,NamedTuple}()
+    for (param, level) in spec.parameter_scope
+        groups[param] = _hierarchy_prefix(path, level)
+    end
+    return groups
+end
+
+"""
+    hierarchy_assignments(spec, multidata)
+    hierarchy_assignments(spec, dataset_specs)
+
+Resolve every dataset into hierarchy paths and parameter-sharing groups.
+
+This is still passive data wrangling: it validates metadata and returns
+[`HierarchyAssignment`](@ref) records, but does not change likelihoods or the
+legacy `hierarchical=(...)` tuple path.
+"""
+function hierarchy_assignments(spec::HierarchySpec, multidata::MultiDatasetData)
+    assignments = HierarchyAssignment[]
+    for i in eachindex(multidata.datasets)
+        path = hierarchy_path(spec, multidata.metadata[i])
+        push!(assignments, HierarchyAssignment(
+            multidata.names[i],
+            path,
+            hierarchy_parameter_groups(spec, path),
+        ))
+    end
+    return assignments
+end
+
+function hierarchy_assignments(spec::HierarchySpec, dataset_specs::AbstractVector{<:DatasetSpec})
+    assignments = HierarchyAssignment[]
+    for ds in dataset_specs
+        path = hierarchy_path(spec, ds.metadata)
+        push!(assignments, HierarchyAssignment(
+            ds.name,
+            path,
+            hierarchy_parameter_groups(spec, path),
+        ))
+    end
+    return assignments
+end
+
+function _family_group_key(groups::AbstractDict, families)
+    names = Symbol[]
+    values = Any[]
+    seen = Set{Symbol}()
+    for family in families
+        haskey(groups, family) ||
+            throw(ArgumentError("parameter family $(repr(family)) is not present in hierarchy assignment groups"))
+        group = groups[family]
+        for name in keys(group)
+            value = group[name]
+            if name in seen
+                first_i = findfirst(==(name), names)
+                values[first_i] == value ||
+                    throw(ArgumentError("incompatible hierarchy values for key $(repr(name)): $(repr(values[first_i])) and $(repr(value))"))
+            else
+                push!(names, name)
+                push!(values, value)
+                push!(seen, name)
+            end
+        end
+    end
+    return NamedTuple{Tuple(names)}(Tuple(values))
+end
+
+function _group_indices(keys_in_order)
+    unique_keys = NamedTuple[]
+    indices = Int[]
+    lookup = Dict{NamedTuple,Int}()
+    for key in keys_in_order
+        idx = get(lookup, key, 0)
+        if idx == 0
+            push!(unique_keys, key)
+            idx = length(unique_keys)
+            lookup[key] = idx
+        end
+        push!(indices, idx)
+    end
+    return unique_keys, indices
+end
+
+"""
+    recursive_hierarchy_cache_plan(assignments; transition_families, emission_families)
+    recursive_hierarchy_cache_plan(spec, dataset_specs; ...)
+
+Compile hierarchy assignments into transition/emission cache groups.
+
+Families in `transition_families` determine when transition matrices must differ.
+Families in `emission_families` determine when emission distributions must differ.
+The function returns stable integer group IDs in first-seen order.
+"""
+function recursive_hierarchy_cache_plan(
+    assignments::AbstractVector{<:HierarchyAssignment};
+    transition_families,
+    emission_families,
+)
+    assignments_out = collect(assignments)
+    transition = collect(transition_families)
+    emission = collect(emission_families)
+    transition_keys = [_family_group_key(a.parameter_groups, transition) for a in assignments_out]
+    emission_keys = [_family_group_key(a.parameter_groups, emission) for a in assignments_out]
+    transition_group_keys, assignment_transition_group = _group_indices(transition_keys)
+    emission_group_keys, assignment_emission_group = _group_indices(emission_keys)
+    return RecursiveHierarchyCachePlan(
+        assignments_out,
+        transition,
+        emission,
+        transition_group_keys,
+        emission_group_keys,
+        assignment_transition_group,
+        assignment_emission_group,
+    )
+end
+
+function recursive_hierarchy_cache_plan(
+    spec::HierarchySpec,
+    dataset_specs::AbstractVector{<:DatasetSpec};
+    transition_families,
+    emission_families,
+)
+    recursive_hierarchy_cache_plan(
+        hierarchy_assignments(spec, dataset_specs);
+        transition_families=transition_families,
+        emission_families=emission_families,
+    )
+end
+
+"""
+    n_transition_rate_groups(plan)
+
+Number of unique transition-rate groups in a recursive hierarchy cache plan.
+This is the number of transition probability/steady-state objects `(a, p0)` that
+must be computed and cached per likelihood evaluation.
+"""
+n_transition_rate_groups(plan::RecursiveHierarchyCachePlan) = length(plan.transition_group_keys)
+
+"""
+    n_emission_groups(plan)
+
+Number of unique emission/noise groups in a recursive hierarchy cache plan.
+"""
+n_emission_groups(plan::RecursiveHierarchyCachePlan) = length(plan.emission_group_keys)
 
 # Helper functions for yield Union type
 """

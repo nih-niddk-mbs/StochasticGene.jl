@@ -55,7 +55,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution. `proposal_cv` is accepted as an alias. If a vector is supplied, each sampled parameter uses its own CV. If positive scalar, uses this fixed value. If negative scalar (e.g., `-0.01`), attempts to load the proposal covariance matrix from a previous fit with the same model. If loading succeeds, warmup is automatically skipped (even if `warmupsteps > 0` is set). If loading fails or file doesn't exist, falls back to `abs(propcv)` and warmup proceeds normally. Loading validates that model parameters match exactly (G, R, S, transitions, fittedparam, nalleles, etc.). This enables efficient proposal reuse when running multiple chains or extensions with expensive likelihood evaluations.
-- `proposal_cv_rates::Real=0.0`, `proposal_cv_noise::Real=0.0`: MH only — optional split initial proposal CVs for rate versus noise parameters. `0.0` means use `propcv`; `proposal_cv_noise=0.0` inherits the rate CV.
+- `propcv_rate::Real=0.0`, `propcv_noise::Real=0.0`: MH only — optional split initial proposal CVs for rate versus noise parameters. `0.0` means use `propcv`; `propcv_noise=0.0` inherits the rate CV.
 - `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
@@ -178,8 +178,11 @@ const _FIT_DEFAULTS = (
     probfn=nothing,  # resolved to prob_Gaussian at runtime (defined in hmm.jl, included after fit.jl)
     noisepriors=[],
     hierarchical=tuple(),
+    recursive_hierarchy=nothing,
     ratetype="median",
     propcv=0.01,
+    propcv_rate=0.0,
+    propcv_noise=0.0,
     proposal_cv_rates=0.0,
     proposal_cv_noise=0.0,
     maxtime=60.0,
@@ -308,6 +311,12 @@ function fit(; key=nothing, kwargs...)
     end
     if haskey(merged, :proposal_cv) && merged[:proposal_cv] !== nothing
         merged[:propcv] = merged[:proposal_cv]
+    end
+    if haskey(merged, :propcv_rate) && merged[:propcv_rate] !== nothing
+        merged[:proposal_cv_rates] = merged[:propcv_rate]
+    end
+    if haskey(merged, :propcv_noise) && merged[:propcv_noise] !== nothing
+        merged[:proposal_cv_noise] = merged[:propcv_noise]
     end
     delete!(merged, :infolder)  # legacy key from old info TOMLs; ignored
     delete!(merged, :inlabel)   # legacy key from old info TOMLs; ignored
@@ -981,7 +990,8 @@ const _MAKE_STRUCTURES_OPTION_KW = (
     :advi_verbose, :advi_n_mc, :zygote_trace,
     :likelihood_executor, :gradient_checkpoint_length, :hmm_stack, :hmm_checkpoint_steps,
     :init_jitter, :init_jitter_individual, :init_jitter_noise,
-    :proposal_cv_rates, :proposal_cv_noise,
+    :propcv_rate, :propcv_noise, :proposal_cv_rates, :proposal_cv_noise,
+    :recursive_hierarchy,
 )
 
 function _make_structures_option_kwargs(; kwargs...)
@@ -1131,6 +1141,14 @@ Create and configure data, model, and options structures for fitting.
 - Optional trailing `kwargs...` (filtered to inference / sampler option keys; see `_MAKE_STRUCTURES_OPTION_KW` in the source) are merged into the run dict before [`load_options`](@ref) (e.g. `inference_method=:nuts`, `parallel=:distributed`, `gradient=:finite`).
 """
 function make_structures(rinit, datatype, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; legacy_traceinfo=nothing, legacy_dttype=nothing, kwargs...)
+    kw = Dict{Symbol,Any}(pairs(kwargs))
+    run_spec = _current_run_spec[] === nothing ? Dict{Symbol,Any}() : Dict{Symbol,Any}(_current_run_spec[])
+    recursive_hierarchy = pop!(kw, :recursive_hierarchy, get(run_spec, :recursive_hierarchy, nothing))
+    recursive_from_hierarchical = _recursive_hierarchy_from_hierarchical(hierarchical)
+    if recursive_hierarchy === nothing && recursive_from_hierarchical !== nothing
+        recursive_hierarchy = recursive_from_hierarchical
+        hierarchical = tuple()
+    end
     gene = check_genename(gene, "[")
     insertstep = normalize_insertstep(R, insertstep)
     S = reset_S(S, R, insertstep)
@@ -1150,7 +1168,25 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     if normalize_datatype(datatype_context) == :tracejoint && isempty(dwell_specs) && isempty(trace_specs_work) && !isempty(coupling)
         trace_specs_work = default_trace_specs_for_coupled(traceinfo, zeromedian, n_observed_trace_units(coupling))
     end
-    data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs_work, dwell_specs)
+    recursive_loaded = _load_recursive_trace_datasets(
+        recursive_hierarchy,
+        label,
+        gene,
+        dttype,
+        traceinfo,
+        temprna,
+        datacol,
+        zeromedian,
+        yieldfactor,
+        trace_specs_work,
+        root,
+    )
+    if recursive_loaded === nothing
+        data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs_work, dwell_specs)
+    else
+        data, expanded_recursive_specs = recursive_loaded
+        recursive_hierarchy = _complete_recursive_hierarchy_spec(recursive_hierarchy, expanded_recursive_specs)
+    end
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype_context; priorcv=priorcv)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
@@ -1172,7 +1208,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
         )
     end
     propcv = get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, proposal_fittedparam, transitions; name_override=proposal_key)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs; recursive_hierarchy=recursive_hierarchy)
     run = if _current_run_spec[] === nothing
         Dict{Symbol,Any}()
     else
@@ -1187,7 +1223,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
             :temp => temp,
         ),
     )
-    merge!(run, Dict{Symbol,Any}(kwargs))
+    merge!(run, Dict{Symbol,Any}(kw))
     options = load_options(run)
     return data, model, options
 end
@@ -1289,8 +1325,8 @@ function load_options(run0::AbstractDict)
     init_jitter = Float64(get(run, :init_jitter, 0.0))
     init_jitter_individual = Float64(get(run, :init_jitter_individual, 0.0))
     init_jitter_noise = Float64(get(run, :init_jitter_noise, 0.0))
-    proposal_cv_rates = Float64(get(run, :proposal_cv_rates, 0.0))
-    proposal_cv_noise = Float64(get(run, :proposal_cv_noise, 0.0))
+    proposal_cv_rates = Float64(get(run, :proposal_cv_rates, get(run, :propcv_rate, 0.0)))
+    proposal_cv_noise = Float64(get(run, :proposal_cv_noise, get(run, :propcv_noise, 0.0)))
 
     gck = _parse_gradient_checkpoint_length(run)
     lik_mh = _parse_likelihood_executor(
@@ -2940,6 +2976,324 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
     Transformation(ftransforms, invtransforms, sigmatransforms)
 end
 
+function _normalize_rate_families(rate_families)
+    rate_families === nothing && return Dict{Any,Vector{Int}}()
+    d = Dict{Any,Vector{Int}}()
+    for (k, v) in pairs(rate_families)
+        d[k] = collect(Int, v)
+    end
+    return d
+end
+
+function _recursive_hierarchy_trait(recursive_hierarchy)
+    recursive_hierarchy === nothing && return nothing
+    recursive_hierarchy == false && return nothing
+    if recursive_hierarchy isa RecursiveHierarchyTrait
+        return recursive_hierarchy
+    elseif recursive_hierarchy isa RecursiveHierarchyCachePlan
+        return RecursiveHierarchyTrait(recursive_hierarchy, Dict{Any,Vector{Int}}())
+    elseif recursive_hierarchy isa NamedTuple || recursive_hierarchy isa AbstractDict
+        plan = _spec_get_row(recursive_hierarchy, :cache_plan, _spec_get_row(recursive_hierarchy, :plan, nothing))
+        plan isa RecursiveHierarchyCachePlan ||
+            throw(ArgumentError("recursive_hierarchy requires a RecursiveHierarchyCachePlan in :cache_plan or :plan"))
+        rate_families = _normalize_rate_families(_spec_get_row(recursive_hierarchy, :rate_families, Dict{Any,Vector{Int}}()))
+        initial_values = _spec_get_row(recursive_hierarchy, :initial_values, Dict{Any,Any}())
+        return RecursiveHierarchyTrait(plan, rate_families, initial_values)
+    end
+    throw(ArgumentError("unsupported recursive_hierarchy value $(typeof(recursive_hierarchy)); pass a RecursiveHierarchyCachePlan, RecursiveHierarchyTrait, or NamedTuple/Dict"))
+end
+
+function _is_recursive_hierarchy_spec(x)
+    (x isa NamedTuple || x isa AbstractDict) || return false
+    kind = _spec_get_row(x, :kind, _spec_get_row(x, :type, nothing))
+    kind in (:recursive, "recursive", :recursive_hierarchy, "recursive_hierarchy") && return true
+    _spec_get_row(x, :cache_plan, _spec_get_row(x, :plan, nothing)) isa RecursiveHierarchyCachePlan && return true
+    _spec_get_row(x, :hierarchy, _spec_get_row(x, :levels, nothing)) isa HierarchySpec && return true
+    return false
+end
+
+function _recursive_hierarchy_from_hierarchical(hierarchical)
+    _is_recursive_hierarchy_spec(hierarchical) || return nothing
+    return hierarchical
+end
+
+function _recursive_hierarchy_datasets(recursive_hierarchy)
+    recursive_hierarchy === nothing && return nothing
+    (recursive_hierarchy isa NamedTuple || recursive_hierarchy isa AbstractDict) || return nothing
+    datasets = _spec_get_row(
+        recursive_hierarchy,
+        :datasets,
+        _spec_get_row(recursive_hierarchy, :dataset_specs, nothing),
+    )
+    datasets === nothing && return nothing
+    return collect(datasets)
+end
+
+function _dataset_spec_with_root(ds::DatasetSpec, root::String)
+    DatasetSpec(
+        ds.name,
+        ds.datatype,
+        _data_folder_path(ds.datapath, root),
+        ds.datacond;
+        metadata=ds.metadata,
+        trace_specs=ds.trace_specs,
+        dwell_specs=ds.dwell_specs,
+    )
+end
+
+function _metadata_to_dict(metadata)
+    d = Dict{Symbol,Any}()
+    if metadata isa NamedTuple
+        for k in keys(metadata)
+            d[Symbol(k)] = metadata[k]
+        end
+    elseif metadata isa AbstractDict
+        for (k, v) in pairs(metadata)
+            d[Symbol(k)] = v
+        end
+    elseif metadata !== nothing
+        for k in propertynames(metadata)
+            d[Symbol(k)] = getproperty(metadata, k)
+        end
+    end
+    return d
+end
+
+function _metadata_for_loaded_trace(metadata, dataset_name::Symbol, trace_index::Integer)
+    d = _metadata_to_dict(metadata)
+    get!(d, :dataset, dataset_name)
+    d[:trace_index] = trace_index
+    d[:trace_id] = Symbol(dataset_name, "_trace", trace_index)
+    names = Tuple(keys(d))
+    return NamedTuple{names}(Tuple(values(d)))
+end
+
+function _trace_specs_for_dataset(ds::DatasetSpec, fallback_trace_specs)
+    !isempty(ds.trace_specs) && return ds.trace_specs
+    return fallback_trace_specs
+end
+
+function _recursive_traceinfo_for_dataset(traceinfo, trace_specs, dt)
+    !isempty(trace_specs) && return _coalesce_traceinfo(nothing, trace_specs, dt)
+    length(traceinfo) >= 3 && return (Float64(traceinfo[1]), Float64(traceinfo[2]), Float64(traceinfo[3]))
+    return _LEGACY_TRACEINFO_DEFAULT[1:3]
+end
+
+function _load_recursive_trace_datasets(
+    recursive_hierarchy,
+    label,
+    gene,
+    dttype,
+    traceinfo,
+    temprna,
+    datacol,
+    zeromedian,
+    yieldfactor,
+    trace_specs,
+    root::String,
+)
+    datasets = _recursive_hierarchy_datasets(recursive_hierarchy)
+    datasets === nothing && return nothing
+    isempty(datasets) && throw(ArgumentError("recursive hierarchy :datasets must not be empty"))
+
+    traces = Vector[]
+    expanded_specs = DatasetSpec[]
+    interval = nothing
+    for ds0 in datasets
+        ds0 isa DatasetSpec ||
+            throw(ArgumentError("recursive hierarchy :datasets entries must be DatasetSpec values; got $(typeof(ds0))"))
+        ds = _dataset_spec_with_root(ds0, root)
+        dt = normalize_datatype(ds.datatype)
+        dt === :trace ||
+            throw(ArgumentError("recursive hierarchy trace loader currently supports DatasetSpec datatype :trace; got $(repr(ds.datatype))"))
+        ds_trace_specs = _trace_specs_for_dataset(ds, trace_specs)
+        ds_traceinfo = _recursive_traceinfo_for_dataset(traceinfo, ds_trace_specs, dt)
+        data_i = load_data(
+            dt,
+            dttype,
+            ds.datapath,
+            string(ds.name),
+            gene,
+            ds.datacond,
+            ds_traceinfo,
+            temprna,
+            datacol,
+            zeromedian,
+            yieldfactor,
+            ds_trace_specs,
+            ds.dwell_specs,
+        )
+        data_i isa AbstractTraceData ||
+            throw(ArgumentError("recursive hierarchy dataset $(ds.name) loaded $(typeof(data_i)); expected trace data"))
+        if interval === nothing
+            interval = data_i.interval
+        elseif abs(Float64(interval) - Float64(data_i.interval)) > max(1e-9, 1e-6 * max(abs(Float64(interval)), abs(Float64(data_i.interval)), 1.0))
+            throw(ArgumentError("recursive hierarchy datasets must share one trace interval; got $(interval) and $(data_i.interval)"))
+        end
+        for (j, tr) in enumerate(data_i.trace[1])
+            push!(traces, tr)
+            push!(expanded_specs, DatasetSpec(
+                Symbol(ds.name, "_trace", j),
+                :trace,
+                ds0.datapath,
+                ds0.datacond;
+                metadata=_metadata_for_loaded_trace(ds0.metadata, ds0.name, j),
+                trace_specs=ds_trace_specs,
+                dwell_specs=[],
+            ))
+        end
+    end
+    isempty(traces) && throw(ArgumentError("recursive hierarchy datasets loaded zero traces"))
+    nframes = round(Int, mean(size.(traces, 1)))
+    data = TraceData{typeof(label),typeof(gene),Tuple}(label, gene, interval, (traces, Vector[], 0.0, nframes, 1.0), Int[])
+    return data, expanded_specs
+end
+
+function _complete_recursive_hierarchy_spec(recursive_hierarchy, expanded_specs)
+    expanded_specs === nothing && return recursive_hierarchy
+    (recursive_hierarchy isa NamedTuple || recursive_hierarchy isa AbstractDict) || return recursive_hierarchy
+    plan = _spec_get_row(recursive_hierarchy, :cache_plan, _spec_get_row(recursive_hierarchy, :plan, nothing))
+    if plan === nothing
+        hierarchy = _spec_get_row(recursive_hierarchy, :hierarchy, _spec_get_row(recursive_hierarchy, :levels, nothing))
+        hierarchy isa HierarchySpec ||
+            throw(ArgumentError("recursive hierarchy keyed format requires :hierarchy or :levels when :cache_plan is not supplied"))
+        transition_families = _spec_get_row(recursive_hierarchy, :transition_families, nothing)
+        emission_families = _spec_get_row(recursive_hierarchy, :emission_families, nothing)
+        transition_families === nothing &&
+            throw(ArgumentError("recursive hierarchy keyed format requires :transition_families when :cache_plan is not supplied"))
+        emission_families === nothing &&
+            throw(ArgumentError("recursive hierarchy keyed format requires :emission_families when :cache_plan is not supplied"))
+        plan = recursive_hierarchy_cache_plan(
+            hierarchy,
+            expanded_specs;
+            transition_families=transition_families,
+            emission_families=emission_families,
+        )
+    end
+    rate_families = _spec_get_row(recursive_hierarchy, :rate_families, Dict{Any,Vector{Int}}())
+    initial_values = _spec_get_row(recursive_hierarchy, :initial_values, Dict{Any,Any}())
+    return (cache_plan=plan, rate_families=rate_families, initial_values=initial_values)
+end
+
+function _expand_recursive_vector(v::AbstractVector, base_indices::Vector{Int}, name::Symbol)
+    length(v) == length(base_indices) && return v
+    maximum(base_indices; init=0) <= length(v) && return v[base_indices]
+    throw(ArgumentError("recursive_hierarchy $name length $(length(v)) is incompatible with $(length(base_indices)) recursive parameters and base indices $(repr(base_indices))"))
+end
+
+_expand_recursive_priorcv(priorcv::Number, base_indices::Vector{Int}) = priorcv
+_expand_recursive_priorcv(priorcv::AbstractVector, base_indices::Vector{Int}) =
+    _expand_recursive_vector(priorcv, base_indices, :priorcv)
+
+function _expand_recursive_fittedparam(fittedparam, base_indices::Vector{Int})
+    isempty(fittedparam) && return collect(eachindex(base_indices))
+    base_fit = Set(Int.(fittedparam))
+    return [i for i in eachindex(base_indices) if base_indices[i] in base_fit]
+end
+
+function _recursive_family_initial_value(initial_values::AbstractDict, trait::RecursiveHierarchyTrait, pidx::Integer)
+    base_idx = trait.parameter_base_indices[pidx]
+    family = nothing
+    for (fam, indices) in trait.rate_families
+        if base_idx in indices
+            family = fam
+            break
+        end
+    end
+    family === nothing && return nothing
+    haskey(initial_values, family) || return nothing
+    family_values = initial_values[family]
+    offset = findfirst(==(base_idx), trait.rate_families[family])
+    offset === nothing && return nothing
+    if family_values isa AbstractVector
+        return family_values[offset]
+    end
+    family_values isa AbstractDict || return nothing
+    assignment_idx = findfirst(
+        a -> trait.assignment_parameter_indices[base_idx, a] == pidx,
+        axes(trait.assignment_parameter_indices, 2),
+    )
+    assignment_idx === nothing && return nothing
+    assignment = trait.cache_plan.assignments[assignment_idx]
+    group = assignment.parameter_groups[family]
+    candidates = Any[group, assignment.path, assignment.dataset]
+    for k in keys(assignment.path)
+        push!(candidates, assignment.path[k])
+    end
+    for k in keys(group)
+        push!(candidates, group[k])
+    end
+    for key in candidates
+        haskey(family_values, key) || continue
+        value = family_values[key]
+        return value isa AbstractVector ? value[offset] : value
+    end
+    return nothing
+end
+
+function _apply_recursive_initial_values!(r, rmean, trait::RecursiveHierarchyTrait)
+    isempty(trait.initial_values) && return r, rmean
+    for pidx in eachindex(trait.parameter_base_indices)
+        value = _recursive_family_initial_value(trait.initial_values, trait, pidx)
+        value === nothing && continue
+        r[pidx] = Float64(value)
+        rmean[pidx] = Float64(value)
+    end
+    return r, rmean
+end
+
+function _compile_recursive_trait_and_layout(
+    recursive_trait,
+    r,
+    rmean,
+    priorcv,
+    fittedparam,
+    ratetransforms,
+    nrates,
+    reporter,
+)
+    recursive_trait === nothing && return recursive_trait, r, rmean, priorcv, fittedparam, ratetransforms
+    nrates isa Int ||
+        throw(ArgumentError("recursive_hierarchy currently supports flat single-unit trace models; coupled/multi-unit rate splitting will be added separately"))
+    reporter isa HMMReporter ||
+        throw(ArgumentError("recursive_hierarchy currently requires a single HMMReporter"))
+    isempty(recursive_trait.rate_families) &&
+        throw(ArgumentError("recursive_hierarchy requires rate_families covering transition and emission parameter indices"))
+    nbase = nrates + reporter.n
+    trait = isempty(recursive_trait.parameter_base_indices) ?
+        compile_recursive_hierarchy_trait(
+            recursive_trait.cache_plan,
+            recursive_trait.rate_families,
+            nbase;
+            transition_indices=1:nrates,
+            emission_indices=(nrates + 1):nbase,
+        ) :
+        recursive_trait
+    if isempty(trait.initial_values) && !isempty(recursive_trait.initial_values)
+        trait = RecursiveHierarchyTrait(
+            trait.cache_plan,
+            trait.rate_families,
+            recursive_trait.initial_values,
+            trait.parameter_base_indices,
+            trait.assignment_parameter_indices,
+            trait.transition_group_parameter_indices,
+            trait.emission_group_parameter_indices,
+        )
+    end
+    base_indices = trait.parameter_base_indices
+    r = _expand_recursive_vector(r, base_indices, :rinit)
+    rmean = _expand_recursive_vector(rmean, base_indices, :priormean)
+    r, rmean = _apply_recursive_initial_values!(r, rmean, trait)
+    priorcv = _expand_recursive_priorcv(priorcv, base_indices)
+    fittedparam = _expand_recursive_fittedparam(fittedparam, base_indices)
+    ratetransforms = Transformation(
+        ratetransforms.f[base_indices],
+        ratetransforms.f_inv[base_indices],
+        ratetransforms.f_cv[base_indices],
+    )
+    return trait, r, rmean, priorcv, fittedparam, ratetransforms
+end
+
 
 """
     load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
@@ -2982,7 +3336,7 @@ For **coupled trace** / `AbstractTraceData`, keyword **`coupled_stack`** selects
 - Sets up traits and prior distributions
 - Returns concrete model type based on model complexity
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full, recursive_hierarchy=nothing)
     dwell_specs = (dwell_specs === nothing) ? [] : dwell_specs
     # For coupled dwell models, extract full onstates from dwell_specs here.
     if !isempty(dwell_specs) && !isempty(coupling) && G isa Tuple
@@ -3016,6 +3370,17 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     else
         gridindices = nothing
     end
+    recursive_trait = _recursive_hierarchy_trait(recursive_hierarchy)
+    recursive_trait, r, rmean, priorcv, fittedparam, ratetransforms = _compile_recursive_trait_and_layout(
+        recursive_trait,
+        r,
+        rmean,
+        priorcv,
+        fittedparam,
+        ratetransforms,
+        nrates,
+        reporter,
+    )
     if !isempty(hierarchical)
         hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor, ratetransforms, zeromedian)
     else
@@ -3027,7 +3392,14 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     GBool = isnothing(grid)
     HBool = isempty(hierarchical)
 
-    if CBool && GBool && HBool
+    if recursive_trait !== nothing
+        extras = NamedTuple()
+        !CBool && (extras = merge(extras, (coupling=couplingtrait,)))
+        !GBool && (extras = merge(extras, (grid=gridtrait,)))
+        !HBool && (extras = merge(extras, (hierarchical=hierarchicaltrait,)))
+        trait = merge(extras, (recursive_hierarchy=recursive_trait,))
+        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    elseif CBool && GBool && HBool
         if R == 0
             if has_trace_leg
                 # For trace data with R=0, still use GRSMmodel but with simplified components

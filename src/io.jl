@@ -2158,6 +2158,53 @@ function rlabels_GRSM_hierarchical(labelsin, model)
     labels
 end
 
+function _recursive_label_family(trait::RecursiveHierarchyTrait, base_idx::Integer)
+    for (family, indices) in trait.rate_families
+        base_idx in indices && return family
+    end
+    return :unknown
+end
+
+function _recursive_group_label(group::NamedTuple)
+    join(["$(k)=$(group[k])" for k in keys(group)], "|")
+end
+
+function _recursive_parameter_family(trait::RecursiveHierarchyTrait, pidx::Integer)
+    _recursive_label_family(trait, trait.parameter_base_indices[pidx])
+end
+
+function recursive_shared_parameter_indices(model::GRSMmodel)
+    trait = model.trait.recursive_hierarchy
+    shared = Int[]
+    for pidx in eachindex(trait.parameter_base_indices)
+        family = _recursive_parameter_family(trait, pidx)
+        family in trait.cache_plan.emission_families && continue
+        push!(shared, pidx)
+    end
+    shared
+end
+
+function rlabels_GRSM_recursive(labelsin, model)
+    trait = model.trait.recursive_hierarchy
+    labels = String[]
+    for pidx in eachindex(trait.parameter_base_indices)
+        base_idx = trait.parameter_base_indices[pidx]
+        family = _recursive_parameter_family(trait, pidx)
+        assignment_idx = findfirst(
+            a -> trait.assignment_parameter_indices[base_idx, a] == pidx,
+            axes(trait.assignment_parameter_indices, 2),
+        )
+        suffix = if assignment_idx === nothing
+            "recursive=$pidx"
+        else
+            groups = trait.cache_plan.assignments[assignment_idx].parameter_groups
+            haskey(groups, family) ? _recursive_group_label(groups[family]) : "recursive=$pidx"
+        end
+        push!(labels, "$(labelsin[1, base_idx])[$suffix]")
+    end
+    reshape(labels, 1, :)
+end
+
 """
     rlabels(model::GRSMmodel)
 
@@ -2182,6 +2229,9 @@ function rlabels(model::GRSMmodel)
     end
     if hastrait(model, :hierarchical)
         labels = rlabels_GRSM_hierarchical(labels, model)
+    end
+    if hastrait(model, :recursive_hierarchy)
+        labels = rlabels_GRSM_recursive(labels, model)
     end
     labels
 end
@@ -2826,6 +2876,8 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     save_proposal_covariance(proposal_cov_file, stats.covparam, model, name)
     if typeof(model) <: GRSMmodel && hastrait(model, :hierarchical)
         write_hierarchy(joinpath(path, "shared" * name), fits, stats, model, labels)
+    elseif typeof(model) <: GRSMmodel && hastrait(model, :recursive_hierarchy)
+        write_recursive_shared(joinpath(path, "shared" * name), fits, stats, model, labels)
     end
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
@@ -3087,6 +3139,31 @@ Write hierarchy parameters using default labels.
 """
 function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
     write_hierarchy(file, fits, stats, model, rlabels(model))
+end
+
+"""
+    write_recursive_shared(file::String, fits::Fit, stats, model::GRSMmodel, labels)
+
+Write shared recursive-hierarchy parameters into a file.
+
+Recursive hierarchy expands the rate vector by parameter-family groups instead of
+placing all shared parameters in a leading block. This writer keeps the
+non-emission families, which correspond to transition-rate groups cached by the
+likelihood, and leaves out individual noise/emission parameters.
+"""
+function write_recursive_shared(file::String, fits::Fit, stats, model::GRSMmodel, labels)
+    shared = recursive_shared_parameter_indices(model)
+    f = open(file, "w")
+    writedlm(f, labels[1:1, shared], ',')
+    writedlm(f, [get_rates(fits.parml, model)[shared]], ',')
+    writedlm(f, [get_rates(stats.meanparam, model, false)[shared]], ',')
+    writedlm(f, [get_rates(stats.medparam, model, false)[shared]], ',')
+    writedlm(f, [get_rates(fits.param[:, end], model)[shared]], ',')
+    close(f)
+end
+
+function write_recursive_shared(file::String, fits::Fit, stats, model::GRSMmodel)
+    write_recursive_shared(file, fits, stats, model, rlabels(model))
 end
 
 """
