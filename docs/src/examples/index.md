@@ -23,6 +23,7 @@ Cluster / Biowulf batch generation and combined rate files are documented on the
 
 ### Parallel Processing
 - [Parallel Processing](parallel_processing.md): Using parallel processing for large datasets
+- [Recursive Parameter-Sharing Trace Fits](recursive_parameter_sharing.md): Combining datasets across folders with arbitrary grouping levels and parameter sharing
 
 ## Contributing Examples
 

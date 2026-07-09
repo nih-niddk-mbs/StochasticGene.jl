@@ -38,6 +38,7 @@ makedocs(
             "Advanced Examples" => [
                 "Parallel Processing" => "examples/parallel_processing.md",
                 "Hierarchical Trace Analysis" => "examples/hierarchical_trace.md",
+                "Recursive Parameter-Sharing Trace Fits" => "examples/recursive_parameter_sharing.md",
                 "Joint Trace Analysis" => "examples/joint_trace.md",
                 "Coupled Model Analysis" => "examples/coupled_models.md",
             ],
