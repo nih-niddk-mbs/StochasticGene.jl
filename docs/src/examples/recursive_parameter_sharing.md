@@ -118,6 +118,7 @@ fit(;
     ratetype="ml",
     propcv_rate=0.05,
     propcv_noise=0.001,
+    propcv_levels=Dict(:top => 0.05, :group => 0.02, :noise => 0.001),
     maxtime=100.0,
 )
 ```
@@ -207,13 +208,56 @@ The ownership key for a parameter is the path prefix down to that level. If `:R 
 
 This prevents `:ThreePrime` under `:UNT` from being accidentally merged with `:ThreePrime` under `:KRAB`.
 
+## Rate-Handling Design
+
+Recursive parameter sharing keeps the same basic convention as other fits: a rate file is an operational object, not a compact storage format. The difference is that recursive groups are not dynamically connected, so their operational rate files are written separately.
+
+- The sampler may use a compact vector containing only the fitted degrees of freedom.
+- Before likelihood evaluation, the recursive layer assembles the full operational rate vector needed by each recursive group or trace assignment.
+- Existing HMM likelihood code receives ordinary rate vectors; it should not need to understand the sharing tree.
+- Informational files such as `info_*.toml`, `param-stats_*.txt`, `measures_*.txt`, and `shared_*.txt` are written once for the combined run.
+- Operational rate files are written once per recursive operational group, e.g. `rates_<key>-3Prime.txt` and `rates_<key>-5Prime.txt`.
+- Group rate files keep pristine single-unit rate labels such as `Rate_12`, `Rshift_1`, and `noiseparam_1`.
+- Combined parameter outputs append the recursive group label to compact fitted-parameter labels, e.g. `Rshift_1_3Prime`.
+- `shared_*.txt` is a diagnostic summary, not the canonical restart/input representation.
+
+## Proposal CVs
+
+Recursive MH fits can use a proposal-CV map so different hierarchy levels move at different scales:
+
+```julia
+propcv_levels = Dict(
+    :top => 0.05,
+    :group => 0.02,
+    :noise => 0.001,
+)
+```
+
+The map is additive to the older scalar settings. `propcv` remains the fallback, `propcv_rate` and
+`propcv_noise` still work, and `propcv_levels` overrides them for recursive parameters that match a key.
+`fit.jl` assembles these settings into one proposal CV vector before constructing the sampler proposal.
+
+Lookup is ordered from most specific to broad:
+
+- `(family=:R, owner=(top=:top, group=:ThreePrime))`, `(family, owner)`, or the full owner path.
+- Group-specific keys such as `(family=:R, level=:group, value=:ThreePrime)`, `(:R, :group, :ThreePrime)`, `(:group, :ThreePrime)`, or `:ThreePrime`.
+- Family/level keys such as `(family=:R, level=:group)`, `(:R, :group)`, `:R`, or `:group`.
+
+For the common 3Prime/5Prime setup, `:top` controls shared `G`, initiation, and decay parameters; `:group`
+controls group-owned `R` parameters; and `:noise` controls the noise parameters whether they are group-owned
+or individual-owned.
+
+This intentionally keeps downstream prediction tools simple. A downstream analysis should be able to read one group rate file as "the rates this group needs to run" without reconstructing the recursive sharing graph. The combined `info_*.toml`/`.jld2` records which group rate files belong to the joint run.
+
 ## Cache Behavior
 
-The recursive likelihood builds only the unique objects it needs:
+The recursive likelihood still avoids redundant expensive work when possible:
 
 - `transition_families` determines how many transition matrices `a` are cached.
 - `emission_families` determines how many emission parameter groups are cached.
 - Each trace is assigned to one transition group and one emission group.
+
+Operationally, the likelihood loops over traces using assembled full rates. The special recursive behavior is limited to caching reusable `(a, p0)` transition objects and emission/noise objects.
 
 For the no-`h` 3Prime/5Prime example, there are two transition groups and two emission groups. For the `-h` individual-noise case, there are still two transition groups, but emission groups are trace-specific.
 

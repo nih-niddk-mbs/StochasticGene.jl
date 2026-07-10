@@ -148,6 +148,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             tuple(),
             nothing;
             recursive_hierarchy=recursive_spec,
+            proposal_cv_levels=Dict(:top => 0.01, :group => 0.02, :noise => 0.003),
         )
         @test StochasticGene.hastrait(model, :recursive_hierarchy)
         @test length(model.rates) == 28
@@ -157,6 +158,29 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
               model.trait.recursive_hierarchy.assignment_parameter_indices[6, 3]
         @test model.trait.recursive_hierarchy.assignment_parameter_indices[10, 1] !=
               model.trait.recursive_hierarchy.assignment_parameter_indices[10, 2]
+        compact = collect(1.0:length(model.rates))
+        expanded = recursive_assignment_rates(compact, model.trait.recursive_hierarchy)
+        @test length(expanded) == 4
+        @test all(length.(expanded) .== 13)
+        @test expanded[1][1] == expanded[4][1]  # top-level G rate is shared
+        @test expanded[1][6] == expanded[2][6]  # group-level R rate is shared within 3Prime
+        @test expanded[1][6] != expanded[3][6]  # group-level R rate differs across groups
+        @test expanded[1][10] != expanded[2][10]  # individual noise differs per trace
+        @test length(recursive_transition_group_rates(compact, model.trait.recursive_hierarchy)) == 2
+        @test all(length.(recursive_transition_group_rates(compact, model.trait.recursive_hierarchy)) .== 9)
+        @test length(recursive_emission_group_rates(compact, model.trait.recursive_hierarchy)) == 4
+        @test all(length.(recursive_emission_group_rates(compact, model.trait.recursive_hierarchy)) .== 4)
+        @test size(StochasticGene.rlabels(model), 2) == length(model.rates)
+        @test any(contains("ThreePrime"), vec(StochasticGene.rlabels(model)))
+        @test length(StochasticGene._recursive_operational_rate_groups(model.trait.recursive_hierarchy)) == 4
+        split_cv = model.proposal
+        trait = model.trait.recursive_hierarchy
+        top_pos = findfirst(==(trait.assignment_parameter_indices[1, 1]), model.fittedparam)
+        group_pos = findfirst(==(trait.assignment_parameter_indices[6, 1]), model.fittedparam)
+        noise_pos = findfirst(==(trait.assignment_parameter_indices[10, 1]), model.fittedparam)
+        @test split_cv[top_pos] == 0.01
+        @test split_cv[group_pos] == 0.02
+        @test split_cv[noise_pos] == 0.003
 
         mktempdir() do root
             d3 = joinpath(root, "data", "3Prime")

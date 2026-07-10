@@ -56,6 +56,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution. `proposal_cv` is accepted as an alias. If a vector is supplied, each sampled parameter uses its own CV. If positive scalar, uses this fixed value. If negative scalar (e.g., `-0.01`), attempts to load the proposal covariance matrix from a previous fit with the same model. If loading succeeds, warmup is automatically skipped (even if `warmupsteps > 0` is set). If loading fails or file doesn't exist, falls back to `abs(propcv)` and warmup proceeds normally. Loading validates that model parameters match exactly (G, R, S, transitions, fittedparam, nalleles, etc.). This enables efficient proposal reuse when running multiple chains or extensions with expensive likelihood evaluations.
 - `propcv_rate::Real=0.0`, `propcv_noise::Real=0.0`: MH only — optional split initial proposal CVs for rate versus noise parameters. `0.0` means use `propcv`; `propcv_noise=0.0` inherits the rate CV.
+- `propcv_levels::Dict=nothing`: MH only — optional recursive parameter-sharing proposal CV overrides, for example `Dict(:top=>0.05, :group=>0.02, :noise=>0.001)`. Matching entries override `propcv_rate` / `propcv_noise`.
 - `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
@@ -185,6 +186,8 @@ const _FIT_DEFAULTS = (
     propcv_noise=0.0,
     proposal_cv_rates=0.0,
     proposal_cv_noise=0.0,
+    propcv_levels=nothing,
+    proposal_cv_levels=nothing,
     maxtime=60.0,
     samplesteps=1000000,
     warmupsteps=0,
@@ -317,6 +320,9 @@ function fit(; key=nothing, kwargs...)
     end
     if haskey(merged, :propcv_noise) && merged[:propcv_noise] !== nothing
         merged[:proposal_cv_noise] = merged[:propcv_noise]
+    end
+    if haskey(merged, :propcv_levels) && merged[:propcv_levels] !== nothing
+        merged[:proposal_cv_levels] = merged[:propcv_levels]
     end
     delete!(merged, :infolder)  # legacy key from old info TOMLs; ignored
     delete!(merged, :inlabel)   # legacy key from old info TOMLs; ignored
@@ -991,7 +997,7 @@ const _MAKE_STRUCTURES_OPTION_KW = (
     :likelihood_executor, :gradient_checkpoint_length, :hmm_stack, :hmm_checkpoint_steps,
     :init_jitter, :init_jitter_individual, :init_jitter_noise,
     :propcv_rate, :propcv_noise, :proposal_cv_rates, :proposal_cv_noise,
-    :recursive_hierarchy,
+    :propcv_levels, :proposal_cv_levels, :recursive_hierarchy,
 )
 
 function _make_structures_option_kwargs(; kwargs...)
@@ -1193,6 +1199,9 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     fittedparam = set_fittedparam(fittedparam, datatype_context, transitions, R, S, insertstep, noisepriors, coupling, grid)
     proposal_key = _current_name_override[] === nothing ? nothing : _current_name_override[]
     proposal_fittedparam = fittedparam
+    proposal_cv_rates = get(kw, :proposal_cv_rates, get(kw, :propcv_rate, get(run_spec, :proposal_cv_rates, get(run_spec, :propcv_rate, 0.0))))
+    proposal_cv_noise = get(kw, :proposal_cv_noise, get(kw, :propcv_noise, get(run_spec, :proposal_cv_noise, get(run_spec, :propcv_noise, 0.0))))
+    proposal_cv_levels = get(kw, :proposal_cv_levels, get(kw, :propcv_levels, get(run_spec, :proposal_cv_levels, get(run_spec, :propcv_levels, nothing))))
     if !isempty(hierarchical)
         n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors) +
                        ncoupling(coupling) +
@@ -1208,7 +1217,15 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
         )
     end
     propcv = get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalleles, proposal_fittedparam, transitions; name_override=proposal_key)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs; recursive_hierarchy=recursive_hierarchy)
+    model = load_model(
+        data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep,
+        splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method,
+        hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs;
+        recursive_hierarchy=recursive_hierarchy,
+        proposal_cv_rates=proposal_cv_rates,
+        proposal_cv_noise=proposal_cv_noise,
+        proposal_cv_levels=proposal_cv_levels,
+    )
     run = if _current_run_spec[] === nothing
         Dict{Symbol,Any}()
     else
@@ -1224,6 +1241,10 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
         ),
     )
     merge!(run, Dict{Symbol,Any}(kw))
+    # Proposal CV splitting is assembled above into model.proposal. Keep MH from
+    # applying the legacy option-level split a second time.
+    run[:proposal_cv_rates] = 0.0
+    run[:proposal_cv_noise] = 0.0
     options = load_options(run)
     return data, model, options
 end
@@ -3242,6 +3263,149 @@ function _apply_recursive_initial_values!(r, rmean, trait::RecursiveHierarchyTra
     return r, rmean
 end
 
+function _fit_noise_parameter_indices(nrates::Integer, reporter::HMMReporter)
+    Set(nrates+1:nrates+reporter.n)
+end
+
+function _fit_noise_parameter_indices(nrates::AbstractVector{<:Integer}, reporter::AbstractVector{<:HMMReporter})
+    inds = Set{Int}()
+    offset = 0
+    for i in eachindex(nrates)
+        union!(inds, offset+nrates[i]+1:offset+nrates[i]+reporter[i].n)
+        offset += nrates[i] + reporter[i].n
+    end
+    return inds
+end
+
+_fit_noise_parameter_indices(nrates, reporter) = Set{Int}()
+
+function _fit_base_parameter_index(idx::Integer, nbase::Integer)
+    nbase <= 0 && return idx
+    return mod1(idx, nbase)
+end
+
+_fit_proposal_cv_at(propcv::AbstractVector, i::Integer, default_cv::Real) = Float64(propcv[i])
+_fit_proposal_cv_at(propcv, i::Integer, default_cv::Real) = Float64(default_cv)
+
+function _normalize_proposal_cv_levels(proposal_cv_levels)
+    proposal_cv_levels === nothing && return Dict{Any,Float64}()
+    proposal_cv_levels isa AbstractDict ||
+        throw(ArgumentError("propcv_levels/proposal_cv_levels must be a Dict-like object or nothing, got $(typeof(proposal_cv_levels))"))
+    out = Dict{Any,Float64}()
+    for (k, v) in pairs(proposal_cv_levels)
+        fv = Float64(v)
+        fv >= 0.0 || throw(ArgumentError("propcv_levels[$(repr(k))] must be nonnegative, got $(repr(v))"))
+        out[k] = fv
+    end
+    return out
+end
+
+function _fit_proposal_cv_map_value(pcv::AbstractDict, key)
+    haskey(pcv, key) || return nothing
+    value = pcv[key]
+    value > 0.0 ? value : nothing
+end
+
+function _fit_recursive_parameter_family(trait::RecursiveHierarchyTrait, base_idx::Integer)
+    for (family, inds) in pairs(trait.rate_families)
+        base_idx in inds && return family
+    end
+    return nothing
+end
+
+function _recursive_assignment_for_parameter(trait::RecursiveHierarchyTrait, base_idx::Integer, pidx::Integer)
+    size(trait.assignment_parameter_indices, 1) >= base_idx || return nothing
+    for aidx in axes(trait.assignment_parameter_indices, 2)
+        trait.assignment_parameter_indices[base_idx, aidx] == pidx && return aidx
+    end
+    return nothing
+end
+
+function _recursive_owner_level(owner::NamedTuple)
+    ks = keys(owner)
+    isempty(ks) && return nothing
+    return ks[end]
+end
+
+function _recursive_proposal_cv_override(pcv::AbstractDict, trait::RecursiveHierarchyTrait, fitted_idx::Integer)
+    1 <= fitted_idx <= length(trait.parameter_base_indices) || return nothing
+    base_idx = trait.parameter_base_indices[fitted_idx]
+    family = _fit_recursive_parameter_family(trait, base_idx)
+    family === nothing && return nothing
+    aidx = _recursive_assignment_for_parameter(trait, base_idx, fitted_idx)
+    aidx === nothing && return nothing
+    assignment = trait.cache_plan.assignments[aidx]
+    haskey(assignment.parameter_groups, family) || return nothing
+    owner = assignment.parameter_groups[family]
+    level = _recursive_owner_level(owner)
+
+    candidates = Any[
+        (family=family, owner=owner),
+        (family, owner),
+        owner,
+    ]
+    for k in reverse(keys(owner))
+        v = owner[k]
+        push!(candidates, (family=family, level=k, value=v))
+        push!(candidates, (family, k, v))
+        push!(candidates, (k, v))
+        k === :top || push!(candidates, v)
+    end
+    if level !== nothing
+        push!(candidates, (family=family, level=level))
+        push!(candidates, (family, level))
+    end
+    push!(candidates, family)
+    level !== nothing && push!(candidates, level)
+
+    for key in candidates
+        value = _fit_proposal_cv_map_value(pcv, key)
+        value === nothing || return value
+    end
+    return nothing
+end
+
+function _assemble_proposalcv(
+    propcv,
+    fittedparam,
+    nrates,
+    reporter,
+    recursive_trait::Union{Nothing,RecursiveHierarchyTrait};
+    proposal_cv_rates::Real=0.0,
+    proposal_cv_noise::Real=0.0,
+    proposal_cv_levels=nothing,
+)
+    pcv_rates = Float64(proposal_cv_rates)
+    pcv_noise = Float64(proposal_cv_noise)
+    pcv_rates >= 0.0 || throw(ArgumentError("propcv_rate/proposal_cv_rates must be nonnegative, got $(repr(proposal_cv_rates))"))
+    pcv_noise >= 0.0 || throw(ArgumentError("propcv_noise/proposal_cv_noise must be nonnegative, got $(repr(proposal_cv_noise))"))
+    pcv_levels = _normalize_proposal_cv_levels(proposal_cv_levels)
+    (pcv_rates > 0.0 || pcv_noise > 0.0 || !isempty(pcv_levels)) || return propcv
+    if propcv isa Tuple || propcv isa AbstractMatrix
+        @warn "split proposal CV options ignored because proposal covariance is matrix-based"
+        return propcv
+    end
+    fallback_cv = propcv isa AbstractVector ? one(Float64) : Float64(propcv)
+    noise_inds = _fit_noise_parameter_indices(nrates, reporter)
+    nbase = nrates isa Integer ? nrates + reporter.n : 0
+    cv = Vector{Float64}(undef, length(fittedparam))
+    for i in eachindex(fittedparam)
+        base_idx = _fit_base_parameter_index(fittedparam[i], nbase)
+        inherited_cv = _fit_proposal_cv_at(propcv, i, fallback_cv)
+        rate_cv = pcv_rates > 0.0 ? pcv_rates : inherited_cv
+        noise_cv = pcv_noise > 0.0 ? pcv_noise : rate_cv
+        cv[i] = base_idx in noise_inds ? noise_cv : rate_cv
+    end
+    if recursive_trait !== nothing && !isempty(pcv_levels)
+        for i in eachindex(fittedparam)
+            override = _recursive_proposal_cv_override(pcv_levels, recursive_trait, fittedparam[i])
+            override === nothing || (cv[i] = override)
+        end
+    end
+    @info "Assembled proposal CV vector" proposal_cv_rates=pcv_rates proposal_cv_noise=pcv_noise proposal_cv_levels=pcv_levels nparams=length(cv)
+    return cv
+end
+
 function _compile_recursive_trait_and_layout(
     recursive_trait,
     r,
@@ -3336,7 +3500,7 @@ For **coupled trace** / `AbstractTraceData`, keyword **`coupled_stack`** selects
 - Sets up traits and prior distributions
 - Returns concrete model type based on model complexity
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full, recursive_hierarchy=nothing)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full, recursive_hierarchy=nothing, proposal_cv_rates::Real=0.0, proposal_cv_noise::Real=0.0, proposal_cv_levels=nothing)
     dwell_specs = (dwell_specs === nothing) ? [] : dwell_specs
     # For coupled dwell models, extract full onstates from dwell_specs here.
     if !isempty(dwell_specs) && !isempty(coupling) && G isa Tuple
@@ -3380,6 +3544,16 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         ratetransforms,
         nrates,
         reporter,
+    )
+    propcv = _assemble_proposalcv(
+        propcv,
+        fittedparam,
+        nrates,
+        reporter,
+        recursive_trait;
+        proposal_cv_rates=proposal_cv_rates,
+        proposal_cv_noise=proposal_cv_noise,
+        proposal_cv_levels=proposal_cv_levels,
     )
     if !isempty(hierarchical)
         hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor, ratetransforms, zeromedian)

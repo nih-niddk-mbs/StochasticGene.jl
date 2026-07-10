@@ -2166,7 +2166,19 @@ function _recursive_label_family(trait::RecursiveHierarchyTrait, base_idx::Integ
 end
 
 function _recursive_group_label(group::NamedTuple)
-    join(["$(k)=$(group[k])" for k in keys(group)], "|")
+    parts = String[]
+    for k in keys(group)
+        v = group[k]
+        k === :top && v == :top && continue
+        push!(parts, String(v))
+    end
+    isempty(parts) && push!(parts, "top")
+    return join(parts, "-")
+end
+
+function _recursive_file_token(s)
+    token = replace(strip(string(s)), r"[^A-Za-z0-9.-]+" => "-")
+    isempty(token) ? "group" : token
 end
 
 function _recursive_parameter_family(trait::RecursiveHierarchyTrait, pidx::Integer)
@@ -2200,7 +2212,7 @@ function rlabels_GRSM_recursive(labelsin, model)
             groups = trait.cache_plan.assignments[assignment_idx].parameter_groups
             haskey(groups, family) ? _recursive_group_label(groups[family]) : "recursive=$pidx"
         end
-        push!(labels, "$(labelsin[1, base_idx])[$suffix]")
+        push!(labels, "$(labelsin[1, base_idx])_$(suffix)")
     end
     reshape(labels, 1, :)
 end
@@ -2630,9 +2642,9 @@ Write the info file (TOML) for a run. Same stem as rates/measures (e.g. info_foo
 If `file` does not end in .toml, the extension is replaced. Delegates to `write_info_toml`.
 Sections: [output], [model_info], [environment]; if `run_spec` is set, also [run].
 """
-function write_info(file::String, fits, data, model, labels; run_spec=nothing)
+function write_info(file::String, fits, data, model, labels; run_spec=nothing, recursive_rate_outputs=nothing)
     file_toml = endswith(file, ".toml") ? file : (replace(file, r"\.txt$" => "") * ".toml")
-    write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels)
+    write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels, recursive_rate_outputs=recursive_rate_outputs)
 end
 
 function _stochasticgene_environment_info()
@@ -2662,7 +2674,7 @@ Write run specification and key outputs to a TOML file (info_*.toml).
 Same stem as rates/measures (e.g. rates_foo.txt → info_foo.toml). Called by write_info.
 Sections: [output] = llml, accept, total, median_param; [model_info]; [environment]. If run_spec is provided, also [run] = fit kwargs.
 """
-function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
+function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing, recursive_rate_outputs=nothing)
     # Write companion JLD2 with exact Julia types (functions, ODE solvers, etc.)
     if run_spec !== nothing
         write_run_spec_jld2(file_toml, run_spec)
@@ -2690,7 +2702,18 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
         lab = labels !== nothing ? labels : (model isa AbstractGRSMmodel ? rlabels(model) : String[])
         # rate_labels must be Vector{String} for valid TOML array (never Matrix repr)
         rate_labels_vec = lab isa AbstractMatrix ? vec(collect(String, lab)) : (lab isa AbstractVector ? collect(String, lab) : String[])
-        _write_toml_table(io, Dict("rate_labels" => rate_labels_vec, "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0), "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),), "  ")
+        model_info = Dict{String,Any}(
+            "rate_labels" => rate_labels_vec,
+            "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0),
+            "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),
+        )
+        if recursive_rate_outputs !== nothing
+            model_info["recursive_rate_files"] = [x.file for x in recursive_rate_outputs]
+            model_info["recursive_rate_groups"] = [x.group for x in recursive_rate_outputs]
+            model_info["recursive_rate_transition_groups"] = [x.transition_group for x in recursive_rate_outputs]
+            model_info["recursive_rate_emission_groups"] = [x.emission_group for x in recursive_rate_outputs]
+        end
+        _write_toml_table(io, model_info, "  ")
         println(io, "")
         println(io, "[environment]")
         _write_toml_table(io, _stochasticgene_environment_info(), "  ")
@@ -2866,7 +2889,12 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     end
     name = name_override !== nothing ? name_override : filename(data, model)
     labels = rlabels(model)
-    write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
+    recursive_rate_outputs = nothing
+    if model isa GRSMmodel && hastrait(model, :recursive_hierarchy)
+        recursive_rate_outputs = write_rates_recursive_groups(joinpath(path, "rates" * name), fits, stats, model)
+    else
+        write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
+    end
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp, data, model)
     if inference_info !== nothing
         write_advi_measures(joinpath(path, "advi-measures" * name), fits, stats, measures, deviance(fits, data, model), data, model, labels, inference_info, run_spec)
@@ -2889,7 +2917,7 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
     end
-    write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec)
+    write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec, recursive_rate_outputs=recursive_rate_outputs)
 end
 
 function _run_spec_get(run_spec, key::Symbol, default=nothing)
@@ -3164,6 +3192,63 @@ end
 
 function write_recursive_shared(file::String, fits::Fit, stats, model::GRSMmodel)
     write_recursive_shared(file, fits, stats, model, rlabels(model))
+end
+
+function _recursive_output_file(file::String, group_label::AbstractString)
+    base = replace(file, r"\.txt$" => "")
+    return base * "-" * _recursive_file_token(group_label) * ".txt"
+end
+
+function _recursive_operational_rate_groups(trait::RecursiveHierarchyTrait)
+    groups = NamedTuple[]
+    seen = Set{Tuple{Int,Int}}()
+    for aidx in axes(trait.assignment_parameter_indices, 2)
+        tg = trait.cache_plan.assignment_transition_group[aidx]
+        eg = trait.cache_plan.assignment_emission_group[aidx]
+        key = (tg, eg)
+        key in seen && continue
+        push!(seen, key)
+        tlabel = _recursive_group_label(trait.cache_plan.transition_group_keys[tg])
+        elabel = _recursive_group_label(trait.cache_plan.emission_group_keys[eg])
+        label = tlabel == elabel ? tlabel : tlabel * "-emission-" * elabel
+        push!(groups, (assignment_index=aidx, transition_group=tg, emission_group=eg, label=label))
+    end
+    return groups
+end
+
+function _write_one_recursive_rate_file(file::String, labels, rows)
+    open(file, "w") do f
+        writedlm(f, labels, ',')
+        for row in rows
+            writedlm(f, [row], ',')
+        end
+    end
+end
+
+function write_rates_recursive_groups(file::String, fits::Fit, stats, model::GRSMmodel)
+    trait = model.trait.recursive_hierarchy
+    labels = rlabels_GRSM(model)
+    groups = _recursive_operational_rate_groups(trait)
+    rate_rows = (
+        recursive_assignment_rates(get_rates(fits.parml, model), trait),
+        recursive_assignment_rates(get_rates(stats.meanparam, model, false), trait),
+        recursive_assignment_rates(get_rates(stats.medparam, model, false), trait),
+        recursive_assignment_rates(get_rates(fits.param[:, end], model), trait),
+    )
+    outputs = NamedTuple[]
+    for group in groups
+        outfile = _recursive_output_file(file, group.label)
+        rows = [rr[group.assignment_index] for rr in rate_rows]
+        _write_one_recursive_rate_file(outfile, labels, rows)
+        push!(outputs, (
+            file=basename(outfile),
+            group=group.label,
+            assignment_index=group.assignment_index,
+            transition_group=group.transition_group,
+            emission_group=group.emission_group,
+        ))
+    end
+    return outputs
 end
 
 """

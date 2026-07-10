@@ -1091,9 +1091,42 @@ function get_reporter(model::AbstractGeneTransitionModel, data)
     return model.reporter
 end
 
-function _recursive_group_rates(r, group_indices::Vector{Vector{Int}})
-    [r[idx] for idx in group_indices]
+function recursive_assignment_rates(r::AbstractVector, trait::RecursiveHierarchyTrait)
+    [
+        r[trait.assignment_parameter_indices[:, aidx]]
+        for aidx in axes(trait.assignment_parameter_indices, 2)
+    ]
 end
+
+function recursive_transition_group_rates(r::AbstractVector, trait::RecursiveHierarchyTrait)
+    assignment_rates = recursive_assignment_rates(r, trait)
+    [
+        begin
+            aidx = findfirst(==(gid), trait.cache_plan.assignment_transition_group)
+            aidx === nothing && throw(ArgumentError("transition group $gid has no recursive assignments"))
+            ntransition = length(trait.transition_group_parameter_indices[gid])
+            assignment_rates[aidx][1:ntransition]
+        end
+        for gid in 1:n_transition_rate_groups(trait.cache_plan)
+    ]
+end
+
+function recursive_emission_group_rates(r::AbstractVector, trait::RecursiveHierarchyTrait)
+    assignment_rates = recursive_assignment_rates(r, trait)
+    nbase = size(trait.assignment_parameter_indices, 1)
+    [
+        begin
+            aidx = findfirst(==(gid), trait.cache_plan.assignment_emission_group)
+            aidx === nothing && throw(ArgumentError("emission group $gid has no recursive assignments"))
+            nemission = length(trait.emission_group_parameter_indices[gid])
+            assignment_rates[aidx][(nbase - nemission + 1):nbase]
+        end
+        for gid in 1:n_emission_groups(trait.cache_plan)
+    ]
+end
+
+recursive_assignment_rates(param, model::AbstractGeneTransitionModel; inverse::Bool=true) =
+    recursive_assignment_rates(get_rates(param, model, inverse), model.trait.recursive_hierarchy)
 
 function ll_hmm_trace_recursive(
     param,
@@ -1119,8 +1152,8 @@ function ll_hmm_trace_recursive(
     end
     kf = _hmm_kolmogorov_fn(hmm_stack)
     r = hmm_stack === HMM_STACK_AD ? get_rates_ad(param, model) : get_rates(param, model)
-    transition_rates = _recursive_group_rates(r, trait.transition_group_parameter_indices)
-    emission_params = _recursive_group_rates(r, trait.emission_group_parameter_indices)
+    transition_rates = recursive_transition_group_rates(r, trait)
+    emission_params = recursive_emission_group_rates(r, trait)
     ap_cache = [
         make_ap(rt, data.interval, components, model.method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
         for rt in transition_rates
