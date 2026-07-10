@@ -4114,14 +4114,28 @@ end
 
 function write_correlation_functions_key(folder::String; lags=collect(0:1:200), ratetype::String="median", insertstep=nothing)
     n = 0
+    nrates = 0
+    skipped = String[]
     for (root, _, files) in walkdir(folder)
         for f in files
-            if occursin("info", f) && endswith(f, ".jld2")
-                n += 1
-                info = read_run_spec(joinpath(root, f))
+            if startswith(f, "rates_") && endswith(f, ".txt")
+                nrates += 1
                 key = get_key(f)
-                ratefile = joinpath(root, "rates_" * key * ".txt")
+                infofile = joinpath(root, "info_" * key * ".jld2")
+                if !isfile(infofile)
+                    push!(skipped, infofile)
+                    @warn "write_correlation_functions_key: skipping rate file with missing info file" ratefile = joinpath(root, f) infofile
+                    continue
+                end
+                info = read_run_spec(infofile)
+                ratefile = joinpath(root, f)
                 r = readrates(ratefile, get_row(ratetype))
+                if isempty(r)
+                    push!(skipped, ratefile)
+                    @warn "write_correlation_functions_key: skipping empty rate vector" ratefile
+                    continue
+                end
+                n += 1
                 splicetype = String(get(info, :splicetype, ""))
                 this_insertstep = isnothing(insertstep) ? info[:insertstep] : insertstep
                 @info "computing correlations for $ratefile with insertstep=$(this_insertstep)"
@@ -4132,7 +4146,9 @@ function write_correlation_functions_key(folder::String; lags=collect(0:1:200), 
             end
         end
     end
-    n == 0 && @warn "write_correlation_functions_key: no info_*.jld2 files found under $(abspath(folder))"
+    nrates == 0 && @warn "write_correlation_functions_key: no rates_*.txt files found under $(abspath(folder))"
+    nrates > 0 && n == 0 && @warn "write_correlation_functions_key: no usable rate/info pairs found for $(nrates) rate files under $(abspath(folder))"
+    !isempty(skipped) && @warn "write_correlation_functions_key: skipped $(length(skipped)) rate files without usable info/rate data"
     return n
 end
 

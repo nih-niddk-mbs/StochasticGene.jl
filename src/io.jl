@@ -4835,6 +4835,59 @@ function _parse_combined_file_spec_gamma(v, ncoupling::Int)
     length(vals) == ncoupling ? vals : nothing
 end
 
+function _combined_csv_colnames(df, candidates::Tuple)
+    names_lower = Dict(lowercase(String(n)) => String(n) for n in names(df))
+    for c in candidates
+        key = lowercase(String(c))
+        haskey(names_lower, key) && return names_lower[key]
+    end
+    return nothing
+end
+
+function _combined_csv_cell(row, col)
+    col === nothing && return ""
+    v = row[Symbol(col)]
+    (ismissing(v) || v === nothing) ? "" : string(v)
+end
+
+function _combined_csv_count_token(token::AbstractString, Runit::Int)
+    s = strip(String(token))
+    isempty(s) && return 0
+    if startswith(s, "Rany")
+        return 1
+    elseif startswith(s, "Rsum")
+        tail = s[5:end]
+        return (!isempty(tail) && all(isdigit, tail)) ? Runit : 0
+    elseif startswith(s, "R")
+        tail = s[2:end]
+        return (!isempty(tail) && all(isdigit, tail)) ? Runit : 0
+    else
+        return (length(s) == 2 && isdigit(s[1]) && isdigit(s[2])) ? 1 : 0
+    end
+end
+
+function _combined_csv_count_cell(cell, Runit::Int)
+    s = strip(string(cell))
+    (isempty(s) || lowercase(s) == "missing") && return 0
+    return sum(_combined_csv_count_token(strip(string(tok)), Runit) for tok in split(s, ','))
+end
+
+function _infer_combined_csv_ncoupling(row, cols, R::Tuple)
+    n = 0
+    n += _combined_csv_count_cell(_combined_csv_cell(row, cols.e1), R[1])
+    n += _combined_csv_count_cell(_combined_csv_cell(row, cols.e2), R[1])
+    n += _combined_csv_count_cell(_combined_csv_cell(row, cols.ge), R[2])
+    return n
+end
+
+function _combined_csv_coupling_cols(df)
+    (
+        e1 = _combined_csv_colnames(df, ("enhancer_to_gene_1", "e1")),
+        e2 = _combined_csv_colnames(df, ("enhancer_to_gene_2", "gene_to_enhancer", "e2")),
+        ge = _combined_csv_colnames(df, ("background_gene", "ge")),
+    )
+end
+
 """
     read_combined_file_specs_csv(csv_path; key_col="Model_name", ncoupling_col="ncoupling", gamma_col="default_coupling", skip_empty=true)
 
@@ -4847,14 +4900,22 @@ Returns `Vector{NamedTuple}` with fields:
 If `ncoupling_col` is absent, defaults to `1`. If `gamma_col` is absent/unparseable, uses `nothing`
 (so [`create_combined_file`](@ref) fills coupling columns with zeros).
 """
-function read_combined_file_specs_csv(csv_path::AbstractString; key_col::String="Model_name", ncoupling_col::String="ncoupling", gamma_col::String="default_coupling", skip_empty::Bool=true)
+function read_combined_file_specs_csv(csv_path::AbstractString; key_col::String="Model_name", ncoupling_col::String="ncoupling", gamma_col::String="default_coupling", skip_empty::Bool=true, R::Tuple=(3, 3), infer_coupled_ncoupling::Bool=true)
     df = DataFrame(CSV.File(csv_path))
     key_col in names(df) || throw(ArgumentError("missing key column '$key_col' in $csv_path"))
+    coupling_cols = _combined_csv_coupling_cols(df)
+    has_coupled_cols = any(c -> !isnothing(c), values(coupling_cols))
     rows = NamedTuple[]
     for row in eachrow(df)
         key = strip(string(row[Symbol(key_col)]))
         (skip_empty && isempty(key)) && continue
-        ncoupling = ncoupling_col in names(df) ? Int(row[Symbol(ncoupling_col)]) : 1
+        ncoupling = if ncoupling_col in names(df)
+            Int(row[Symbol(ncoupling_col)])
+        elseif infer_coupled_ncoupling && has_coupled_cols
+            max(1, _infer_combined_csv_ncoupling(row, coupling_cols, R))
+        else
+            1
+        end
         gamma_raw = gamma_col in names(df) ? row[Symbol(gamma_col)] : nothing
         default_coupling = _parse_combined_file_spec_gamma(gamma_raw, ncoupling)
         push!(rows, (key=key, ncoupling=ncoupling, default_coupling=default_coupling))
@@ -4907,8 +4968,10 @@ function create_combined_files_driver(
     ncoupling_col::String="ncoupling",
     gamma_col::String="default_coupling",
     skip_empty::Bool=true,
+    R::Tuple=(3, 3),
+    infer_coupled_ncoupling::Bool=true,
 )
-    specs = read_combined_file_specs_csv(csv_path; key_col=key_col, ncoupling_col=ncoupling_col, gamma_col=gamma_col, skip_empty=skip_empty)
+    specs = read_combined_file_specs_csv(csv_path; key_col=key_col, ncoupling_col=ncoupling_col, gamma_col=gamma_col, skip_empty=skip_empty, R=R, infer_coupled_ncoupling=infer_coupled_ncoupling)
     create_combined_files_driver(specs; enhancer_file=enhancer_file, gene_file=gene_file, outfolder=outfolder, Nenh=Nenh, Ngene=Ngene, hierarchical=hierarchical)
 end
 
@@ -4927,9 +4990,11 @@ function create_combined_files(csv_path::AbstractString, outfolder::AbstractStri
         key_col::String="Model_name",
         ncoupling_col::String="ncoupling",
         gamma_col::String="default_coupling",
-        skip_empty::Bool=true)
+        skip_empty::Bool=true,
+        R::Tuple=(3, 3),
+        infer_coupled_ncoupling::Bool=true)
     create_combined_files_driver(csv_path; enhancer_file=enhancer_file, gene_file=gene_file, outfolder=outfolder,
-        Nenh=Nenh, Ngene=Ngene, hierarchical=hierarchical, key_col=key_col, ncoupling_col=ncoupling_col, gamma_col=gamma_col, skip_empty=skip_empty)
+        Nenh=Nenh, Ngene=Ngene, hierarchical=hierarchical, key_col=key_col, ncoupling_col=ncoupling_col, gamma_col=gamma_col, skip_empty=skip_empty, R=R, infer_coupled_ncoupling=infer_coupled_ncoupling)
 end
 
 """
