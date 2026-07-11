@@ -1933,49 +1933,208 @@ function write_ONOFFhistograms_key(
                 ninfo += 1
                 info_path = joinpath(result_root, f)
                 key = get_key(f)
-                ratefile = joinpath(result_root, "rates_" * key * ".txt")
-                outfile = joinpath(result_root, "ONOFF_" * key * ".csv")
-
-                if !isfile(ratefile)
-                    @warn "write_ONOFFhistograms_key: missing rates file for key=$key at $ratefile; skipping"
-                    push!(df, (key, ratefile, outfile, "missing rates"))
-                    continue
-                end
-
                 info = read_run_spec(info_path)
                 required = (:transitions, :G, :R, :S, :insertstep)
                 missing = [k for k in required if !haskey(info, k)]
                 if !isempty(missing)
                     @warn "write_ONOFFhistograms_key: run spec missing $(missing) for key=$key; skipping"
-                    push!(df, (key, ratefile, outfile, "missing metadata"))
+                    push!(df, (key, "", "", "missing metadata"))
                     continue
                 end
 
                 if info[:G] isa Tuple
                     @info "write_ONOFFhistograms_key: skipping coupled/joint key=$key"
-                    push!(df, (key, ratefile, outfile, "skipped coupled"))
+                    push!(df, (key, "", "", "skipped coupled"))
                     continue
                 end
 
-                r = readrates(ratefile, get_row(ratetype))
-                write_ONOFFhistograms(
-                    r,
-                    info[:transitions],
-                    info[:G],
-                    info[:R],
-                    info[:S],
-                    info[:insertstep],
-                    bins;
-                    outfile=outfile,
-                    simulate=simulate,
-                )
-                push!(df, (key, ratefile, outfile, "wrote"))
+                rate_jobs = _analysis_is_shared_spec(info) ?
+                    _analysis_shared_outputs(info, result_root, key) :
+                    [(group="", ratefile=joinpath(result_root, "rates_" * key * ".txt"))]
+
+                for job in rate_jobs
+                    suffix = isempty(job.group) ? key : key * "-" * job.group
+                    ratefile = job.ratefile
+                    outfile = joinpath(result_root, "ONOFF_" * suffix * ".csv")
+
+                    if !isfile(ratefile)
+                        @warn "write_ONOFFhistograms_key: missing rates file for key=$suffix at $ratefile; skipping"
+                        push!(df, (suffix, ratefile, outfile, "missing rates"))
+                        continue
+                    end
+
+                    r = readrates(ratefile, get_row(ratetype))
+                    write_ONOFFhistograms(
+                        r,
+                        info[:transitions],
+                        info[:G],
+                        info[:R],
+                        info[:S],
+                        info[:insertstep],
+                        bins;
+                        outfile=outfile,
+                        simulate=simulate,
+                    )
+                    push!(df, (suffix, ratefile, outfile, "wrote"))
+                end
             end
         end
     end
 
     ninfo == 0 && @warn "write_ONOFFhistograms_key: no info_*.jld2 files found under $(abspath(results_dir))"
     return df
+end
+
+function _analysis_shared_spec(info::AbstractDict)
+    spec = get(info, :shared_parameters, nothing)
+    spec === nothing && (spec = get(info, :recursive_hierarchy, nothing))
+    spec === false && return nothing
+    return spec
+end
+
+_analysis_is_shared_spec(info::AbstractDict) =
+    get(info, :shared, false) === true || _analysis_shared_spec(info) !== nothing
+
+function _analysis_shared_outputs(info::AbstractDict, result_root::AbstractString, key::AbstractString)
+    outputs = get(info, :shared_rate_outputs, nothing)
+    if outputs === nothing
+        manifest = get(info, :shared_rate_manifest, nothing)
+        if manifest !== nothing
+            jobs = NamedTuple[]
+            for out in manifest
+                file = _spec_get_row(out, :ratefile, _spec_get_row(out, :file, nothing))
+                file === nothing && continue
+                group = _spec_get_row(out, :group, replace(replace(String(file), r"^rates_" => ""), r"\.txt$" => ""))
+                push!(jobs, (
+                    group=String(group),
+                    ratefile=isabspath(String(file)) ? String(file) : joinpath(result_root, String(file)),
+                    datasets=String.(_spec_get_row(out, :data_conditions, String[])),
+                    paths=NamedTuple[],
+                    assignment_indices=Int[],
+                    emission_groups=Int[],
+                ))
+            end
+            return jobs
+        end
+        @warn "shared run key=$key has no :shared_rate_outputs or :shared_rate_manifest in its JLD2 info file; regenerate the fit output so analysis can reproduce the group rate layout"
+        return NamedTuple[]
+    end
+
+    jobs = NamedTuple[]
+    for out in outputs
+        file = _spec_get_row(out, :file, nothing)
+        file === nothing && continue
+        group = _spec_get_row(out, :group, replace(replace(String(file), r"^rates_" => ""), r"\.txt$" => ""))
+        push!(jobs, (
+            group=String(group),
+            ratefile=isabspath(String(file)) ? String(file) : joinpath(result_root, String(file)),
+            datasets=_spec_get_row(out, :datasets, String[]),
+            paths=_spec_get_row(out, :paths, NamedTuple[]),
+            assignment_indices=_spec_get_row(out, :assignment_indices, Int[]),
+            emission_groups=_spec_get_row(out, :emission_groups, Int[]),
+        ))
+    end
+    return jobs
+end
+
+function _analysis_metadata_values(metadata)
+    vals = String[]
+    metadata === nothing && return vals
+    if metadata isa NamedTuple
+        append!(vals, string.(values(metadata)))
+    elseif metadata isa AbstractDict
+        append!(vals, string.(values(metadata)))
+    else
+        for k in propertynames(metadata)
+            push!(vals, string(getproperty(metadata, k)))
+        end
+    end
+    return vals
+end
+
+function _analysis_dataset_matches_group(ds::DatasetSpec, group::AbstractString)
+    group_token = _shared_file_token(group)
+    candidates = String[string(ds.name), string(ds.datapath), string(ds.datacond)]
+    append!(candidates, _analysis_metadata_values(ds.metadata))
+    return any(c -> c == group || _shared_file_token(c) == group_token || occursin(group, c), candidates)
+end
+
+function _analysis_dataset_for_shared_group(info::AbstractDict, group::AbstractString)
+    spec = _analysis_shared_spec(info)
+    spec === nothing && return nothing
+    datasets = _recursive_hierarchy_datasets(spec)
+    datasets === nothing && return nothing
+    matches = [ds for ds in datasets if ds isa DatasetSpec && _analysis_dataset_matches_group(ds, group)]
+    isempty(matches) ? nothing : first(matches)
+end
+
+function _analysis_dataset_for_shared_job(info::AbstractDict, job)
+    datasets = _recursive_hierarchy_datasets(_analysis_shared_spec(info))
+    datasets === nothing && return _analysis_dataset_for_shared_group(info, job.group)
+    ds = [d for d in datasets if d isa DatasetSpec]
+    job_datasets = :datasets in keys(job) ? collect(String.(job.datasets)) : String[]
+    if !isempty(job_datasets)
+        prefix = replace(job_datasets[1], r"_trace\d+$" => "")
+        matches = [d for d in ds if string(d.name) == prefix || startswith(job_datasets[1], string(d.name, "_trace"))]
+        isempty(matches) || return first(matches)
+    end
+    job_paths = :paths in keys(job) ? collect(job.paths) : []
+    if !isempty(job_paths)
+        group_values = Set{String}()
+        for p in job_paths
+            if p isa NamedTuple
+                for v in values(p)
+                    push!(group_values, string(v))
+                end
+            end
+        end
+        matches = [d for d in ds if any(v -> _analysis_dataset_matches_group(d, v), group_values)]
+        isempty(matches) || return first(matches)
+    end
+    return _analysis_dataset_for_shared_group(info, job.group)
+end
+
+function _analysis_trace_window(info::AbstractDict; interval=nothing, dataset=nothing)
+    trace_specs = dataset isa DatasetSpec && !isempty(dataset.trace_specs) ? dataset.trace_specs : get(info, :trace_specs, [])
+    ti_legacy = get(info, :traceinfo, nothing)
+    if !isempty(trace_specs)
+        s1 = trace_specs[1]
+        return (
+            isnothing(interval) ? Float64(get(s1, :interval, 1.0)) : Float64(interval),
+            Float64(get(s1, :start, 1.0)),
+            Float64(get(s1, :t_end, -1.0)),
+        )
+    elseif ti_legacy !== nothing
+        return (
+            isnothing(interval) ? Float64(ti_legacy[1]) : Float64(interval),
+            length(ti_legacy) > 1 ? Float64(ti_legacy[2]) : 1.0,
+            length(ti_legacy) > 2 ? Float64(ti_legacy[3]) : -1.0,
+        )
+    end
+    return (isnothing(interval) ? 1.0 : Float64(interval), 1.0, -1.0)
+end
+
+function _analysis_single_unit_noisepriors(noisepriors)
+    noisepriors isa Tuple && return isempty(noisepriors) ? Float64[] : first(noisepriors)
+    return noisepriors
+end
+
+function _analysis_single_unit_probfn(probfn)
+    probfn isa Tuple && return first(probfn)
+    return probfn
+end
+
+function _analysis_base_rate_count(info::AbstractDict)
+    nnoise = length(_analysis_single_unit_noisepriors(get(info, :noisepriors, Float64[])))
+    return num_rates(info[:transitions], info[:R], info[:S], info[:insertstep]) + nnoise
+end
+
+_analysis_group_rate_is_hierarchical(r::AbstractVector, info::AbstractDict) =
+    length(r) > _analysis_base_rate_count(info)
+
+function _analysis_insertstep_token(insertstep)
+    insertstep isa Tuple && return join(string.(insertstep), "")
+    return string(insertstep)
 end
 
 
@@ -2402,8 +2561,46 @@ function make_traces_dataframe_key(data::AbstractTraceData, rin, run_spec::Dict{
         coupling, grid, run_spec[:zeromedian])
 end
 
+function _operational_trace_noise_chunks(rin, nrates::Integer, nnoise::Integer, ntraces::Integer)
+    nnoise > 0 || return nothing
+    length(rin) == nrates + nnoise * ntraces || return nothing
+    return [rin[nrates+(i-1)*nnoise+1:nrates+i*nnoise] for i in 1:ntraces]
+end
+
+function _make_traces_dataframe_operational_h(rin, data::AbstractTraceData, transitions, G::Int, R::Int, S::Int, insertstep::Int, probfn, noiseparams, splicetype, state::Bool, grid, zeromedian)
+    grid === nothing || return nothing
+    nnoise = noiseparams isa Number ? Int(noiseparams) : length(noiseparams)
+    nrates = num_rates(transitions, R, S, insertstep)
+    traces = data.trace[1]
+    noiseindividual = _operational_trace_noise_chunks(rin, nrates, nnoise, length(traces))
+    if noiseindividual === nothing
+        extra = length(rin) - nrates
+        if nnoise > 0 && extra > 0 && extra % nnoise == 0
+            nblocks = extra ÷ nnoise
+            throw(ArgumentError(
+                "shared trace prediction mismatch: rate vector has $nblocks trace-level noise blocks " *
+                "but loaded $(length(traces)) traces from the selected dataset. " *
+                "Check shared_rate_outputs/dataset metadata in info_<key>.jld2 and the dataset datapath/datacond."
+            ))
+        end
+        return nothing
+    end
+
+    rmodel = vcat(rin[1:nrates], noiseindividual[1])
+    _, model = make_trace_datamodel(data, rmodel, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, false, tuple(), grid, zeromedian)
+    rates, _ = prepare_rates(get_param(model), model)
+    a, p0 = make_ap(rates, data.interval, model.components, model.method)
+    state_paths, dists = _predict_trace(noiseindividual, a, p0, model.reporter, traces)
+    states, observations = make_observation_dist(dists, state_paths, G, R, S, tuple())
+    make_traces_dataframe(states, observations, traces, G, R, S, insertstep, state, tuple())
+end
+
 function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
     # data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])), Int[])
+    if hierarchical && isempty(coupling) && G isa Int
+        df = _make_traces_dataframe_operational_h(rin, data, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, grid, zeromedian)
+        df === nothing || return df
+    end
     if hierarchical
         h = (2, [8], ())
         method = (Tsit5(), true)
@@ -2501,37 +2698,57 @@ function write_traces_key(folder::String;
         datacol=nothing,
         zeromedian=nothing,
         interval=nothing)
-    jobs = Tuple{String,String,String}[]
+    jobs = NamedTuple[]
     results_dir = folder_path(folder, root, "results")
     for (result_root, _, files) in walkdir(results_dir)
         for f in files
             if occursin("info", f) && endswith(f, ".jld2")
                 key = get_key(f)
-                push!(jobs, (joinpath(result_root, f), joinpath(result_root, "rates_" * key * ".txt"), joinpath(result_root, "predictedtraces_" * key * ".csv")))
+                info_path = joinpath(result_root, f)
+                info = read_run_spec(info_path)
+                if _analysis_is_shared_spec(info)
+                    for job in _analysis_shared_outputs(info, result_root, key)
+                        suffix = key * "-" * job.group
+                        push!(jobs, (
+                            info_path=info_path,
+                            info=info,
+                            ratefile=job.ratefile,
+                            outfile=joinpath(result_root, "predictedtraces_" * suffix * ".csv"),
+                            group=job.group,
+                        ))
+                    end
+                else
+                    push!(jobs, (
+                        info_path=info_path,
+                        info=info,
+                        ratefile=joinpath(result_root, "rates_" * key * ".txt"),
+                        outfile=joinpath(result_root, "predictedtraces_" * key * ".csv"),
+                        group="",
+                    ))
+                end
             end
         end
     end
-    Threads.@threads for (info_path, ratefile, outfile) in jobs
+    Threads.@threads for job in jobs
+        info_path = job.info_path
+        ratefile = job.ratefile
+        outfile = job.outfile
         @info "writing traces for $ratefile"
-        info     = read_run_spec(info_path)
-        r        = readrates(ratefile, get_row(ratetype))
-        trace_specs = get(info, :trace_specs, [])
-        ti_legacy = get(info, :traceinfo, nothing)
-        dt, start, stop = if !isempty(trace_specs)
-            s1 = trace_specs[1]
-            isnothing(interval) ? Float64(get(s1, :interval, 1.0)) : Float64(interval),
-            Float64(get(s1, :start, 1.0)),
-            Float64(get(s1, :t_end, -1.0))
-        elseif ti_legacy !== nothing
-            isnothing(interval) ? Float64(ti_legacy[1]) : Float64(interval),
-            length(ti_legacy) > 1 ? Float64(ti_legacy[2]) : 1.0,
-            length(ti_legacy) > 2 ? Float64(ti_legacy[3]) : -1.0
-        else
-            isnothing(interval) ? 1.0 : Float64(interval), 1.0, -1.0
+        if !isfile(ratefile)
+            @warn "write_traces_key: missing rate file; skipping" ratefile
+            continue
         end
-        raw_dp   = isnothing(datapath)   ? info[:datapath]   : datapath
+        info     = job.info
+        r        = readrates(ratefile, get_row(ratetype))
+        dataset = isempty(job.group) ? nothing : _analysis_dataset_for_shared_job(info, job)
+        if !isempty(job.group) && dataset === nothing && (isnothing(datapath) || isnothing(datacond))
+            @warn "write_traces_key: shared group has no matching DatasetSpec; pass datapath/datacond explicitly or regenerate info JLD2 with shared datasets" group=job.group info_path
+            continue
+        end
+        dt, start, stop = _analysis_trace_window(info; interval=interval, dataset=dataset)
+        raw_dp   = isnothing(datapath)   ? (dataset isa DatasetSpec ? dataset.datapath : info[:datapath]) : datapath
         dp       = _data_folder_path(raw_dp, root)
-        dc       = isnothing(datacond)   ? info[:datacond]   : datacond
+        dc       = isnothing(datacond)   ? (dataset isa DatasetSpec ? dataset.datacond : info[:datacond]) : datacond
         col      = isnothing(datacol)    ? info[:datacol]    : datacol
         zm       = isnothing(zeromedian) ? info[:zeromedian] : zeromedian
         sp = splicetype == "" ? get(info, :splicetype, "") : splicetype
@@ -2551,7 +2768,7 @@ function write_traces_key(folder::String;
             outfile, dp, dc, dt, r, info[:transitions], G, info[:R], info[:S],
             info[:insertstep], start, stop, probfn_eff, noise_eff, sp;
             state=state,
-            hierarchical=!isempty(get(info, :hierarchical, ())),
+            hierarchical=!isempty(get(info, :hierarchical, ())) || (!isempty(job.group) && _analysis_group_rate_is_hierarchical(r, info)),
             coupling=coupling,
             grid=grid_eff,
             zeromedian=zm,
@@ -4118,35 +4335,57 @@ function write_correlation_functions_key(folder::String; lags=collect(0:1:200), 
     skipped = String[]
     for (root, _, files) in walkdir(folder)
         for f in files
-            if startswith(f, "rates_") && endswith(f, ".txt")
-                nrates += 1
+            if startswith(f, "info_") && endswith(f, ".jld2")
+                key = get_key(f)
+                infofile = joinpath(root, f)
+                info = read_run_spec(infofile)
+                rate_jobs = _analysis_is_shared_spec(info) ?
+                    _analysis_shared_outputs(info, root, key) :
+                    [(group="", ratefile=joinpath(root, "rates_" * key * ".txt"))]
+
+                for job in rate_jobs
+                    nrates += 1
+                    ratefile = job.ratefile
+                    suffix = isempty(job.group) ? key : key * "-" * job.group
+                    if !isfile(ratefile)
+                        push!(skipped, ratefile)
+                        @warn "write_correlation_functions_key: skipping missing rate file" ratefile
+                        continue
+                    end
+                    if !(info[:G] isa Tuple)
+                        push!(skipped, ratefile)
+                        @warn "write_correlation_functions_key: skipping single-unit rate file; theoretical cross-correlation requires a coupled/tuple model" ratefile
+                        continue
+                    end
+                    r = readrates(ratefile, get_row(ratetype))
+                    if isempty(r)
+                        push!(skipped, ratefile)
+                        @warn "write_correlation_functions_key: skipping empty rate vector" ratefile
+                        continue
+                    end
+                    n += 1
+                    splicetype = String(get(info, :splicetype, ""))
+                    this_insertstep = isnothing(insertstep) ? info[:insertstep] : insertstep
+                    @info "computing correlations for $ratefile with insertstep=$(this_insertstep)"
+                    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
+                        correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], lags; splicetype=splicetype)
+                    outname = joinpath(root, "crosscorrelation_" * suffix * "_insertstep" * _analysis_insertstep_token(this_insertstep) * ".csv")
+                    write_correlation_csv(outname, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+                end
+            elseif startswith(f, "rates_") && endswith(f, ".txt")
+                # Legacy folders may have rates without key info files; keep the old warning behavior.
                 key = get_key(f)
                 infofile = joinpath(root, "info_" * key * ".jld2")
-                if !isfile(infofile)
+                if !isfile(infofile) && read_run_spec_for_rates_file(joinpath(root, f)) === nothing
+                    nrates += 1
                     push!(skipped, infofile)
                     @warn "write_correlation_functions_key: skipping rate file with missing info file" ratefile = joinpath(root, f) infofile
                     continue
                 end
-                info = read_run_spec(infofile)
-                ratefile = joinpath(root, f)
-                r = readrates(ratefile, get_row(ratetype))
-                if isempty(r)
-                    push!(skipped, ratefile)
-                    @warn "write_correlation_functions_key: skipping empty rate vector" ratefile
-                    continue
-                end
-                n += 1
-                splicetype = String(get(info, :splicetype, ""))
-                this_insertstep = isnothing(insertstep) ? info[:insertstep] : insertstep
-                @info "computing correlations for $ratefile with insertstep=$(this_insertstep)"
-                tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
-                    correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], lags; splicetype=splicetype)
-                outname = joinpath(root, "crosscorrelation_" * key * "_insertstep$(this_insertstep[1])$(this_insertstep[2]).csv")
-                write_correlation_csv(outname, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
             end
         end
     end
-    nrates == 0 && @warn "write_correlation_functions_key: no rates_*.txt files found under $(abspath(folder))"
+    nrates == 0 && @warn "write_correlation_functions_key: no info/rates files found under $(abspath(folder))"
     nrates > 0 && n == 0 && @warn "write_correlation_functions_key: no usable rate/info pairs found for $(nrates) rate files under $(abspath(folder))"
     !isempty(skipped) && @warn "write_correlation_functions_key: skipped $(length(skipped)) rate files without usable info/rate data"
     return n
@@ -4190,17 +4429,14 @@ function write_joint_residence_prob_onoff_key(
             if occursin("info", f) && endswith(f, ".jld2")
                 info = read_run_spec(joinpath(root, f))
                 key = get_key(f)
-                ratefile = joinpath(root, "rates_" * key * ".txt")
-                isfile(ratefile) || begin
-                    @warn "write_joint_residence_prob_onoff_key: missing rates file for key=$key at $ratefile; skipping"
-                    continue
-                end
                 haskey(info, :datapath) && haskey(info, :datacond) || begin
                     @warn "write_joint_residence_prob_onoff_key: run spec missing datapath/datacond for key=$key; skipping"
                     continue
                 end
+                rate_jobs = _analysis_is_shared_spec(info) ?
+                    _analysis_shared_outputs(info, root, key) :
+                    [(group="", ratefile=joinpath(root, "rates_" * key * ".txt"))]
 
-                r = readrates(ratefile, get_row(ratetype))
                 trace_specs = get(info, :trace_specs, [])
                 ti_legacy = get(info, :traceinfo, nothing)
                 interval_eff, start_eff, stop_eff = if !isempty(trace_specs)
@@ -4231,19 +4467,33 @@ function write_joint_residence_prob_onoff_key(
                 zeromedian = get(info, :zeromedian, false)
                 coupling = get(info, :coupling, tuple())
 
-                traces = read_tracefiles(info[:datapath], info[:datacond], start_eff, stop_eff)
-                p0 = make_p0_coupled(
-                    traces, interval_eff, r,
-                    info[:transitions], info[:G], info[:R], info[:S], info[:insertstep],
-                    info[:probfn], noiseparams, splicetype, true, !isempty(hierarchical), coupling, grid, zeromedian,
-                )
-                pr = joint_residence_prob_onoff(p0, info[:G], info[:R], info[:S], info[:insertstep], coupling; units=units)
+                for job in rate_jobs
+                    suffix = isempty(job.group) ? key : key * "-" * job.group
+                    ratefile = job.ratefile
+                    isfile(ratefile) || begin
+                        @warn "write_joint_residence_prob_onoff_key: missing rates file for key=$suffix at $ratefile; skipping"
+                        continue
+                    end
+                    info[:G] isa Tuple || begin
+                        @info "write_joint_residence_prob_onoff_key: skipping single-unit key=$suffix"
+                        continue
+                    end
 
-                push!(df[!, "key"], key)
-                push!(df[!, "ON-ON"], pr.ON_ON)
-                push!(df[!, "ON-OFF"], pr.ON_OFF)
-                push!(df[!, "OFF-ON"], pr.OFF_ON)
-                push!(df[!, "OFF-OFF"], pr.OFF_OFF)
+                    r = readrates(ratefile, get_row(ratetype))
+                    traces = read_tracefiles(info[:datapath], info[:datacond], start_eff, stop_eff)
+                    p0 = make_p0_coupled(
+                        traces, interval_eff, r,
+                        info[:transitions], info[:G], info[:R], info[:S], info[:insertstep],
+                        info[:probfn], noiseparams, splicetype, true, !isempty(hierarchical), coupling, grid, zeromedian,
+                    )
+                    pr = joint_residence_prob_onoff(p0, info[:G], info[:R], info[:S], info[:insertstep], coupling; units=units)
+
+                    push!(df[!, "key"], suffix)
+                    push!(df[!, "ON-ON"], pr.ON_ON)
+                    push!(df[!, "ON-OFF"], pr.ON_OFF)
+                    push!(df[!, "OFF-ON"], pr.OFF_ON)
+                    push!(df[!, "OFF-OFF"], pr.OFF_OFF)
+                end
             end
         end
     end

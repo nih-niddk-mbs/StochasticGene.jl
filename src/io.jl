@@ -2653,6 +2653,56 @@ function write_info(file::String, fits, data, model, labels; run_spec=nothing, s
     write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels, shared_rate_outputs=shared_rate_outputs)
 end
 
+function _shared_dataset_conditions(run_spec)
+    run_spec === nothing && return NamedTuple[]
+    shared_spec = _run_spec_get(run_spec, :shared_parameters, _run_spec_get(run_spec, :recursive_hierarchy, nothing))
+    shared_spec === nothing && return NamedTuple[]
+    datasets = _spec_get_row(shared_spec, :datasets, _spec_get_row(shared_spec, :dataset_specs, nothing))
+    datasets === nothing && return NamedTuple[]
+    out = NamedTuple[]
+    for ds in datasets
+        ds isa DatasetSpec || continue
+        push!(out, (
+            name=String(ds.name),
+            datatype=string(ds.datatype),
+            datapath=string(ds.datapath),
+            datacond=string(ds.datacond),
+            metadata=ds.metadata,
+            trace_specs=ds.trace_specs,
+            dwell_specs=ds.dwell_specs,
+        ))
+    end
+    return out
+end
+
+function _shared_rate_manifest(shared_rate_outputs, data_conditions)
+    shared_rate_outputs === nothing && return NamedTuple[]
+    conditions_by_name = Dict{String,Any}(String(c.name) => c for c in data_conditions)
+    manifest = NamedTuple[]
+    for out in shared_rate_outputs
+        datasets = _spec_get_row(out, :datasets, String[])
+        paths = _spec_get_row(out, :paths, NamedTuple[])
+        path_groups = String[]
+        for p in paths
+            p isa NamedTuple || continue
+            for v in values(p)
+                s = string(v)
+                haskey(conditions_by_name, s) && push!(path_groups, s)
+            end
+        end
+        condition_names = isempty(path_groups) ? unique(String.(datasets)) : unique(path_groups)
+        conditions = [conditions_by_name[n] for n in condition_names if haskey(conditions_by_name, n)]
+        push!(manifest, (
+            group=String(_spec_get_row(out, :group, "")),
+            ratefile=String(_spec_get_row(out, :file, "")),
+            data_conditions=condition_names,
+            dataconds=[String(c.datacond) for c in conditions],
+            datapaths=[String(c.datapath) for c in conditions],
+        ))
+    end
+    return manifest
+end
+
 function _stochasticgene_environment_info()
     sg_version = try
         v = Base.pkgversion(StochasticGene)
@@ -2681,9 +2731,24 @@ Same stem as rates/measures (e.g. rates_foo.txt → info_foo.toml). Called by wr
 Sections: [output] = llml, accept, total, median_param; [model_info]; [environment]. If run_spec is provided, also [run] = fit kwargs.
 """
 function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing, shared_rate_outputs=nothing)
+    data_conditions = _shared_dataset_conditions(run_spec)
+    shared_rate_manifest = _shared_rate_manifest(shared_rate_outputs, data_conditions)
     # Write companion JLD2 with exact Julia types (functions, ODE solvers, etc.)
     if run_spec !== nothing
-        write_run_spec_jld2(file_toml, run_spec)
+        run_spec_jld2 = if shared_rate_outputs === nothing
+            run_spec
+        else
+            d = Dict{Symbol,Any}()
+            for (k, v) in pairs(run_spec)
+                d[Symbol(k)] = v
+            end
+            d[:shared] = true
+            d[:data_conditions] = data_conditions
+            d[:shared_rate_manifest] = shared_rate_manifest
+            d[:shared_rate_outputs] = shared_rate_outputs
+            d
+        end
+        write_run_spec_jld2(file_toml, run_spec_jld2)
     end
     open(file_toml, "w") do io
         if run_spec !== nothing
@@ -2714,10 +2779,27 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
             "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),
         )
         if shared_rate_outputs !== nothing
+            model_info["shared"] = true
+            model_info["data_condition_names"] = [c.name for c in data_conditions]
+            model_info["data_condition_datatypes"] = [c.datatype for c in data_conditions]
+            model_info["data_condition_datapaths"] = [c.datapath for c in data_conditions]
+            model_info["data_condition_dataconds"] = [c.datacond for c in data_conditions]
+            model_info["rate_file_groups"] = [x.group for x in shared_rate_manifest]
+            model_info["rate_file_names"] = [x.ratefile for x in shared_rate_manifest]
+            model_info["rate_file_data_conditions"] = [x.data_conditions for x in shared_rate_manifest]
+            model_info["rate_file_datapaths"] = [x.datapaths for x in shared_rate_manifest]
+            model_info["rate_file_dataconds"] = [x.dataconds for x in shared_rate_manifest]
             model_info["shared_rate_files"] = [x.file for x in shared_rate_outputs]
             model_info["shared_rate_groups"] = [x.group for x in shared_rate_outputs]
             model_info["shared_rate_transition_groups"] = [x.transition_group for x in shared_rate_outputs]
             model_info["shared_rate_emission_groups"] = [x.emission_groups for x in shared_rate_outputs]
+            if !isempty(shared_rate_outputs) && :datasets in keys(shared_rate_outputs[1])
+                model_info["shared_rate_datasets"] = [x.datasets for x in shared_rate_outputs]
+                model_info["shared_rate_paths"] = [[string(p) for p in x.paths] for x in shared_rate_outputs]
+            end
+            model_info["shared_dataset_names"] = [c.name for c in data_conditions]
+            model_info["shared_dataset_datapaths"] = [c.datapath for c in data_conditions]
+            model_info["shared_dataset_dataconds"] = [c.datacond for c in data_conditions]
         end
         _write_toml_table(io, model_info, "  ")
         println(io, "")
@@ -2856,7 +2938,32 @@ i.e. `info_<label>_....jld2`), load and return the run spec as `Dict{Symbol, Any
 function read_run_spec_for_rates_file(rates_file::String)
     toml_path = info_toml_path_for_rates_file(rates_file)
     jld2_path = info_jld2_path(toml_path)
-    isfile(jld2_path) ? read_run_spec(jld2_path) : nothing
+    isfile(jld2_path) && return read_run_spec(jld2_path)
+
+    # Shared-parameter group rate files are written as rates_<key>-<group>.txt
+    # while the run metadata remains at info_<key>.jld2. The parent JLD2 must
+    # explicitly list the group file in :shared_rate_outputs; filenames alone
+    # are not enough metadata to reproduce the run.
+    dir = dirname(rates_file)
+    stem = replace(basename(rates_file), r"\.txt$" => "")
+    startswith(stem, "rates_") || return nothing
+    key = stem[length("rates_")+1:end]
+    rate_base = basename(rates_file)
+    while occursin("-", key)
+        key = replace(key, r"-[^-]*$" => "")
+        candidate = joinpath(dir, "info_" * key * ".jld2")
+        if isfile(candidate)
+            info = read_run_spec(candidate)
+            outputs = get(info, :shared_rate_outputs, nothing)
+            outputs === nothing && continue
+            for out in outputs
+                file = _spec_get_row(out, :file, nothing)
+                file === nothing && continue
+                basename(String(file)) == rate_base && return info
+            end
+        end
+    end
+    return nothing
 end
 
 """
@@ -3284,13 +3391,17 @@ function write_shared_rate_groups(file::String, fits::Fit, stats, model::GRSMmod
         outfile = _shared_output_file(file, group.label)
         group_labels, rows = _shared_rate_group_rows_and_labels(trait, group, labels, rate_rows)
         _write_one_shared_rate_file(outfile, group_labels, rows)
+        assignments = trait.cache_plan.assignments[group.assignment_indices]
         push!(outputs, (
             file=basename(outfile),
             group=group.label,
+            datasets=[String(a.dataset) for a in assignments],
+            paths=[a.path for a in assignments],
             assignment_index=group.assignment_index,
             assignment_indices=group.assignment_indices,
             transition_group=group.transition_group,
             emission_groups=group.emission_groups,
+            n_emission_groups=length(group.emission_groups),
         ))
     end
     return outputs

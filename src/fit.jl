@@ -1151,7 +1151,8 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     kw = Dict{Symbol,Any}(pairs(kwargs))
     run_spec = _current_run_spec[] === nothing ? Dict{Symbol,Any}() : Dict{Symbol,Any}(_current_run_spec[])
     shared_parameters = pop!(kw, :shared_parameters, get(run_spec, :shared_parameters, nothing))
-    recursive_hierarchy = pop!(kw, :recursive_hierarchy, get(run_spec, :recursive_hierarchy, shared_parameters))
+    recursive_hierarchy = pop!(kw, :recursive_hierarchy, get(run_spec, :recursive_hierarchy, nothing))
+    recursive_hierarchy === nothing && (recursive_hierarchy = shared_parameters)
     recursive_from_hierarchical = _recursive_hierarchy_from_hierarchical(hierarchical)
     if recursive_hierarchy === nothing && recursive_from_hierarchical !== nothing
         recursive_hierarchy = recursive_from_hierarchical
