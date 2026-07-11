@@ -1128,6 +1128,15 @@ end
 recursive_assignment_rates(param, model::AbstractGeneTransitionModel; inverse::Bool=true) =
     recursive_assignment_rates(get_rates(param, model, inverse), model.trait.recursive_hierarchy)
 
+shared_assignment_rates(args...; kwargs...) =
+    recursive_assignment_rates(args...; kwargs...)
+
+shared_transition_group_rates(args...; kwargs...) =
+    recursive_transition_group_rates(args...; kwargs...)
+
+shared_emission_group_rates(args...; kwargs...) =
+    recursive_emission_group_rates(args...; kwargs...)
+
 function ll_hmm_trace_recursive(
     param,
     data::AbstractTraceData,

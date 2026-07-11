@@ -1,10 +1,10 @@
-# Recursive Parameter-Sharing Trace Fits
+# Shared Parameter Trace Fits
 
-Recursive parameter sharing lets one fit combine trace datasets that live in different folders while sharing some parameter families and splitting others. This is useful when the same biological model is fit to several related samples, for example 3Prime and 5Prime traces, CRISPR perturbations, or replicate groups.
+Shared parameter fitting lets one fit combine trace datasets that live in different folders while sharing some parameter families exactly and splitting others. This is useful when the same biological model is fit to several related samples, for example 3Prime and 5Prime traces, CRISPR perturbations, or replicate groups.
 
-This is not a hierarchical Bayesian shrinkage model: no learned hyperparameters are introduced. Group-specific or trace-specific copies are independent fitted parameters under the ordinary prior template. The fit keyword is still named `hierarchical` for compatibility with the existing `fit` API, but the object passed there is a recursive parameter-sharing specification.
+This is not a recursive hierarchical Bayesian shrinkage model: no learned cross-dataset hyperparameters are introduced. Dataset-specific or trace-specific copies are independent fitted parameters under the ordinary prior template. The fit keyword is still named `hierarchical` for compatibility with the existing `fit` API, but the object passed there is a shared-parameter specification.
 
-The recursive interface is keyed: each dataset row carries metadata, the grouping tree reads those metadata keys, and `parameter_scope` decides which level owns each family of parameters.
+The shared interface is keyed: each dataset row carries metadata, the grouping tree reads those metadata keys, and `parameter_scope` decides which level owns each family of parameters.
 
 ## Minimal Example
 
@@ -20,7 +20,7 @@ using StochasticGene
 
 grouping = HierarchySpec(
     HierarchyNode(:top, children=[
-        HierarchyNode(:group, key=:sample, levels=[:ThreePrime, :FivePrime])
+        HierarchyNode(:group, key=:sample, levels=[Symbol("3Prime"), Symbol("5Prime")])
     ]);
     parameter_scope=Dict(
         :G => :top,
@@ -37,19 +37,19 @@ Each dataset declares its group through `metadata.sample`:
 ```julia
 datasets = DatasetSpec[
     DatasetSpec(
-        :ThreePrime_gene,
+        Symbol("3Prime_gene"),
         "trace",
         "data/3Prime_gene_enhancer/including_background/short",
         "gene";
-        metadata=(sample=:ThreePrime,),
+        metadata=(sample=Symbol("3Prime"),),
         trace_specs=[(unit=1, interval=5/3, start=1.0, t_end=-1.0, zeromedian=true)],
     ),
     DatasetSpec(
-        :FivePrime_gene,
+        Symbol("5Prime_gene"),
         "trace",
         "data/5Prime_gene_enhancer/including_background/short",
         "gene";
-        metadata=(sample=:FivePrime,),
+        metadata=(sample=Symbol("5Prime"),),
         trace_specs=[(unit=1, interval=5/3, start=1.0, t_end=-1.0, zeromedian=true)],
     ),
 ]
@@ -67,16 +67,16 @@ rate_families = Dict(
 )
 ```
 
-The recursive sharing object passed to `fit` is a named tuple:
+The shared-parameter object passed to `fit` is a named tuple:
 
 ```julia
 noise_priors_by_group = Dict(
-    :ThreePrime => [-0.018007, 0.214861, 1.256466, 0.405046],
-    :FivePrime => [-0.004966, 0.118037, 0.607264, 0.223634],
+    Symbol("3Prime") => [-0.018007, 0.214861, 1.256466, 0.405046],
+    Symbol("5Prime") => [-0.004966, 0.118037, 0.607264, 0.223634],
 )
 
 sharing = (
-    kind=:recursive,
+    kind=:shared,
     levels=grouping,
     datasets=datasets,
     transition_families=[:G, :initiation, :R, :decay],
@@ -90,7 +90,7 @@ Then call `fit` as usual. The keyword is still `hierarchical` because that is th
 
 ```julia
 fit(;
-    key="recursive-3Prime-5Prime-gene-3301",
+    key="shared-3Prime-5Prime-3301-gene",
     nchains=2,
     datatype="trace",
     datapath="",
@@ -99,7 +99,7 @@ fit(;
     gene="MYC",
     cell="HBEC",
     datacond="gene",
-    label="recursive-3Prime-5Prime-gene-3301",
+    label="shared-3Prime-5Prime-3301-gene",
     G=3,
     R=3,
     S=0,
@@ -111,7 +111,7 @@ fit(;
     grid=nothing,
     priormean=Float64[],
     priorcv=Float64[],
-    noisepriors=noise_priors_by_group[:ThreePrime],
+    noisepriors=noise_priors_by_group[Symbol("3Prime")],
     decayrate=-1.0,
     probfn=prob_Gaussian,
     hierarchical=sharing,
@@ -138,7 +138,7 @@ To fit noise separately for each trace, add an individual level and move `:noise
 ```julia
 grouping_h = HierarchySpec(
     HierarchyNode(:top, children=[
-        HierarchyNode(:group, key=:sample, levels=[:ThreePrime, :FivePrime], children=[
+        HierarchyNode(:group, key=:sample, levels=[Symbol("3Prime"), Symbol("5Prime")], children=[
             HierarchyNode(:individual, key=:trace_id)
         ])
     ]);
@@ -169,7 +169,7 @@ top
 grouping = HierarchySpec(
     HierarchyNode(:top, children=[
         HierarchyNode(:perturbation, key=:perturbation, levels=[:UNT, :KRAB, :VPR], children=[
-            HierarchyNode(:sample, key=:sample, levels=[:ThreePrime, :FivePrime], children=[
+            HierarchyNode(:sample, key=:sample, levels=[Symbol("3Prime"), Symbol("5Prime")], children=[
                 HierarchyNode(:replicate, key=:replicate)
             ])
         ])
@@ -188,13 +188,13 @@ Rows must include metadata for every keyed level:
 
 ```julia
 DatasetSpec(
-    :UNT_ThreePrime_rep1_gene,
+    :UNT_3Prime_rep1_gene,
     "trace",
     "CRISPR/5Prime/UNT/rep1/short",
     "gene";
     metadata=(
         perturbation=:UNT,
-        sample=:ThreePrime,
+        sample=Symbol("3Prime"),
         replicate=:rep1,
     ),
 )
@@ -203,27 +203,28 @@ DatasetSpec(
 The ownership key for a parameter is the path prefix down to that level. If `:R => :sample`, then the key includes both the parent perturbation and the sample:
 
 ```julia
-(top=:top, perturbation=:UNT, sample=:ThreePrime)
+(top=:top, perturbation=:UNT, sample=Symbol("3Prime"))
 ```
 
-This prevents `:ThreePrime` under `:UNT` from being accidentally merged with `:ThreePrime` under `:KRAB`.
+This prevents `Symbol("3Prime")` under `:UNT` from being accidentally merged with `Symbol("3Prime")` under `:KRAB`.
 
 ## Rate-Handling Design
 
-Recursive parameter sharing keeps the same basic convention as other fits: a rate file is an operational object, not a compact storage format. The difference is that recursive groups are not dynamically connected, so their operational rate files are written separately.
+Shared parameter fitting keeps the same basic convention as other fits: a rate file is an operational object, not a compact storage format. The difference is that shared-fit groups are not dynamically connected, so their operational rate files are written separately.
 
 - The sampler may use a compact vector containing only the fitted degrees of freedom.
-- Before likelihood evaluation, the recursive layer assembles the full operational rate vector needed by each recursive group or trace assignment.
+- Before likelihood evaluation, the shared layer assembles the full operational rate vector needed by each shared group or trace assignment.
 - Existing HMM likelihood code receives ordinary rate vectors; it should not need to understand the sharing tree.
-- Informational files such as `info_*.toml`, `param-stats_*.txt`, `measures_*.txt`, and `shared_*.txt` are written once for the combined run.
-- Operational rate files are written once per recursive operational group, e.g. `rates_<key>-3Prime.txt` and `rates_<key>-5Prime.txt`.
-- Group rate files keep pristine single-unit rate labels such as `Rate_12`, `Rshift_1`, and `noiseparam_1`.
-- Combined parameter outputs append the recursive group label to compact fitted-parameter labels, e.g. `Rshift_1_3Prime`.
-- `shared_*.txt` is a diagnostic summary, not the canonical restart/input representation.
+- Informational files such as `info_*.toml`, `param-stats_*.txt`, `measures_*.txt`, and `summary-rates_*.txt` are written once for the combined run.
+- Operational rate files are written once per transition-rate group, e.g. `rates_<key>-3Prime.txt` and `rates_<key>-5Prime.txt`.
+- Trace-level noise in `-h` mode does not create one rate file per trace; the group file contains the group transition block plus all trace-level noise blocks for that group.
+- Group rate files keep pristine transition labels such as `Rate_12` and `Rshift_1`; in `-h` mode, repeated noise blocks are suffixed by their trace/noise owner so columns stay unique.
+- Combined parameter outputs append the shared group label to compact fitted-parameter labels, e.g. `Rshift_1_3Prime`.
+- `summary-rates_*.txt` is a convenience summary of the compact transition-rate-style parameters, not the canonical restart/input representation.
 
 ## Proposal CVs
 
-Recursive MH fits can use a proposal-CV map so different hierarchy levels move at different scales:
+Shared MH fits can use a proposal-CV map so different hierarchy levels move at different scales:
 
 ```julia
 propcv_levels = Dict(
@@ -234,30 +235,30 @@ propcv_levels = Dict(
 ```
 
 The map is additive to the older scalar settings. `propcv` remains the fallback, `propcv_rate` and
-`propcv_noise` still work, and `propcv_levels` overrides them for recursive parameters that match a key.
+`propcv_noise` still work, and `propcv_levels` overrides them for shared-fit parameters that match a key.
 `fit.jl` assembles these settings into one proposal CV vector before constructing the sampler proposal.
 
 Lookup is ordered from most specific to broad:
 
-- `(family=:R, owner=(top=:top, group=:ThreePrime))`, `(family, owner)`, or the full owner path.
-- Group-specific keys such as `(family=:R, level=:group, value=:ThreePrime)`, `(:R, :group, :ThreePrime)`, `(:group, :ThreePrime)`, or `:ThreePrime`.
+- `(family=:R, owner=(top=:top, group=Symbol("3Prime")))`, `(family, owner)`, or the full owner path.
+- Group-specific keys such as `(family=:R, level=:group, value=Symbol("3Prime"))`, `(:R, :group, Symbol("3Prime"))`, `(:group, Symbol("3Prime"))`, or `Symbol("3Prime")`.
 - Family/level keys such as `(family=:R, level=:group)`, `(:R, :group)`, `:R`, or `:group`.
 
 For the common 3Prime/5Prime setup, `:top` controls shared `G`, initiation, and decay parameters; `:group`
 controls group-owned `R` parameters; and `:noise` controls the noise parameters whether they are group-owned
 or individual-owned.
 
-This intentionally keeps downstream prediction tools simple. A downstream analysis should be able to read one group rate file as "the rates this group needs to run" without reconstructing the recursive sharing graph. The combined `info_*.toml`/`.jld2` records which group rate files belong to the joint run.
+This intentionally keeps downstream prediction tools simple. A downstream analysis should be able to read one group rate file as "the rates this group needs to run" without reconstructing the shared-parameter graph. The combined `info_*.toml`/`.jld2` records which group rate files belong to the joint run.
 
 ## Cache Behavior
 
-The recursive likelihood still avoids redundant expensive work when possible:
+The shared-fit likelihood still avoids redundant expensive work when possible:
 
 - `transition_families` determines how many transition matrices `a` are cached.
 - `emission_families` determines how many emission parameter groups are cached.
 - Each trace is assigned to one transition group and one emission group.
 
-Operationally, the likelihood loops over traces using assembled full rates. The special recursive behavior is limited to caching reusable `(a, p0)` transition objects and emission/noise objects.
+Operationally, the likelihood loops over traces using assembled full rates. The special shared-fit behavior is limited to caching reusable `(a, p0)` transition objects and emission/noise objects.
 
 For the no-`h` 3Prime/5Prime example, there are two transition groups and two emission groups. For the `-h` individual-noise case, there are still two transition groups, but emission groups are trace-specific.
 
@@ -283,16 +284,16 @@ If the printed mode or filename does not match the intended setting, regenerate 
 This interface does not currently create learned hyperparameters. For example, if `:R => :group`, then each group has its own fitted `R` copy:
 
 ```text
-R_ThreePrime ~ prior
-R_FivePrime  ~ prior
+R_3Prime ~ prior
+R_5Prime  ~ prior
 ```
 
 It does not fit:
 
 ```text
 R_hyper_mean, R_hyper_cv
-R_ThreePrime ~ distribution(R_hyper_mean, R_hyper_cv)
-R_FivePrime  ~ distribution(R_hyper_mean, R_hyper_cv)
+R_3Prime ~ distribution(R_hyper_mean, R_hyper_cv)
+R_5Prime  ~ distribution(R_hyper_mean, R_hyper_cv)
 ```
 
 That distinction matters. This is a Bayesian grouped-parameter model with exact sharing where requested, not a hierarchical shrinkage model.

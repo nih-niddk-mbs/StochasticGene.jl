@@ -56,7 +56,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution. `proposal_cv` is accepted as an alias. If a vector is supplied, each sampled parameter uses its own CV. If positive scalar, uses this fixed value. If negative scalar (e.g., `-0.01`), attempts to load the proposal covariance matrix from a previous fit with the same model. If loading succeeds, warmup is automatically skipped (even if `warmupsteps > 0` is set). If loading fails or file doesn't exist, falls back to `abs(propcv)` and warmup proceeds normally. Loading validates that model parameters match exactly (G, R, S, transitions, fittedparam, nalleles, etc.). This enables efficient proposal reuse when running multiple chains or extensions with expensive likelihood evaluations.
 - `propcv_rate::Real=0.0`, `propcv_noise::Real=0.0`: MH only — optional split initial proposal CVs for rate versus noise parameters. `0.0` means use `propcv`; `propcv_noise=0.0` inherits the rate CV.
-- `propcv_levels::Dict=nothing`: MH only — optional recursive parameter-sharing proposal CV overrides, for example `Dict(:top=>0.05, :group=>0.02, :noise=>0.001)`. Matching entries override `propcv_rate` / `propcv_noise`.
+- `propcv_levels::Dict=nothing`: MH only — optional shared-parameter proposal CV overrides, for example `Dict(:top=>0.05, :group=>0.02, :noise=>0.001)`. Matching entries override `propcv_rate` / `propcv_noise`.
 - `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
@@ -179,6 +179,7 @@ const _FIT_DEFAULTS = (
     probfn=nothing,  # resolved to prob_Gaussian at runtime (defined in hmm.jl, included after fit.jl)
     noisepriors=[],
     hierarchical=tuple(),
+    shared_parameters=nothing,
     recursive_hierarchy=nothing,
     ratetype="median",
     propcv=0.01,
@@ -997,7 +998,7 @@ const _MAKE_STRUCTURES_OPTION_KW = (
     :likelihood_executor, :gradient_checkpoint_length, :hmm_stack, :hmm_checkpoint_steps,
     :init_jitter, :init_jitter_individual, :init_jitter_noise,
     :propcv_rate, :propcv_noise, :proposal_cv_rates, :proposal_cv_noise,
-    :propcv_levels, :proposal_cv_levels, :recursive_hierarchy,
+    :propcv_levels, :proposal_cv_levels, :shared_parameters, :recursive_hierarchy,
 )
 
 function _make_structures_option_kwargs(; kwargs...)
@@ -1149,7 +1150,8 @@ Create and configure data, model, and options structures for fitting.
 function make_structures(rinit, datatype, datapath, gene, cell, datacond, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; legacy_traceinfo=nothing, legacy_dttype=nothing, kwargs...)
     kw = Dict{Symbol,Any}(pairs(kwargs))
     run_spec = _current_run_spec[] === nothing ? Dict{Symbol,Any}() : Dict{Symbol,Any}(_current_run_spec[])
-    recursive_hierarchy = pop!(kw, :recursive_hierarchy, get(run_spec, :recursive_hierarchy, nothing))
+    shared_parameters = pop!(kw, :shared_parameters, get(run_spec, :shared_parameters, nothing))
+    recursive_hierarchy = pop!(kw, :recursive_hierarchy, get(run_spec, :recursive_hierarchy, shared_parameters))
     recursive_from_hierarchical = _recursive_hierarchy_from_hierarchical(hierarchical)
     if recursive_hierarchy === nothing && recursive_from_hierarchical !== nothing
         recursive_hierarchy = recursive_from_hierarchical
@@ -1221,7 +1223,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
         data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep,
         splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method,
         hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs;
-        recursive_hierarchy=recursive_hierarchy,
+        shared_parameters=recursive_hierarchy,
         proposal_cv_rates=proposal_cv_rates,
         proposal_cv_noise=proposal_cv_noise,
         proposal_cv_levels=proposal_cv_levels,
@@ -3027,7 +3029,7 @@ end
 function _is_recursive_hierarchy_spec(x)
     (x isa NamedTuple || x isa AbstractDict) || return false
     kind = _spec_get_row(x, :kind, _spec_get_row(x, :type, nothing))
-    kind in (:recursive, "recursive", :recursive_hierarchy, "recursive_hierarchy") && return true
+    kind in (:shared, "shared", :recursive, "recursive", :recursive_hierarchy, "recursive_hierarchy") && return true
     _spec_get_row(x, :cache_plan, _spec_get_row(x, :plan, nothing)) isa RecursiveHierarchyCachePlan && return true
     _spec_get_row(x, :hierarchy, _spec_get_row(x, :levels, nothing)) isa HierarchySpec && return true
     return false
@@ -3500,7 +3502,7 @@ For **coupled trace** / `AbstractTraceData`, keyword **`coupled_stack`** selects
 - Sets up traits and prior distributions
 - Returns concrete model type based on model complexity
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full, recursive_hierarchy=nothing, proposal_cv_rates::Real=0.0, proposal_cv_noise::Real=0.0, proposal_cv_levels=nothing)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full, shared_parameters=nothing, recursive_hierarchy=nothing, proposal_cv_rates::Real=0.0, proposal_cv_noise::Real=0.0, proposal_cv_levels=nothing)
     dwell_specs = (dwell_specs === nothing) ? [] : dwell_specs
     # For coupled dwell models, extract full onstates from dwell_specs here.
     if !isempty(dwell_specs) && !isempty(coupling) && G isa Tuple
@@ -3534,6 +3536,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     else
         gridindices = nothing
     end
+    recursive_hierarchy = recursive_hierarchy === nothing ? shared_parameters : recursive_hierarchy
     recursive_trait = _recursive_hierarchy_trait(recursive_hierarchy)
     recursive_trait, r, rmean, priorcv, fittedparam, ratetransforms = _compile_recursive_trait_and_layout(
         recursive_trait,

@@ -92,7 +92,7 @@ end
 # Longest first so `sampled_rates` does not match before `rates`.
 const _STAGE_LEGACY_RESULT_PREFIXES = (
     "ll_sampled_rates", "sampled_rates", "param-stats", "proposal-cov", "advi-measures",
-    "measures", "rates", "shared", "optimized", "burst", "info",
+    "summary-rates", "measures", "rates", "optimized", "burst", "info",
 )
 
 function _legacy_parse_result_basename(basename_fn::AbstractString)

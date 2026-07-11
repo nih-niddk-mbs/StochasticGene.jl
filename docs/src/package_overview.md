@@ -71,6 +71,7 @@ The tuple order is canonicalized, so `(:dwelltime, :rna)` is equivalent to `(:rn
 Under each **`resultfolder`**, names encode cell, condition, gene, model string (**G**, **R**, **S**, **insertstep**), and alleles. Typical prefixes:
 
 - **`rates_*.txt`** — posterior summaries and ML row (see file header / docs).
+- **`summary-rates_*.txt`** — compact human-facing rate summaries for hierarchical/shared-style fits, omitting long individual/noise blocks.
 - **`measures_*.txt`**, **`param-stats_*.txt`** — diagnostics and parameter summaries.
 - **`proposal-cov_*.jld2`** — proposal covariance matrix and metadata (see MCMC proposal & warmup below).
 - **`burst_*.txt`** — optional burst statistics when requested.

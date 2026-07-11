@@ -2158,59 +2158,65 @@ function rlabels_GRSM_hierarchical(labelsin, model)
     labels
 end
 
-function _recursive_label_family(trait::RecursiveHierarchyTrait, base_idx::Integer)
+function _shared_label_family(trait::RecursiveHierarchyTrait, base_idx::Integer)
     for (family, indices) in trait.rate_families
         base_idx in indices && return family
     end
     return :unknown
 end
 
-function _recursive_group_label(group::NamedTuple)
+function _shared_owner_label(group::NamedTuple)
     parts = String[]
     for k in keys(group)
         v = group[k]
         k === :top && v == :top && continue
         push!(parts, String(v))
     end
+    if length(parts) > 1
+        last_part = parts[end]
+        if all(p -> occursin(p, last_part), parts[1:end-1])
+            return last_part
+        end
+    end
     isempty(parts) && push!(parts, "top")
     return join(parts, "-")
 end
 
-function _recursive_file_token(s)
+function _shared_file_token(s)
     token = replace(strip(string(s)), r"[^A-Za-z0-9.-]+" => "-")
     isempty(token) ? "group" : token
 end
 
-function _recursive_parameter_family(trait::RecursiveHierarchyTrait, pidx::Integer)
-    _recursive_label_family(trait, trait.parameter_base_indices[pidx])
+function _shared_parameter_family(trait::RecursiveHierarchyTrait, pidx::Integer)
+    _shared_label_family(trait, trait.parameter_base_indices[pidx])
 end
 
-function recursive_shared_parameter_indices(model::GRSMmodel)
+function shared_summary_rate_parameter_indices(model::GRSMmodel)
     trait = model.trait.recursive_hierarchy
-    shared = Int[]
+    summary = Int[]
     for pidx in eachindex(trait.parameter_base_indices)
-        family = _recursive_parameter_family(trait, pidx)
+        family = _shared_parameter_family(trait, pidx)
         family in trait.cache_plan.emission_families && continue
-        push!(shared, pidx)
+        push!(summary, pidx)
     end
-    shared
+    summary
 end
 
-function rlabels_GRSM_recursive(labelsin, model)
+function rlabels_GRSM_shared(labelsin, model)
     trait = model.trait.recursive_hierarchy
     labels = String[]
     for pidx in eachindex(trait.parameter_base_indices)
         base_idx = trait.parameter_base_indices[pidx]
-        family = _recursive_parameter_family(trait, pidx)
+        family = _shared_parameter_family(trait, pidx)
         assignment_idx = findfirst(
             a -> trait.assignment_parameter_indices[base_idx, a] == pidx,
             axes(trait.assignment_parameter_indices, 2),
         )
         suffix = if assignment_idx === nothing
-            "recursive=$pidx"
+            "shared=$pidx"
         else
             groups = trait.cache_plan.assignments[assignment_idx].parameter_groups
-            haskey(groups, family) ? _recursive_group_label(groups[family]) : "recursive=$pidx"
+            haskey(groups, family) ? _shared_owner_label(groups[family]) : "shared=$pidx"
         end
         push!(labels, "$(labelsin[1, base_idx])_$(suffix)")
     end
@@ -2243,7 +2249,7 @@ function rlabels(model::GRSMmodel)
         labels = rlabels_GRSM_hierarchical(labels, model)
     end
     if hastrait(model, :recursive_hierarchy)
-        labels = rlabels_GRSM_recursive(labels, model)
+        labels = rlabels_GRSM_shared(labels, model)
     end
     labels
 end
@@ -2642,9 +2648,9 @@ Write the info file (TOML) for a run. Same stem as rates/measures (e.g. info_foo
 If `file` does not end in .toml, the extension is replaced. Delegates to `write_info_toml`.
 Sections: [output], [model_info], [environment]; if `run_spec` is set, also [run].
 """
-function write_info(file::String, fits, data, model, labels; run_spec=nothing, recursive_rate_outputs=nothing)
+function write_info(file::String, fits, data, model, labels; run_spec=nothing, shared_rate_outputs=nothing)
     file_toml = endswith(file, ".toml") ? file : (replace(file, r"\.txt$" => "") * ".toml")
-    write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels, recursive_rate_outputs=recursive_rate_outputs)
+    write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels, shared_rate_outputs=shared_rate_outputs)
 end
 
 function _stochasticgene_environment_info()
@@ -2674,7 +2680,7 @@ Write run specification and key outputs to a TOML file (info_*.toml).
 Same stem as rates/measures (e.g. rates_foo.txt → info_foo.toml). Called by write_info.
 Sections: [output] = llml, accept, total, median_param; [model_info]; [environment]. If run_spec is provided, also [run] = fit kwargs.
 """
-function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing, recursive_rate_outputs=nothing)
+function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing, shared_rate_outputs=nothing)
     # Write companion JLD2 with exact Julia types (functions, ODE solvers, etc.)
     if run_spec !== nothing
         write_run_spec_jld2(file_toml, run_spec)
@@ -2707,11 +2713,11 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
             "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0),
             "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),
         )
-        if recursive_rate_outputs !== nothing
-            model_info["recursive_rate_files"] = [x.file for x in recursive_rate_outputs]
-            model_info["recursive_rate_groups"] = [x.group for x in recursive_rate_outputs]
-            model_info["recursive_rate_transition_groups"] = [x.transition_group for x in recursive_rate_outputs]
-            model_info["recursive_rate_emission_groups"] = [x.emission_group for x in recursive_rate_outputs]
+        if shared_rate_outputs !== nothing
+            model_info["shared_rate_files"] = [x.file for x in shared_rate_outputs]
+            model_info["shared_rate_groups"] = [x.group for x in shared_rate_outputs]
+            model_info["shared_rate_transition_groups"] = [x.transition_group for x in shared_rate_outputs]
+            model_info["shared_rate_emission_groups"] = [x.emission_groups for x in shared_rate_outputs]
         end
         _write_toml_table(io, model_info, "  ")
         println(io, "")
@@ -2876,7 +2882,7 @@ Write all model fitting results to files.
 # Notes
 - Creates output directory if it doesn't exist
 - Writes rates, measures, and parameter stats; if run_spec is set, also writes info_<stem>.toml
-- For hierarchical GRSM models, writes shared parameters
+- For hierarchical GRSM models, writes compact summary-rate parameters
 - Conditionally writes optimized and burst files if provided
 - Conditionally writes sample data if writesamples=true
 - Uses consistent filename generation for all output files
@@ -2889,9 +2895,9 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     end
     name = name_override !== nothing ? name_override : filename(data, model)
     labels = rlabels(model)
-    recursive_rate_outputs = nothing
+    shared_rate_outputs = nothing
     if model isa GRSMmodel && hastrait(model, :recursive_hierarchy)
-        recursive_rate_outputs = write_rates_recursive_groups(joinpath(path, "rates" * name), fits, stats, model)
+        shared_rate_outputs = write_shared_rate_groups(joinpath(path, "rates" * name), fits, stats, model)
     else
         write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     end
@@ -2903,9 +2909,9 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     proposal_cov_file = joinpath(path, replace("proposal-cov" * name, r"\.(csv|txt)$" => ".jld2"))
     save_proposal_covariance(proposal_cov_file, stats.covparam, model, name)
     if typeof(model) <: GRSMmodel && hastrait(model, :hierarchical)
-        write_hierarchy(joinpath(path, "shared" * name), fits, stats, model, labels)
+        write_summary_rates(joinpath(path, "summary-rates" * name), fits, stats, model, labels)
     elseif typeof(model) <: GRSMmodel && hastrait(model, :recursive_hierarchy)
-        write_recursive_shared(joinpath(path, "shared" * name), fits, stats, model, labels)
+        write_shared_summary_rates(joinpath(path, "summary-rates" * name), fits, stats, model, labels)
     end
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
@@ -2917,7 +2923,7 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
     end
-    write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec, recursive_rate_outputs=recursive_rate_outputs)
+    write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec, shared_rate_outputs=shared_rate_outputs)
 end
 
 function _run_spec_get(run_spec, key::Symbol, default=nothing)
@@ -3117,9 +3123,9 @@ end
 
 
 """
-    write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, labels)
+    write_summary_rates(file::String, fits::Fit, stats, model::GRSMmodel, labels)
 
-Write hierarchy parameters into a file for hierarchical models.
+Write compact summary-rate parameters into a file for hierarchical models.
 
 # Arguments
 - `file::String`: Output file path
@@ -3129,15 +3135,15 @@ Write hierarchy parameters into a file for hierarchical models.
 - `labels`: Rate labels for the file header
 
 # Returns
-- Nothing, but writes hierarchy file with shared parameters
+- Nothing, but writes a compact summary-rate file
 
 # Notes
-- Writes only the shared (hyper) parameters for hierarchical models
-- Uses first nrates columns from labels where nrates is the number of shared parameters
+- Writes only the leading summary-rate block for hierarchical models
+- Uses first nrates columns from labels where nrates is the number of summary-rate parameters
 - Writes 4 rows: max likelihood, mean, median, and last sample
-- Used for hierarchical models to separate shared from individual parameters
+- Used for hierarchical models to avoid repeating all individual/noise parameters
 """
-function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, labels)
+function write_summary_rates(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     f = open(file, "w")
     writedlm(f, labels[1:1, 1:model.trait.hierarchical.nrates], ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)[1:model.trait.hierarchical.nrates]], ',')  # max posterior
@@ -3148,9 +3154,9 @@ function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, label
 end
 
 """
-    write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
+    write_summary_rates(file::String, fits::Fit, stats, model::GRSMmodel)
 
-Write hierarchy parameters using default labels.
+Write compact summary-rate parameters using default labels.
 
 # Arguments
 - `file::String`: Output file path
@@ -3159,64 +3165,102 @@ Write hierarchy parameters using default labels.
 - `model::GRSMmodel`: GRSM model with hierarchical trait
 
 # Returns
-- Nothing, but writes hierarchy file
+- Nothing, but writes summary-rate file
 
 # Notes
-- Delegates to write_hierarchy with labels generated from rlabels(model)
+- Delegates to write_summary_rates with labels generated from rlabels(model)
 - Uses model to generate appropriate rate labels
 """
-function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
-    write_hierarchy(file, fits, stats, model, rlabels(model))
+function write_summary_rates(file::String, fits::Fit, stats, model::GRSMmodel)
+    write_summary_rates(file, fits, stats, model, rlabels(model))
 end
 
 """
-    write_recursive_shared(file::String, fits::Fit, stats, model::GRSMmodel, labels)
+    write_shared_summary_rates(file::String, fits::Fit, stats, model::GRSMmodel, labels)
 
-Write shared recursive-hierarchy parameters into a file.
+Write compact shared-fit summary-rate parameters into a file.
 
-Recursive hierarchy expands the rate vector by parameter-family groups instead of
-placing all shared parameters in a leading block. This writer keeps the
+The shared fit expands the rate vector by parameter-family ownership instead of
+placing all summary parameters in a leading block. This writer keeps the
 non-emission families, which correspond to transition-rate groups cached by the
 likelihood, and leaves out individual noise/emission parameters.
 """
-function write_recursive_shared(file::String, fits::Fit, stats, model::GRSMmodel, labels)
-    shared = recursive_shared_parameter_indices(model)
+function write_shared_summary_rates(file::String, fits::Fit, stats, model::GRSMmodel, labels)
+    summary = shared_summary_rate_parameter_indices(model)
     f = open(file, "w")
-    writedlm(f, labels[1:1, shared], ',')
-    writedlm(f, [get_rates(fits.parml, model)[shared]], ',')
-    writedlm(f, [get_rates(stats.meanparam, model, false)[shared]], ',')
-    writedlm(f, [get_rates(stats.medparam, model, false)[shared]], ',')
-    writedlm(f, [get_rates(fits.param[:, end], model)[shared]], ',')
+    writedlm(f, labels[1:1, summary], ',')
+    writedlm(f, [get_rates(fits.parml, model)[summary]], ',')
+    writedlm(f, [get_rates(stats.meanparam, model, false)[summary]], ',')
+    writedlm(f, [get_rates(stats.medparam, model, false)[summary]], ',')
+    writedlm(f, [get_rates(fits.param[:, end], model)[summary]], ',')
     close(f)
 end
 
-function write_recursive_shared(file::String, fits::Fit, stats, model::GRSMmodel)
-    write_recursive_shared(file, fits, stats, model, rlabels(model))
+function write_shared_summary_rates(file::String, fits::Fit, stats, model::GRSMmodel)
+    write_shared_summary_rates(file, fits, stats, model, rlabels(model))
 end
 
-function _recursive_output_file(file::String, group_label::AbstractString)
+function _shared_output_file(file::String, group_label::AbstractString)
     base = replace(file, r"\.txt$" => "")
-    return base * "-" * _recursive_file_token(group_label) * ".txt"
+    return base * "-" * _shared_file_token(group_label) * ".txt"
 end
 
-function _recursive_operational_rate_groups(trait::RecursiveHierarchyTrait)
+function _shared_operational_rate_groups(trait::RecursiveHierarchyTrait)
     groups = NamedTuple[]
-    seen = Set{Tuple{Int,Int}}()
+    seen = Set{Int}()
     for aidx in axes(trait.assignment_parameter_indices, 2)
         tg = trait.cache_plan.assignment_transition_group[aidx]
-        eg = trait.cache_plan.assignment_emission_group[aidx]
-        key = (tg, eg)
-        key in seen && continue
-        push!(seen, key)
-        tlabel = _recursive_group_label(trait.cache_plan.transition_group_keys[tg])
-        elabel = _recursive_group_label(trait.cache_plan.emission_group_keys[eg])
-        label = tlabel == elabel ? tlabel : tlabel * "-emission-" * elabel
-        push!(groups, (assignment_index=aidx, transition_group=tg, emission_group=eg, label=label))
+        tg in seen && continue
+        push!(seen, tg)
+        label = _shared_owner_label(trait.cache_plan.transition_group_keys[tg])
+        assignment_indices = findall(==(tg), trait.cache_plan.assignment_transition_group)
+        emission_groups = unique(trait.cache_plan.assignment_emission_group[assignment_indices])
+        push!(groups, (
+            assignment_index=aidx,
+            assignment_indices=assignment_indices,
+            transition_group=tg,
+            emission_groups=emission_groups,
+            label=label,
+        ))
     end
     return groups
 end
 
-function _write_one_recursive_rate_file(file::String, labels, rows)
+function _shared_rate_group_rows_and_labels(trait::RecursiveHierarchyTrait, group, base_labels, assignment_rates)
+    ntransition = length(trait.transition_group_parameter_indices[group.transition_group])
+    nbase = size(trait.assignment_parameter_indices, 1)
+    nemission = isempty(trait.emission_group_parameter_indices) ? 0 :
+        length(trait.emission_group_parameter_indices[group.emission_groups[1]])
+    transition_labels = vec(String.(base_labels[1:1, 1:ntransition]))
+    emission_base_labels = nemission == 0 ? String[] : vec(String.(base_labels[1:1, (nbase - nemission + 1):nbase]))
+    add_emission_suffix = length(group.emission_groups) > 1
+
+    labels = copy(transition_labels)
+    for eg in group.emission_groups
+        if add_emission_suffix
+            suffix = _shared_owner_label(trait.cache_plan.emission_group_keys[eg])
+            append!(labels, ["$(label)_$(suffix)" for label in emission_base_labels])
+        else
+            append!(labels, emission_base_labels)
+        end
+    end
+
+    rows = Vector{Float64}[]
+    for rates_by_assignment in assignment_rates
+        transition_row = collect(rates_by_assignment[group.assignment_index][1:ntransition])
+        row = copy(transition_row)
+        for eg in group.emission_groups
+            local_assignment = findfirst(aidx -> trait.cache_plan.assignment_emission_group[aidx] == eg, group.assignment_indices)
+            local_assignment === nothing && throw(ArgumentError("shared output group $(group.label) has no assignment for emission group $eg"))
+            aidx = group.assignment_indices[local_assignment]
+            append!(row, rates_by_assignment[aidx][(nbase - nemission + 1):nbase])
+        end
+        push!(rows, row)
+    end
+    return reshape(labels, 1, :), rows
+end
+
+function _write_one_shared_rate_file(file::String, labels, rows)
     open(file, "w") do f
         writedlm(f, labels, ',')
         for row in rows
@@ -3225,10 +3269,10 @@ function _write_one_recursive_rate_file(file::String, labels, rows)
     end
 end
 
-function write_rates_recursive_groups(file::String, fits::Fit, stats, model::GRSMmodel)
+function write_shared_rate_groups(file::String, fits::Fit, stats, model::GRSMmodel)
     trait = model.trait.recursive_hierarchy
     labels = rlabels_GRSM(model)
-    groups = _recursive_operational_rate_groups(trait)
+    groups = _shared_operational_rate_groups(trait)
     rate_rows = (
         recursive_assignment_rates(get_rates(fits.parml, model), trait),
         recursive_assignment_rates(get_rates(stats.meanparam, model, false), trait),
@@ -3237,15 +3281,16 @@ function write_rates_recursive_groups(file::String, fits::Fit, stats, model::GRS
     )
     outputs = NamedTuple[]
     for group in groups
-        outfile = _recursive_output_file(file, group.label)
-        rows = [rr[group.assignment_index] for rr in rate_rows]
-        _write_one_recursive_rate_file(outfile, labels, rows)
+        outfile = _shared_output_file(file, group.label)
+        group_labels, rows = _shared_rate_group_rows_and_labels(trait, group, labels, rate_rows)
+        _write_one_shared_rate_file(outfile, group_labels, rows)
         push!(outputs, (
             file=basename(outfile),
             group=group.label,
             assignment_index=group.assignment_index,
+            assignment_indices=group.assignment_indices,
             transition_group=group.transition_group,
-            emission_group=group.emission_group,
+            emission_groups=group.emission_groups,
         ))
     end
     return outputs

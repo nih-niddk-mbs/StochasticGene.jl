@@ -11,11 +11,12 @@ export simulator, simulate_trace, simulate_trace_data, simulate_trace_vector, si
 export RNAData, RNADwellTimeData, RNAOnOffData, TraceData, TraceRNAData,
     AbstractCombinedData, CombinedData, combined_modalities, reconstruct_tracerna,
     DatasetSpec, HierarchyNode, HierarchySpec, HierarchyAssignment,
-    RecursiveHierarchyCachePlan, RecursiveHierarchyTrait, MultiDatasetData,
+    SharedParameterCachePlan, SharedParameterTrait, MultiDatasetData,
     hierarchy_assignments, hierarchy_node_names, hierarchy_parameter_groups,
     hierarchy_path, hierarchy_parameter_levels, n_emission_groups,
-    n_transition_rate_groups, compile_recursive_hierarchy_trait,
-    recursive_hierarchy_cache_plan
+    n_transition_rate_groups, compile_shared_parameter_trait,
+    shared_parameter_cache_plan, shared_assignment_rates,
+    shared_transition_group_rates, shared_emission_group_rates
 
 # Data Handling
 export load_data, load_model, write_histograms, write_traces, write_dataframes

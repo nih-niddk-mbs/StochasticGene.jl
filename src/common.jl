@@ -846,6 +846,15 @@ function recursive_hierarchy_cache_plan(
     )
 end
 
+const SharedParameterCachePlan = RecursiveHierarchyCachePlan
+const SharedParameterTrait = RecursiveHierarchyTrait
+
+shared_parameter_cache_plan(args...; kwargs...) =
+    recursive_hierarchy_cache_plan(args...; kwargs...)
+
+compile_shared_parameter_trait(args...; kwargs...) =
+    compile_recursive_hierarchy_trait(args...; kwargs...)
+
 """
     n_transition_rate_groups(plan)
 

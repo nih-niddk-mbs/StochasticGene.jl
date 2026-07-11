@@ -2795,7 +2795,7 @@ end
 
 function read_rates(rates_dir::String, model_name::String)
     if occursin("-h", model_name)
-        rates_file = joinpath(rates_dir, "shared_trace-HBEC-$(model_name)_1.txt")
+        rates_file = joinpath(rates_dir, "summary-rates_trace-HBEC-$(model_name)_1.txt")
     else
         rates_file = joinpath(rates_dir, "rates_trace-HBEC-$(model_name)_1.txt")
     end

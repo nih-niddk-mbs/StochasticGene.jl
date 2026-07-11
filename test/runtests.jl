@@ -31,7 +31,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
-    @testset "recursive hierarchy vocabulary is passive and composable" begin
+    @testset "shared parameter vocabulary is passive and composable" begin
         spec3 = DatasetSpec(
             :ThreePrime,
             :trace,
@@ -86,13 +86,13 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             DatasetSpec(:FivePrime_trace001, :trace, "data/5Prime", "gene"; metadata=(sample=:FivePrime, trace_id=:trace003)),
             DatasetSpec(:FivePrime_trace002, :trace, "data/5Prime", "gene"; metadata=(sample=:FivePrime, trace_id=:trace004)),
         ]
-        plan = recursive_hierarchy_cache_plan(
+        plan = shared_parameter_cache_plan(
             hierarchy,
             trace_specs;
             transition_families=[:G, :initiation, :R],
             emission_families=[:noise],
         )
-        @test plan isa RecursiveHierarchyCachePlan
+        @test plan isa SharedParameterCachePlan
         @test plan.assignment_transition_group == [1, 1, 2, 2]
         @test plan.assignment_emission_group == [1, 2, 3, 4]
         @test n_transition_rate_groups(plan) == 2
@@ -102,12 +102,12 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             (top=:top, group=:FivePrime),
         ]
         @test length(plan.emission_group_keys) == 4
-        @test_throws ArgumentError recursive_hierarchy_cache_plan(
+        @test_throws ArgumentError shared_parameter_cache_plan(
             assignments;
             transition_families=[:missing_family],
             emission_families=[:noise],
         )
-        recursive_spec = (
+        shared_spec = (
             cache_plan=plan,
             rate_families=Dict(
                 :G => collect(1:4),
@@ -118,7 +118,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             ),
         )
         trace_data = StochasticGene.TraceData(
-            "recursive",
+            "shared",
             "MYC",
             1.0,
             ([fill(0.1, 4), fill(0.2, 4), fill(0.3, 4), fill(0.4, 4)], [], 0.0, 1),
@@ -147,7 +147,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             tuple(),
             tuple(),
             nothing;
-            recursive_hierarchy=recursive_spec,
+            shared_parameters=shared_spec,
             proposal_cv_levels=Dict(:top => 0.01, :group => 0.02, :noise => 0.003),
         )
         @test StochasticGene.hastrait(model, :recursive_hierarchy)
@@ -159,20 +159,34 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test model.trait.recursive_hierarchy.assignment_parameter_indices[10, 1] !=
               model.trait.recursive_hierarchy.assignment_parameter_indices[10, 2]
         compact = collect(1.0:length(model.rates))
-        expanded = recursive_assignment_rates(compact, model.trait.recursive_hierarchy)
+        expanded = shared_assignment_rates(compact, model.trait.recursive_hierarchy)
         @test length(expanded) == 4
         @test all(length.(expanded) .== 13)
         @test expanded[1][1] == expanded[4][1]  # top-level G rate is shared
         @test expanded[1][6] == expanded[2][6]  # group-level R rate is shared within 3Prime
         @test expanded[1][6] != expanded[3][6]  # group-level R rate differs across groups
         @test expanded[1][10] != expanded[2][10]  # individual noise differs per trace
-        @test length(recursive_transition_group_rates(compact, model.trait.recursive_hierarchy)) == 2
-        @test all(length.(recursive_transition_group_rates(compact, model.trait.recursive_hierarchy)) .== 9)
-        @test length(recursive_emission_group_rates(compact, model.trait.recursive_hierarchy)) == 4
-        @test all(length.(recursive_emission_group_rates(compact, model.trait.recursive_hierarchy)) .== 4)
+        @test length(shared_transition_group_rates(compact, model.trait.recursive_hierarchy)) == 2
+        @test all(length.(shared_transition_group_rates(compact, model.trait.recursive_hierarchy)) .== 9)
+        @test length(shared_emission_group_rates(compact, model.trait.recursive_hierarchy)) == 4
+        @test all(length.(shared_emission_group_rates(compact, model.trait.recursive_hierarchy)) .== 4)
         @test size(StochasticGene.rlabels(model), 2) == length(model.rates)
         @test any(contains("ThreePrime"), vec(StochasticGene.rlabels(model)))
-        @test length(StochasticGene._recursive_operational_rate_groups(model.trait.recursive_hierarchy)) == 4
+        output_groups = StochasticGene._shared_operational_rate_groups(model.trait.recursive_hierarchy)
+        @test length(output_groups) == 2
+        @test [g.label for g in output_groups] == ["ThreePrime", "FivePrime"]
+        @test basename(StochasticGene._shared_output_file("rates_shared-key.txt", output_groups[1].label)) == "rates_shared-key-ThreePrime.txt"
+        group_labels, group_rows = StochasticGene._shared_rate_group_rows_and_labels(
+            model.trait.recursive_hierarchy,
+            output_groups[1],
+            StochasticGene.rlabels_GRSM(model),
+            (expanded,),
+        )
+        @test size(group_labels, 2) == 17
+        @test length(group_rows[1]) == 17
+        @test any(contains("trace001"), vec(group_labels))
+        @test group_rows[1][10:13] == expanded[1][10:13]
+        @test group_rows[1][14:17] == expanded[2][10:13]
         split_cv = model.proposal
         trait = model.trait.recursive_hierarchy
         top_pos = findfirst(==(trait.assignment_parameter_indices[1, 1]), model.fittedparam)
@@ -191,8 +205,8 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                 writedlm(joinpath(d3, "gene_trace$(i).txt"), [1:6 fill(0.0, 6) fill(0.1 * i, 6)])
                 writedlm(joinpath(d5, "gene_trace$(i).txt"), [1:6 fill(0.0, 6) fill(0.2 * i, 6)])
             end
-            keyed_recursive = (
-                kind=:recursive,
+            keyed_shared = (
+                kind=:shared,
                 levels=hierarchy,
                 datasets=DatasetSpec[
                     DatasetSpec(:ThreePrime_gene, :trace, "3Prime", "gene"; metadata=(sample=:ThreePrime,)),
@@ -200,7 +214,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                 ],
                 transition_families=[:G, :initiation, :R, :decay],
                 emission_families=[:noise],
-                rate_families=recursive_spec.rate_families,
+                rate_families=shared_spec.rate_families,
             )
             data2, model2, _ = StochasticGene.make_structures(
                 base_rates,
@@ -210,7 +224,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                 "cell",
                 "gene",
                 "results",
-                "recursive-real-smoke",
+                "shared-real-smoke",
                 collect(1:13),
                 tuple(),
                 ([1, 2], [2, 1], [2, 3], [3, 2]),
@@ -231,7 +245,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                 "",
                 StochasticGene.prob_Gaussian,
                 [0.0, 0.1, 0.5, 0.2],
-                keyed_recursive,
+                keyed_shared,
                 "ml",
                 0.01,
                 10,

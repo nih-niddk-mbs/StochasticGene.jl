@@ -48,8 +48,8 @@ For **ADVI**, `gradient = :finite` and `gradient = :ForwardDiff` both differenti
 
 - **`G::Int`**, **`R::Int`**, **`S::Int`**, **`insertstep::Int`**, **`transitions`**: Model topology (see in-source `fit` docstring).
 - **`coupling`**, **`grid`**, **`hierarchical`**: Coupled / grid / hierarchical layouts.
-- **Recursive parameter sharing**: `hierarchical` may also be a keyed recursive named tuple with `kind=:recursive`, `levels::HierarchySpec`, `datasets::Vector{DatasetSpec}`, `rate_families`, `transition_families`, and `emission_families`. This combines datasets from multiple folders while sharing some parameter families and splitting others. It does not introduce learned hyperparameters. See [Recursive Parameter-Sharing Trace Fits](../examples/recursive_parameter_sharing.md).
-  Recursive fits write combined informational files for the run, but operational `rates_*.txt` files are split by recursive group and keep ordinary rate labels.
+- **Shared-parameter multi-fit**: `hierarchical` may also be a keyed shared-parameter named tuple with `kind=:shared`, `levels::HierarchySpec`, `datasets::Vector{DatasetSpec}`, `rate_families`, `transition_families`, and `emission_families`. This combines datasets from multiple folders while sharing some parameter families exactly and splitting others. It does not introduce learned hyperparameters. See [Shared Parameter Trace Fits](../examples/shared_parameter_fits.md).
+  Shared fits write combined informational files for the run, but operational `rates_*.txt` files are split by shared-rate group and keep ordinary rate labels.
 
 ### Data parameters
 
