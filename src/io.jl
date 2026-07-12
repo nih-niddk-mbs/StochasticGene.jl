@@ -3005,6 +3005,7 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     shared_rate_outputs = nothing
     if model isa GRSMmodel && hastrait(model, :recursive_hierarchy)
         shared_rate_outputs = write_shared_rate_groups(joinpath(path, "rates" * name), fits, stats, model)
+        write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     else
         write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     end

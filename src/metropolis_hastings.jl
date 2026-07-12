@@ -606,7 +606,7 @@ Run the main MCMC sampling phase, collecting samples and statistics.
 function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime; SLAB=10000, hmm_stack::Symbol=HMM_STACK_MH, mh_options::Union{Nothing,MHOptions}=nothing)
     llout = Array{Float64,1}(undef, SLAB)
     parout = Array{Float64,2}(undef, length(param), SLAB)
-    pwaic = (0, log.(max.(logpredictions, eps(Float64))), zeros(length(logpredictions)))
+    pwaic = (0, zeros(length(logpredictions)), zeros(length(logpredictions)))
     lppd = fill(-Inf, length(logpredictions))
     accepttotal = 0
     prior = logprior(param, model)

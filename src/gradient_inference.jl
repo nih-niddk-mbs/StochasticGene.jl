@@ -592,7 +592,7 @@ function _nuts_samples_to_fit(
     n >= 1 || throw(ArgumentError("need at least one posterior sample"))
     ll = Vector{Float64}(undef, n)
     _, logpred0 = _loglikelihood_predictions(param[:, 1], data, model, steady_state_solver, ad_likelihood, options)
-    pwaic = (0, log.(max.(logpred0, eps(Float64))), zeros(length(logpred0)))
+    pwaic = (0, zeros(length(logpred0)), zeros(length(logpred0)))
     lppd = fill(-Inf, length(logpred0))
     for s in 1:n
         ll[s], logpred = _loglikelihood_predictions(param[:, s], data, model, steady_state_solver, ad_likelihood, options)
