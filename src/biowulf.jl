@@ -228,12 +228,107 @@ end
 
 function _format_fit_override(k::Symbol, v)::Union{String,Nothing}
     v === nothing && return nothing
+    v === prob_Gaussian && return "$k=prob_Gaussian"
+    if occursin("Tsit5", string(typeof(v)))
+        return "$k=StochasticGene.Tsit5()"
+    end
     v isa AbstractString && return "$k=\"$(escape_string(String(v)))\""
     v isa Symbol && return "$k=$(repr(v))"
     v isa Bool && return "$k=$v"
     v isa Real && return "$k=$v"
-    (v isa Tuple || v isa NamedTuple || v isa AbstractVector) && return "$k=$(repr(v))"
+    (v isa Tuple || v isa NamedTuple || v isa AbstractVector || v isa AbstractDict) && return "$k=$(repr(v))"
     return nothing
+end
+
+const _FITFILE_FULL_KEY_ORDER = Symbol[
+    :key,
+    :nchains, :datatype, :datapath, :gene, :cell, :datacond,
+    :resultfolder, :label, :root,
+    :G, :R, :S, :insertstep, :transitions, :coupling, :TransitionType,
+    :fittedparam, :fixedeffects, :hierarchical, :shared_parameters, :priormean, :priorcv,
+    :noisepriors, :nalleles, :onstates, :decayrate, :splicetype,
+    :probfn, :method, :elongationtime, :grid,
+    :trace_specs, :dwell_specs, :zeromedian, :datacol, :ejectnumber,
+    :maxtime, :samplesteps, :warmupsteps, :sample_stride,
+    :propcv, :ratetype, :writesamples, :temp, :temprna,
+    :inference_method, :parallel, :device, :gradient,
+    :n_samples, :n_adapts, :nuts_delta, :fd_ε, :max_depth,
+    :nuts_verbose, :nuts_progress,
+    :maxiter, :n_mc, :σ_floor, :init_s_raw,
+    :advi_verbose, :advi_time_limit, :zygote_trace,
+    :likelihood_executor, :gradient_checkpoint_length,
+    :init_jitter, :init_jitter_individual, :init_jitter_noise,
+    :propcv_rate, :propcv_noise, :propcv_levels,
+    :proposal_cv_rates, :proposal_cv_noise, :proposal_cv_levels,
+    :burst, :optimize, :prefer_legacy_ratefile, :init_ratefile,
+    :rinit, :yieldfactor, :merge_max_memory, :merge_max_gb,
+]
+
+function _fitfile_full_key_order(spec::AbstractDict)
+    seen = Set{Symbol}()
+    ordered = Symbol[]
+    for k in _FITFILE_FULL_KEY_ORDER
+        haskey(spec, k) || continue
+        push!(ordered, k)
+        push!(seen, k)
+    end
+    rest = sort!(setdiff(Symbol.(collect(keys(spec))), collect(seen)); by=string)
+    append!(ordered, rest)
+    return ordered
+end
+
+function _format_fit_full_kw(k::Symbol, v)::String
+    if k === :probfn
+        return "$k=" * (v === prob_Gaussian ? "prob_Gaussian" : repr(v))
+    elseif k === :method
+        if v isa Tuple && length(v) == 2 && v[2] === true
+            return "$k=(StochasticGene.Tsit5(), true)"
+        elseif occursin("Tsit5", string(typeof(v)))
+            return "$k=StochasticGene.Tsit5()"
+        end
+    end
+    formatted = _format_fit_override(k, v)
+    formatted !== nothing && return formatted
+    return "$k=$(repr(v))"
+end
+
+"""
+    write_fitfile_full(fitfile, spec; src="", key=nothing, skip_keys=(:infolder, :inlabel, :traceinfo, :dttype))
+
+Write a fully formed multiline `@time fit(; ...)` script from a keyword spec.
+Unlike [`write_fitfile_key`](@ref), this emits the full keyword surface into the
+fitscript so the script can be inspected and edited without relying on a staged
+`info_<key>.jld2` file.
+"""
+function write_fitfile_full(
+    fitfile,
+    spec::AbstractDict;
+    src="",
+    key=nothing,
+    skip_keys=(:infolder, :inlabel, :traceinfo, :dttype),
+)
+    f = open(fitfile, "w")
+    try
+        write_prolog(f, src)
+        write(f, "@time fit(;")
+        order = _fitfile_full_key_order(spec)
+        args = String[]
+        skips = Set(Symbol.(skip_keys))
+        for k in order
+            k in skips && continue
+            haskey(spec, k) || continue
+            v = (k === :key && key !== nothing) ? key : spec[k]
+            push!(args, _format_fit_full_kw(k, v))
+        end
+        for (i, arg) in enumerate(args)
+            sep = i == length(args) ? "" : ","
+            write(f, "\n    " * arg * sep)
+        end
+        write(f, "\n)\n")
+    finally
+        close(f)
+    end
+    return String(fitfile)
 end
 
 """

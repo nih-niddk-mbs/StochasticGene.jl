@@ -308,6 +308,7 @@ export
     stage_combine_rates_from_csv,
     stage_write_run_specs,
     make_fitscript,
+    write_fitfile_full,
     make_fitscripts_from_csv,
     build_julia_script_command,
     write_julia_command_file,
