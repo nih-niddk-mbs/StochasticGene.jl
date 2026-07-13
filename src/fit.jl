@@ -1195,6 +1195,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     else
         data, expanded_recursive_specs = recursive_loaded
         recursive_hierarchy = _complete_recursive_hierarchy_spec(recursive_hierarchy, expanded_recursive_specs)
+        recursive_hierarchy = _materialize_recursive_initial_ratefiles(recursive_hierarchy, root, resultfolder, ratetype)
     end
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype_context; priorcv=priorcv)
@@ -3021,8 +3022,8 @@ function _recursive_hierarchy_trait(recursive_hierarchy)
         plan isa RecursiveHierarchyCachePlan ||
             throw(ArgumentError("recursive_hierarchy requires a RecursiveHierarchyCachePlan in :cache_plan or :plan"))
         rate_families = _normalize_rate_families(_spec_get_row(recursive_hierarchy, :rate_families, Dict{Any,Vector{Int}}()))
-        initial_values = _spec_get_row(recursive_hierarchy, :initial_values, Dict{Any,Any}())
-        return RecursiveHierarchyTrait(plan, rate_families, initial_values)
+        initial_rates = _spec_get_row(recursive_hierarchy, :initial_rates, Dict{Any,Any}())
+        return RecursiveHierarchyTrait(plan, rate_families, initial_rates)
     end
     throw(ArgumentError("unsupported recursive_hierarchy value $(typeof(recursive_hierarchy)); pass a RecursiveHierarchyCachePlan, RecursiveHierarchyTrait, or NamedTuple/Dict"))
 end
@@ -3195,8 +3196,50 @@ function _complete_recursive_hierarchy_spec(recursive_hierarchy, expanded_specs)
         )
     end
     rate_families = _spec_get_row(recursive_hierarchy, :rate_families, Dict{Any,Vector{Int}}())
-    initial_values = _spec_get_row(recursive_hierarchy, :initial_values, Dict{Any,Any}())
-    return (cache_plan=plan, rate_families=rate_families, initial_values=initial_values)
+    initial_rates = _spec_get_row(recursive_hierarchy, :initial_rates, Dict{Any,Any}())
+    initial_ratefiles = _spec_get_row(recursive_hierarchy, :initial_ratefiles, Dict{Any,Any}())
+    return (cache_plan=plan, rate_families=rate_families, initial_rates=initial_rates, initial_ratefiles=initial_ratefiles)
+end
+
+function _resolve_recursive_ratefile_path(path, root::String, resultfolder::String)
+    path === nothing && return nothing
+    s = String(path)
+    isempty(s) && return nothing
+    isabspath(s) && return s
+    results_path = joinpath(folder_path(resultfolder, root, "results"), s)
+    isfile(results_path) && return results_path
+    return joinpath(root, s)
+end
+
+function _materialize_recursive_initial_ratefiles(recursive_hierarchy, root::String, resultfolder::String, ratetype::String)
+    recursive_hierarchy === nothing && return recursive_hierarchy
+    (recursive_hierarchy isa NamedTuple || recursive_hierarchy isa AbstractDict) || return recursive_hierarchy
+    ratefiles = _spec_get_row(recursive_hierarchy, :initial_ratefiles, Dict{Any,Any}())
+    isempty(ratefiles) && return recursive_hierarchy
+    initial_rates = Dict{Any,Any}()
+    for (key, path0) in pairs(ratefiles)
+        path = _resolve_recursive_ratefile_path(path0, root, resultfolder)
+        if path === nothing || !isfile(path)
+            @warn "recursive_hierarchy initial rate file not found" key path=path0
+            continue
+        end
+        initial_rates[key] = readrates(path, get_row(ratetype))
+    end
+    existing = _spec_get_row(recursive_hierarchy, :initial_rates, Dict{Any,Any}())
+    merged_rates = Dict{Any,Any}(pairs(existing))
+    merge!(merged_rates, initial_rates)
+    if recursive_hierarchy isa NamedTuple
+        d = Dict{Symbol,Any}()
+        for (k, v) in pairs(recursive_hierarchy)
+            d[Symbol(k)] = v
+        end
+        d[:initial_rates] = merged_rates
+        return (; d...)
+    else
+        d = Dict{Any,Any}(pairs(recursive_hierarchy))
+        d[:initial_rates] = merged_rates
+        return d
+    end
 end
 
 function _expand_recursive_vector(v::AbstractVector, base_indices::Vector{Int}, name::Symbol)
@@ -3215,7 +3258,22 @@ function _expand_recursive_fittedparam(fittedparam, base_indices::Vector{Int})
     return [i for i in eachindex(base_indices) if base_indices[i] in base_fit]
 end
 
-function _recursive_family_initial_value(initial_values::AbstractDict, trait::RecursiveHierarchyTrait, pidx::Integer)
+function _recursive_initial_rate_candidates(assignment, family)
+    candidates = Any[assignment.dataset, assignment.path]
+    haskey(assignment.parameter_groups, family) && push!(candidates, assignment.parameter_groups[family])
+    for k in keys(assignment.path)
+        push!(candidates, assignment.path[k])
+    end
+    if haskey(assignment.parameter_groups, family)
+        group = assignment.parameter_groups[family]
+        for k in keys(group)
+            push!(candidates, group[k])
+        end
+    end
+    return candidates
+end
+
+function _recursive_initial_rate_value(initial_rates::AbstractDict, trait::RecursiveHierarchyTrait, pidx::Integer)
     base_idx = trait.parameter_base_indices[pidx]
     family = nothing
     for (fam, indices) in trait.rate_families
@@ -3225,45 +3283,43 @@ function _recursive_family_initial_value(initial_values::AbstractDict, trait::Re
         end
     end
     family === nothing && return nothing
-    haskey(initial_values, family) || return nothing
-    family_values = initial_values[family]
-    offset = findfirst(==(base_idx), trait.rate_families[family])
-    offset === nothing && return nothing
-    if family_values isa AbstractVector
-        return family_values[offset]
+    found = Float64[]
+    found_keys = Any[]
+    for aidx in axes(trait.assignment_parameter_indices, 2)
+        trait.assignment_parameter_indices[base_idx, aidx] == pidx || continue
+        assignment = trait.cache_plan.assignments[aidx]
+        for key in _recursive_initial_rate_candidates(assignment, family)
+            haskey(initial_rates, key) || continue
+            rates = initial_rates[key]
+            length(rates) >= base_idx || throw(ArgumentError("recursive_hierarchy initial rates for $(repr(key)) have length $(length(rates)); need base index $base_idx"))
+            push!(found, Float64(rates[base_idx]))
+            push!(found_keys, key)
+            break
+        end
     end
-    family_values isa AbstractDict || return nothing
-    assignment_idx = findfirst(
-        a -> trait.assignment_parameter_indices[base_idx, a] == pidx,
-        axes(trait.assignment_parameter_indices, 2),
-    )
-    assignment_idx === nothing && return nothing
-    assignment = trait.cache_plan.assignments[assignment_idx]
-    group = assignment.parameter_groups[family]
-    candidates = Any[group, assignment.path, assignment.dataset]
-    for k in keys(assignment.path)
-        push!(candidates, assignment.path[k])
+    isempty(found) && return nothing
+    if any(x -> abs(x - found[1]) > max(1e-9, 1e-6 * max(abs(x), abs(found[1]), 1.0)), found)
+        @warn "shared initial complete rates disagree for tied parameter; using first value" parameter_index=pidx base_index=base_idx family keys=found_keys values=found
     end
-    for k in keys(group)
-        push!(candidates, group[k])
-    end
-    for key in candidates
-        haskey(family_values, key) || continue
-        value = family_values[key]
-        return value isa AbstractVector ? value[offset] : value
-    end
-    return nothing
+    return found[1]
 end
 
-function _apply_recursive_initial_values!(r, rmean, trait::RecursiveHierarchyTrait)
-    isempty(trait.initial_values) && return r, rmean
+function _initialize_recursive_rates_from_complete_rates(r, rmean, trait::RecursiveHierarchyTrait)
+    isempty(trait.initial_rates) && return r, rmean
+    length(r) == length(trait.parameter_base_indices) && return r, rmean
+    out = similar(r, length(trait.parameter_base_indices))
+    outmean = similar(rmean, length(trait.parameter_base_indices))
     for pidx in eachindex(trait.parameter_base_indices)
-        value = _recursive_family_initial_value(trait.initial_values, trait, pidx)
-        value === nothing && continue
-        r[pidx] = Float64(value)
-        rmean[pidx] = Float64(value)
+        value = _recursive_initial_rate_value(trait.initial_rates, trait, pidx)
+        if value === nothing
+            base_idx = trait.parameter_base_indices[pidx]
+            length(r) >= base_idx || throw(ArgumentError("recursive_hierarchy cannot initialize parameter $pidx: no complete rate source and base index $base_idx exceeds rinit length $(length(r))"))
+            value = r[base_idx]
+        end
+        out[pidx] = Float64(value)
+        outmean[pidx] = Float64(value)
     end
-    return r, rmean
+    return out, outmean
 end
 
 function _fit_noise_parameter_indices(nrates::Integer, reporter::HMMReporter)
@@ -3436,11 +3492,11 @@ function _compile_recursive_trait_and_layout(
             emission_indices=(nrates + 1):nbase,
         ) :
         recursive_trait
-    if isempty(trait.initial_values) && !isempty(recursive_trait.initial_values)
+    if isempty(trait.initial_rates) && !isempty(recursive_trait.initial_rates)
         trait = RecursiveHierarchyTrait(
             trait.cache_plan,
             trait.rate_families,
-            recursive_trait.initial_values,
+            recursive_trait.initial_rates,
             trait.parameter_base_indices,
             trait.assignment_parameter_indices,
             trait.transition_group_parameter_indices,
@@ -3448,9 +3504,9 @@ function _compile_recursive_trait_and_layout(
         )
     end
     base_indices = trait.parameter_base_indices
+    r, rmean = _initialize_recursive_rates_from_complete_rates(r, rmean, trait)
     r = _expand_recursive_vector(r, base_indices, :rinit)
     rmean = _expand_recursive_vector(rmean, base_indices, :priormean)
-    r, rmean = _apply_recursive_initial_values!(r, rmean, trait)
     priorcv = _expand_recursive_priorcv(priorcv, base_indices)
     fittedparam = _expand_recursive_fittedparam(fittedparam, base_indices)
     ratetransforms = Transformation(

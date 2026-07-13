@@ -514,7 +514,7 @@ emissions by emission group.
 struct RecursiveHierarchyTrait
     cache_plan::RecursiveHierarchyCachePlan
     rate_families::Dict{Any,Vector{Int}}
-    initial_values::Dict{Any,Any}
+    initial_rates::Dict{Any,Any}
     parameter_base_indices::Vector{Int}
     assignment_parameter_indices::Matrix{Int}
     transition_group_parameter_indices::Vector{Vector{Int}}
@@ -524,8 +524,8 @@ end
 RecursiveHierarchyTrait(cache_plan::RecursiveHierarchyCachePlan, rate_families::Dict{Any,Vector{Int}}) =
     RecursiveHierarchyTrait(cache_plan, rate_families, Dict{Any,Any}(), Int[], Matrix{Int}(undef, 0, 0), Vector{Int}[], Vector{Int}[])
 
-RecursiveHierarchyTrait(cache_plan::RecursiveHierarchyCachePlan, rate_families::Dict{Any,Vector{Int}}, initial_values::AbstractDict) =
-    RecursiveHierarchyTrait(cache_plan, rate_families, Dict{Any,Any}(pairs(initial_values)), Int[], Matrix{Int}(undef, 0, 0), Vector{Int}[], Vector{Int}[])
+RecursiveHierarchyTrait(cache_plan::RecursiveHierarchyCachePlan, rate_families::Dict{Any,Vector{Int}}, initial_rates::AbstractDict) =
+    RecursiveHierarchyTrait(cache_plan, rate_families, Dict{Any,Any}(pairs(initial_rates)), Int[], Matrix{Int}(undef, 0, 0), Vector{Int}[], Vector{Int}[])
 
 function _normalize_rate_families_for_trait(rate_families)
     d = Dict{Any,Vector{Int}}()

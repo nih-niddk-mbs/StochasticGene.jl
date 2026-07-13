@@ -460,11 +460,15 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMmodel)
     r = get_rates(param, model)
+    hastrait(model, :recursive_hierarchy) &&
+        return prepare_rates_recursive(r, model.trait.recursive_hierarchy)
     prepare_rates_noiseparams(r, model.nrates, model.reporter)
 end
 
 function prepare_rates_ad(param, model::AbstractGRSMmodel)
     r = get_rates_ad(param, model)
+    hastrait(model, :recursive_hierarchy) &&
+        return prepare_rates_recursive(r, model.trait.recursive_hierarchy)
     prepare_rates_noiseparams(r, model.nrates, model.reporter)
 end
 
@@ -1125,6 +1129,44 @@ function recursive_emission_group_rates(r::AbstractVector, trait::RecursiveHiera
     ]
 end
 
+"""
+    prepare_rates_recursive(r, trait)
+
+Bridge recursive/shared fitted rates into likelihood-facing complete rates.
+The returned object includes complete rates for every assignment plus the
+transition and emission cache groups that HMM can reuse.
+"""
+function prepare_rates_recursive(r::AbstractVector, trait::RecursiveHierarchyTrait)
+    assignment_rates = recursive_assignment_rates(r, trait)
+    nbase = size(trait.assignment_parameter_indices, 1)
+    transition_rates = [
+        begin
+            aidx = findfirst(==(gid), trait.cache_plan.assignment_transition_group)
+            aidx === nothing && throw(ArgumentError("transition group $gid has no recursive assignments"))
+            ntransition = length(trait.transition_group_parameter_indices[gid])
+            assignment_rates[aidx][1:ntransition]
+        end
+        for gid in 1:n_transition_rate_groups(trait.cache_plan)
+    ]
+    emission_params = [
+        begin
+            aidx = findfirst(==(gid), trait.cache_plan.assignment_emission_group)
+            aidx === nothing && throw(ArgumentError("emission group $gid has no recursive assignments"))
+            nemission = length(trait.emission_group_parameter_indices[gid])
+            assignment_rates[aidx][(nbase - nemission + 1):nbase]
+        end
+        for gid in 1:n_emission_groups(trait.cache_plan)
+    ]
+    return (
+        assignment_rates=assignment_rates,
+        transition_rates=transition_rates,
+        emission_params=emission_params,
+        assignment_transition_group=trait.cache_plan.assignment_transition_group,
+        assignment_emission_group=trait.cache_plan.assignment_emission_group,
+        cache_plan=trait.cache_plan,
+    )
+end
+
 recursive_assignment_rates(param, model::AbstractGeneTransitionModel; inverse::Bool=true) =
     recursive_assignment_rates(get_rates(param, model, inverse), model.trait.recursive_hierarchy)
 
@@ -1160,17 +1202,15 @@ function ll_hmm_trace_recursive(
         throw(ArgumentError("recursive_hierarchy likelihood does not yet support off/background trace weighting; use active_fraction=1.0 for this first path"))
     end
     kf = _hmm_kolmogorov_fn(hmm_stack)
-    r = hmm_stack === HMM_STACK_AD ? get_rates_ad(param, model) : get_rates(param, model)
-    transition_rates = recursive_transition_group_rates(r, trait)
-    emission_params = recursive_emission_group_rates(r, trait)
+    prepared = hmm_stack === HMM_STACK_AD ? prepare_rates_ad(param, model) : prepare_rates(param, model)
     ap_cache = [
         make_ap(rt, data.interval, components, model.method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
-        for rt in transition_rates
+        for rt in prepared.transition_rates
     ]
-    d_cache = [set_d(ep, reporter) for ep in emission_params]
+    d_cache = [set_d(ep, reporter) for ep in prepared.emission_params]
     return _tracewise_indexed_logpredictions(traces, hmm_stack) do i, tr
-        tg = trait.cache_plan.assignment_transition_group[i]
-        eg = trait.cache_plan.assignment_emission_group[i]
+        tg = prepared.assignment_transition_group[i]
+        eg = prepared.assignment_emission_group[i]
         a, p0 = ap_cache[tg]
         _ll_hmm_single_trace_contrib(a, p0, d_cache[eg], tr, hmm_stack)
     end
