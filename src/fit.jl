@@ -56,7 +56,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution. `proposal_cv` is accepted as an alias. If a vector is supplied, each sampled parameter uses its own CV. If positive scalar, uses this fixed value. If negative scalar (e.g., `-0.01`), attempts to load the proposal covariance matrix from a previous fit with the same model. If loading succeeds, warmup is automatically skipped (even if `warmupsteps > 0` is set). If loading fails or file doesn't exist, falls back to `abs(propcv)` and warmup proceeds normally. Loading validates that model parameters match exactly (G, R, S, transitions, fittedparam, nalleles, etc.). This enables efficient proposal reuse when running multiple chains or extensions with expensive likelihood evaluations.
 - `propcv_rate::Real=0.0`, `propcv_noise::Real=0.0`: MH only — optional split initial proposal CVs for rate versus noise parameters. `0.0` means use `propcv`; `propcv_noise=0.0` inherits the rate CV.
-- `propcv_levels::Dict=nothing`: MH only — optional shared-parameter proposal CV overrides, for example `Dict(:top=>0.05, :group=>0.02, :noise=>0.001)`. Matching entries override `propcv_rate` / `propcv_noise`.
+- `propcv_levels::Dict=nothing`: MH only — optional shared-parameter proposal CV overrides, for example `Dict(:shared=>0.005, :group=>0.02, :individual=>0.001)`. `:top` is accepted as an alias for `:shared`. Matching entries override `propcv_rate` / `propcv_noise`.
 - `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
@@ -72,7 +72,10 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `dwell_specs=[]`: container of dwell-time specs per unit; each row is typically a NamedTuple (or dict-like row) with at least **`unit`**, **`onstates`**, and **`dttype`** (and any binning fields your loaders expect). When non-empty, used for dwell-time data with multiple units or observation mapping. **Coupled + non-empty `dwell_specs`:** these per-row **`onstates`** are the source of truth for the model (`load_model` calls `full_onstates_dttype_from_dwell_specs`). Single-unit dwell defaults use an empty `dttype` list when `dwell_specs` is empty; then use top-level **`onstates`** as usual.
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
 - `warmupsteps=0`: MH — warmup steps to adapt proposal covariance before sampling. For NUTS, prefer `n_adapts`; `warmupsteps` is accepted as a compatibility alias only when `n_adapts` is not set. MH warmup runs before sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
-- `writesamples=false`: write out posterior samples when supported (MH; see IO paths for other methods)
+- `writesamples=false`: write out posterior samples when supported (MH; see IO paths for other methods).
+  `true`/`:ess` saves an ESS-aware capped subset of already-thinned samples,
+  `:all` saves every stored thinned sample, and an integer saves up to that
+  many evenly spaced samples.
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
 - `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for **`info_<key>.jld2`** under the resolved results folder; if present, loads the merged run dict via [`read_run_spec`](@ref) and merges with defaults and any kwargs you pass (kwargs take precedence). The companion **`info_<key>.toml`** is not required for this load path. On write, both TOML (human-readable) and JLD2 (full types) are produced. Legacy keys **`traceinfo`** and **`dttype`** in an old merged spec are applied for loading then **dropped** from the persisted run dict (use **`trace_specs`** / **`dwell_specs`** going forward). With a non-empty key, optional starting rates are **`rates_<key>.txt`** under the same resolved results folder; if that file is missing and `rinit` is unset, initial rates are taken from priors via [`set_rinit`](@ref) — the positional `readrates(…, label, gene, …)` path is **not** used (it would probe a different `rates_…` stem than the key file).
 
@@ -3355,6 +3358,11 @@ function _normalize_proposal_cv_levels(proposal_cv_levels)
         fv = Float64(v)
         fv >= 0.0 || throw(ArgumentError("propcv_levels[$(repr(k))] must be nonnegative, got $(repr(v))"))
         out[k] = fv
+    end
+    if haskey(out, :shared) && !haskey(out, :top)
+        out[:top] = out[:shared]
+    elseif haskey(out, :top) && !haskey(out, :shared)
+        out[:shared] = out[:top]
     end
     return out
 end

@@ -2981,7 +2981,9 @@ Write all model fitting results to files.
 - `model::AbstractGeneTransitionModel`: Model instance
 - `optimized=0`: Optimized parameters (optional)
 - `burst=0`: Burst size statistics (optional)
-- `writesamples=false`: Whether to write sample data (optional)
+- `writesamples=false`: Whether/how to write sample data. `true`, `:ess`, or
+  `:auto` writes an ESS-aware capped subset of already-thinned samples; `:all`
+  writes every stored thinned sample; an integer writes up to that many samples.
 
 # Returns
 - Nothing, but writes multiple output files
@@ -2991,7 +2993,7 @@ Write all model fitting results to files.
 - Writes rates, measures, and parameter stats; if run_spec is set, also writes info_<stem>.toml
 - For hierarchical GRSM models, writes compact summary-rate parameters
 - Conditionally writes optimized and burst files if provided
-- Conditionally writes sample data if writesamples=true
+- Conditionally writes posterior sample data according to `writesamples`.
 - Uses consistent filename generation for all output files
 - If `name_override` is set (e.g. from `fit(; key=\"id\", ...)`), use that suffix for all files (rates_id.txt, info_id.toml).
 - Always writes info_<stem>.toml with [output], [model_info], [environment]; if `run_spec` is set, also includes [run].
@@ -3027,9 +3029,23 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     if burst != 0
         write_burstsize(joinpath(path, "burst" * name), burst)
     end
-    if writesamples
-        write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
-        write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
+    sample_idx = saved_sample_indices(fits, measures, writesamples)
+    if !isempty(sample_idx)
+        param_subset = fits.param[:, sample_idx]
+        rates_subset = inverse_transform_params(param_subset, model)
+        ll_subset = fits.ll[sample_idx]
+        write_array(joinpath(path, "ll_sampled_rates" * name), ll_subset)
+        write_array(joinpath(path, "sampled_rates" * name), permutedims(rates_subset))
+        jldsave(
+            joinpath(path, replace("posterior-samples" * name, r"\.(csv|txt)$" => ".jld2"));
+            param=param_subset,
+            rates=rates_subset,
+            ll=ll_subset,
+            sample_indices=sample_idx,
+            fittedparam=model.fittedparam,
+            rate_labels=vec(rlabels(model)),
+            writesamples=writesamples,
+        )
     end
     write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec, shared_rate_outputs=shared_rate_outputs)
 end

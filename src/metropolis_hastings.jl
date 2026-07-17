@@ -1292,6 +1292,35 @@ function compute_measures(fits::Fit)
     return compute_ess(fits.param), compute_geweke(fits.param), compute_mcse(fits.param)
 end
 
+"""
+    saved_sample_indices(fits, measures, writesamples; min_samples=500, max_samples=5000, ess_factor=2.0)
+
+Return column indices from the already-thinned posterior sample matrix that should be
+persisted for post-hoc analysis. `writesamples=true`, `:ess`, or `:auto` saves an
+ESS-aware capped subset; `:all` preserves the old behavior and saves every stored
+sample; an integer saves up to that many evenly spaced samples.
+"""
+function saved_sample_indices(fits::Fit, measures::Measures, writesamples; min_samples::Int=500, max_samples::Int=5000, ess_factor::Real=2.0)
+    nsamples = size(fits.param, 2)
+    nsamples == 0 && return Int[]
+    writesamples === false && return Int[]
+    if writesamples === true || writesamples === :ess || writesamples === :auto
+        finite_ess = filter(isfinite, Float64.(vec(measures.ess)))
+        ess_target = isempty(finite_ess) ? min_samples : ceil(Int, ess_factor * minimum(finite_ess))
+        target = clamp(ess_target, min_samples, max_samples)
+        target = min(target, nsamples)
+    elseif writesamples === :all
+        target = nsamples
+    elseif writesamples isa Integer
+        target = min(max(Int(writesamples), 0), nsamples)
+    else
+        throw(ArgumentError("writesamples must be false, true, :ess/:auto, :all, or an integer sample cap; got $(repr(writesamples))"))
+    end
+    target <= 0 && return Int[]
+    target >= nsamples && return collect(1:nsamples)
+    return unique(round.(Int, range(1, nsamples; length=target)))
+end
+
 # function Measures(fits::Fit, waic, rhat)
 #     ess = compute_ess(fits.param)
 #     geweke = compute_geweke(fits.param)

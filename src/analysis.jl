@@ -6421,3 +6421,155 @@ end
 #     display(plt)
 #     return h
 # end
+
+function _posterior_samples_file(results_dir::AbstractString, key::AbstractString)
+    file = joinpath(results_dir, "posterior-samples_" * String(key) * ".jld2")
+    isfile(file) || throw(ArgumentError("posterior sample file not found: $(repr(file)); rerun with writesamples=true, :ess, :auto, :all, or an integer cap"))
+    return file
+end
+
+function _info_file_for_key(results_dir::AbstractString, key::AbstractString)
+    file = joinpath(results_dir, "info_" * String(key) * ".jld2")
+    isfile(file) || throw(ArgumentError("run info file not found: $(repr(file))"))
+    return file
+end
+
+function _fit_context_from_saved_info(key::AbstractString; root::String=".", resultfolder::String, overrides=Dict{Symbol,Any}())
+    results_dir = folder_path(resultfolder, root, "results")
+    spec = read_run_spec(_info_file_for_key(results_dir, key))
+    merged = merge(fit_default_spec(), spec, Dict{Symbol,Any}(pairs(overrides)))
+    merged[:key] = String(key)
+    merged[:label] = String(key)
+    merged[:root] = root
+    merged[:resultfolder] = resultfolder
+    rates_path = joinpath(results_dir, "rates_" * String(key) * ".txt")
+    rinit = isfile(rates_path) ? readrates(rates_path, get_row(get(merged, :ratetype, "median"))) : Float64[]
+    run_spec = Dict{Symbol,Any}(merged)
+    _current_run_spec[] = run_spec
+    _current_name_override[] = filename(String(key))
+    try
+        return make_structures(
+            rinit,
+            merged[:datatype],
+            merged[:datapath],
+            merged[:gene],
+            merged[:cell],
+            merged[:datacond],
+            merged[:resultfolder],
+            merged[:label],
+            merged[:fittedparam],
+            merged[:fixedeffects],
+            merged[:transitions],
+            merged[:G],
+            merged[:R],
+            merged[:S],
+            merged[:insertstep],
+            merged[:coupling],
+            merged[:grid],
+            merged[:root],
+            merged[:maxtime],
+            merged[:elongationtime],
+            merged[:priormean],
+            merged[:priorcv],
+            merged[:nalleles],
+            merged[:onstates],
+            merged[:decayrate],
+            merged[:splicetype],
+            merged[:probfn],
+            merged[:noisepriors],
+            merged[:hierarchical],
+            merged[:ratetype],
+            merged[:propcv],
+            0,
+            0,
+            merged[:temp],
+            merged[:temprna],
+            merged[:method],
+            merged[:zeromedian],
+            merged[:datacol],
+            merged[:ejectnumber],
+            merged[:yieldfactor],
+            merged[:trace_specs],
+            merged[:dwell_specs];
+            shared_parameters=get(merged, :shared_parameters, nothing),
+            recursive_hierarchy=get(merged, :recursive_hierarchy, nothing),
+            proposal_cv_rates=get(merged, :proposal_cv_rates, get(merged, :propcv_rate, 0.0)),
+            proposal_cv_noise=get(merged, :proposal_cv_noise, get(merged, :propcv_noise, 0.0)),
+            proposal_cv_levels=get(merged, :proposal_cv_levels, get(merged, :propcv_levels, nothing)),
+            likelihood_executor=get(merged, :likelihood_executor, HMM_STACK_MH),
+        )
+    finally
+        _current_run_spec[] = nothing
+        _current_name_override[] = nothing
+    end
+end
+
+function _recursive_group_point_indices(model; level::Symbol=:group)
+    hastrait(model, :recursive_hierarchy) ||
+        throw(ArgumentError("group post-hoc measures currently require a recursive/shared hierarchy model"))
+    assignments = model.trait.recursive_hierarchy.cache_plan.assignments
+    groups = Dict{Any,Vector{Int}}()
+    for (i, assignment) in enumerate(assignments)
+        group = haskey(assignment.path, level) ? assignment.path[level] : assignment.dataset
+        push!(get!(groups, group, Int[]), i)
+    end
+    return groups
+end
+
+function _waic_from_logprediction_samples(logpred::AbstractMatrix)
+    npoint, nsamples = size(logpred)
+    nsamples > 0 || throw(ArgumentError("cannot compute WAIC from zero posterior samples"))
+    lppd = [logsumexp(vec(logpred[i, :])) - log(nsamples) for i in 1:npoint]
+    pwaic = nsamples > 1 ? vec(var(logpred; dims=2, corrected=true)) : zeros(eltype(logpred), npoint)
+    waic_i = -2 .* (lppd .- pwaic)
+    se = npoint > 1 ? sqrt(npoint * var(waic_i)) : zero(eltype(waic_i))
+    return sum(waic_i), se
+end
+
+"""
+    write_shared_group_measures_from_samples(resultfolder, key; root=".", level=:group, sample_file=nothing, max_samples=nothing)
+
+Use saved posterior samples to recompute pointwise trace log likelihoods for a
+shared/recursive fit and write WAIC/LL summaries separately for each hierarchy
+group, e.g. `3Prime` and `5Prime`.
+"""
+function write_shared_group_measures_from_samples(resultfolder::AbstractString, key::AbstractString; root::String=".", level::Symbol=:group, sample_file=nothing, max_samples=nothing)
+    results_dir = folder_path(String(resultfolder), root, "results")
+    sample_path = sample_file === nothing ? _posterior_samples_file(results_dir, key) : String(sample_file)
+    param = load(sample_path, "param")
+    nsamples = size(param, 2)
+    if max_samples !== nothing && nsamples > Int(max_samples)
+        idx = unique(round.(Int, range(1, nsamples; length=Int(max_samples))))
+        param = param[:, idx]
+        nsamples = size(param, 2)
+    end
+    data, model, _options = _fit_context_from_saved_info(String(key); root=root, resultfolder=String(resultfolder))
+    groups = _recursive_group_point_indices(model; level=level)
+    full_idx = collect(1:length(model.trait.recursive_hierarchy.cache_plan.assignments))
+    group_ll = Dict(group => Vector{Float64}(undef, nsamples) for group in keys(groups))
+    group_lp = Dict(group => Matrix{Float64}(undef, length(idx), nsamples) for (group, idx) in groups)
+    full_ll = Vector{Float64}(undef, nsamples)
+    full_lp = Matrix{Float64}(undef, length(full_idx), nsamples)
+    for j in 1:nsamples
+        _ll, lp = loglikelihood(param[:, j], data, model)
+        full_ll[j] = sum(lp)
+        full_lp[:, j] = lp[full_idx]
+        for (group, idx) in groups
+            vals = lp[idx]
+            group_ll[group][j] = sum(vals)
+            group_lp[group][:, j] = vals
+        end
+    end
+    outfile = joinpath(results_dir, "group-measures_" * String(key) * ".csv")
+    open(outfile, "w") do io
+        writedlm(io, ["group" "n_points" "n_samples" "ll_mean" "ll_median" "ll_max" "waic" "waic_se"], ',')
+        waic, se = _waic_from_logprediction_samples(full_lp)
+        writedlm(io, ["all" length(full_idx) nsamples mean(full_ll) median(full_ll) maximum(full_ll) waic se], ',')
+        for group in sort(collect(keys(groups)); by=string)
+            waic, se = _waic_from_logprediction_samples(group_lp[group])
+            ll = group_ll[group]
+            writedlm(io, [string(group) length(groups[group]) nsamples mean(ll) median(ll) maximum(ll) waic se], ',')
+        end
+    end
+    return outfile
+end

@@ -324,6 +324,7 @@ export
     summarize_model_scores,
     joint_residence_prob_onoff,
     write_joint_residence_prob_onoff,
+    write_shared_group_measures_from_samples,
     test_compare,
     test_compare_3unit,
     test_compare_coupling,
