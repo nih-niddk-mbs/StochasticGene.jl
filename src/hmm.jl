@@ -3508,6 +3508,288 @@ function correlation_functions(
     return vcat(-reverse(lags), lags[2:end]), cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 
+struct HMMCorrelationContext
+    components
+    rates
+    coupling_rates
+    noiseparams
+    a
+    p0
+    lags::Vector{Float64}
+    tau::Vector{Float64}
+    step_indices::Vector{Int}
+    transition_powers::Vector
+    observed_units::Vector{Int}
+    unit_model::Vector{Int}
+    unit_reporters::Dict{Int,Vector{Float64}}
+    unit_gene_states::Dict{Int,Vector{Float64}}
+    mean_intensity::Dict{Int,Vector{Float64}}
+    second_moment_intensity::Dict{Int,Vector{Float64}}
+    offset::Float64
+end
+
+function _correlation_lag_steps(lags::Vector)
+    lf = Float64.(lags)
+    if length(lf) < 2
+        lag_interval = lf[1] > 0 ? lf[1] : 1.0
+    else
+        lag_interval = lf[2] - lf[1]
+        lag_interval > 0 || error("Lags must be strictly increasing and positive")
+        raw_steps = lf ./ lag_interval
+        all(step -> isapprox(step, round(step), rtol=1e-10), raw_steps) ||
+            error("Lags must be uniform or multiples of the lag interval. First spacing: $lag_interval")
+    end
+    return lf, lag_interval, round.(Int, lf ./ lag_interval)
+end
+
+function _expand_unit_vector_to_coupled(local_values, unit::Int, unit_model, nT)
+    pos = findfirst(==(unit), collect(unit_model))
+    pos === nothing && error("unit $unit is not present in coupling unit_model=$(unit_model)")
+    out = collect(local_values)
+    for j in 1:pos-1
+        out = repeat(out, outer=(nT[j],))
+    end
+    for j in pos+1:length(unit_model)
+        out = repeat(out, inner=(nT[j],))
+    end
+    return out
+end
+
+function _local_gene_state_vector(G::Int, R::Int, S::Int, insertstep::Int)
+    n = T_dimension(G, R, S)
+    Float64[inverse_state(i, G, R, S, insertstep)[1] for i in 1:n]
+end
+
+function build_correlation_context(
+    rin,
+    transitions,
+    G::Tuple,
+    R,
+    S,
+    insertstep,
+    probfn,
+    coupling,
+    lags::Vector;
+    offset::Float64=0.0,
+    splicetype::String="",
+    coupled_stack::Symbol=:full,
+    observed_units=nothing,
+    noise_per_unit=nothing,
+)
+    coupled_stack === :full || throw(ArgumentError("Only coupled_stack=:full is supported (got $(coupled_stack))"))
+    components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    unit_model = collect(coupling[1])
+    if isnothing(observed_units)
+        observed_units = length(unit_model) >= 2 ? unit_model[1:2] : unit_model
+    else
+        observed_units = Int.(collect(observed_units))
+    end
+
+    if isnothing(noise_per_unit)
+        n_units = length(R)
+        noise_per_unit = fill(0, n_units)
+        for i in observed_units
+            if 1 <= i <= n_units && R[i] > 0
+                noise_per_unit[i] = 4
+            end
+        end
+    else
+        n_units = length(R)
+        nv = Int.(collect(noise_per_unit))
+        if length(nv) < n_units
+            append!(nv, fill(0, n_units - length(nv)))
+        elseif length(nv) > n_units
+            nv = nv[1:n_units]
+        end
+        observed_set = Set(observed_units)
+        for i in 1:n_units
+            if !(i in observed_set) || R[i] == 0
+                nv[i] = 0
+            end
+        end
+        noise_per_unit = nv
+    end
+
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rin, coupling, transitions, R, S, insertstep, noise_per_unit)
+    nT = collect(T_dimension(G, R, S, Tuple(unit_model)))
+
+    unit_reporters = Dict{Int,Vector{Float64}}()
+    unit_gene_states = Dict{Int,Vector{Float64}}()
+    for unit in unit_model
+        if R[unit] == 0
+            local_reporters = zeros(Float64, T_dimension(G[unit], R[unit], S[unit]))
+        else
+            local_reporters = Float64.(num_reporters_per_state(G[unit], R[unit], S[unit], insertstep[unit], Int[], sum))
+        end
+        unit_reporters[unit] = Float64.(_expand_unit_vector_to_coupled(local_reporters, unit, unit_model, nT)) .+ offset
+        unit_gene_states[unit] = Float64.(_expand_unit_vector_to_coupled(_local_gene_state_vector(G[unit], R[unit], S[unit], insertstep[unit]), unit, unit_model, nT))
+    end
+
+    mean_intensity = Dict{Int,Vector{Float64}}()
+    second_moment_intensity = Dict{Int,Vector{Float64}}()
+    for unit in observed_units
+        haskey(unit_reporters, unit) || continue
+        idx = findfirst(==(unit), observed_units)
+        dists = if typeof(probfn) <: Tuple
+            probfn[unit](noiseparams[unit], Int.(round.(unit_reporters[unit] .- offset)), components.N)
+        else
+            probfn(noiseparams[unit], Int.(round.(unit_reporters[unit] .- offset)), components.N)
+        end
+        mi = mean.(dists)
+        vi = var.(dists)
+        mean_intensity[unit] = mi
+        second_moment_intensity[unit] = vi .+ mi.^2
+    end
+
+    lf, lag_interval, step_indices = _correlation_lag_steps(lags)
+    coupling_rates = [couplingStrength[k] * r[components.targets[k][1]][components.targets[k][2]]
+                      for k in eachindex(components.targets)]
+    a, p0 = make_ap(r, coupling_rates, lag_interval, components)
+    transition_powers = [a^step for step in step_indices]
+    tau = vcat(-reverse(lf), lf[2:end])
+
+    HMMCorrelationContext(
+        components,
+        r,
+        coupling_rates,
+        noiseparams,
+        a,
+        p0,
+        lf,
+        tau,
+        step_indices,
+        transition_powers,
+        observed_units,
+        unit_model,
+        unit_reporters,
+        unit_gene_states,
+        mean_intensity,
+        second_moment_intensity,
+        Float64(offset),
+    )
+end
+
+function _correlation_spec_parts(spec)
+    if spec isa NamedTuple
+        kind = haskey(spec, :kind) ? spec.kind : error("observable NamedTuple requires :kind")
+        unit = haskey(spec, :unit) ? Int(spec.unit) : nothing
+        value = haskey(spec, :value) ? spec.value : nothing
+        label = haskey(spec, :label) ? String(spec.label) : nothing
+        values = haskey(spec, :values) ? spec.values : nothing
+        return kind, unit, value, label, values
+    elseif spec isa Tuple
+        kind = spec[1]
+        unit = length(spec) >= 2 && spec[2] !== nothing ? Int(spec[2]) : nothing
+        value = length(spec) >= 3 ? spec[3] : nothing
+        return kind, unit, value, nothing, nothing
+    elseif spec isa AbstractVector
+        return :custom, nothing, nothing, nothing, spec
+    else
+        throw(ArgumentError("unsupported correlation observable spec $(repr(spec)); use e.g. (:ON, 1), (:reporters, 2), (:gene_state, 1, 3), or a NamedTuple"))
+    end
+end
+
+function correlation_observable_label(spec)
+    kind, unit, value, label, _ = _correlation_spec_parts(spec)
+    label !== nothing && return label
+    if kind === :custom
+        return "custom"
+    elseif value === nothing
+        return string(kind, "_unit", unit)
+    else
+        return string(kind, "_unit", unit, "_", value)
+    end
+end
+
+function correlation_observable(ctx::HMMCorrelationContext, spec)
+    kind, unit, value, label, values = _correlation_spec_parts(spec)
+    outlabel = label === nothing ? correlation_observable_label(spec) : label
+    if kind === :custom
+        values === nothing && throw(ArgumentError("custom observable requires :values or a vector spec"))
+        length(values) == ctx.components.N || throw(ArgumentError("custom observable $(outlabel) has length $(length(values)); expected $(ctx.components.N)"))
+        v = Float64.(values)
+        return (label=outlabel, values=v, second_moment=v.^2)
+    elseif kind === :state_mask
+        value === nothing && throw(ArgumentError("state_mask observable requires a collection of full-state indices"))
+        mask = Set(Int.(collect(value)))
+        v = [i in mask ? 1.0 : 0.0 for i in 1:ctx.components.N]
+        return (label=outlabel, values=v, second_moment=v)
+    elseif kind === :state_value
+        value === nothing && throw(ArgumentError("state_value observable requires values over full coupled states"))
+        length(value) == ctx.components.N || throw(ArgumentError("state_value observable has length $(length(value)); expected $(ctx.components.N)"))
+        v = Float64.(value)
+        return (label=outlabel, values=v, second_moment=v.^2)
+    end
+    unit === nothing && throw(ArgumentError("observable $(repr(spec)) requires a unit"))
+    if kind === :ON || kind === :on
+        v = Float64.(ctx.unit_reporters[unit] .> ctx.offset) .+ ctx.offset
+        return (label=outlabel, values=v, second_moment=v.^2)
+    elseif kind === :reporters || kind === :reporter
+        v = ctx.unit_reporters[unit]
+        return (label=outlabel, values=v, second_moment=v.^2)
+    elseif kind === :intensity
+        haskey(ctx.mean_intensity, unit) || throw(ArgumentError("unit $unit has no intensity observable in this context"))
+        return (label=outlabel, values=ctx.mean_intensity[unit], second_moment=ctx.second_moment_intensity[unit])
+    elseif kind === :gene_state || kind === :G
+        value === nothing && throw(ArgumentError("gene_state observable requires a state value"))
+        v = Float64.(ctx.unit_gene_states[unit] .== Float64(value))
+        return (label=outlabel, values=v, second_moment=v)
+    elseif kind === :reporter_count
+        value === nothing && throw(ArgumentError("reporter_count observable requires a reporter count"))
+        v = Float64.(ctx.unit_reporters[unit] .== Float64(value) + ctx.offset)
+        return (label=outlabel, values=v, second_moment=v)
+    else
+        throw(ArgumentError("unsupported correlation observable kind $(repr(kind))"))
+    end
+end
+
+function crosscorfn_hmm_cached(ctx::HMMCorrelationContext, x::AbstractVector, y::AbstractVector)
+    cc = zeros(Float64, length(ctx.transition_powers))
+    left = Float64.(x) .* ctx.p0
+    @inbounds for i in eachindex(ctx.transition_powers)
+        cc[i] = dot(left, ctx.transition_powers[i] * y)
+    end
+    return cc
+end
+
+function autocorfn_hmm_cached(ctx::HMMCorrelationContext, x::AbstractVector, second_moment::AbstractVector)
+    ac = crosscorfn_hmm_cached(ctx, x, x)
+    zero_idx = findfirst(==(0), ctx.step_indices)
+    if zero_idx !== nothing
+        ac[zero_idx] = sum(ctx.p0 .* second_moment)
+    else
+        ac[1] = sum(ctx.p0 .* second_moment)
+    end
+    return ac
+end
+
+_symmetrize_positive_lag(ac) = vcat(reverse(ac), ac[2:end])
+
+function correlate_observables(ctx::HMMCorrelationContext, xspec, yspec)
+    x = correlation_observable(ctx, xspec)
+    y = correlation_observable(ctx, yspec)
+    cc12 = crosscorfn_hmm_cached(ctx, x.values, y.values)
+    cc21 = crosscorfn_hmm_cached(ctx, y.values, x.values)
+    acx = autocorfn_hmm_cached(ctx, x.values, x.second_moment)
+    acy = autocorfn_hmm_cached(ctx, y.values, y.second_moment)
+    mx = mean_hmm(ctx.p0, x.values)
+    my = mean_hmm(ctx.p0, y.values)
+    zero_idx = findfirst(==(0), ctx.step_indices)
+    zero_idx === nothing && (zero_idx = 1)
+    return (
+        x=x.label,
+        y=y.label,
+        tau=ctx.tau,
+        cc=vcat(reverse(cc21), cc12[2:end]),
+        ac_x=_symmetrize_positive_lag(acx),
+        ac_y=_symmetrize_positive_lag(acy),
+        mean_x=mx,
+        mean_y=my,
+        var_x=acx[zero_idx] - mx^2,
+        var_y=acy[zero_idx] - my^2,
+    )
+end
+
 """
     crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, step_indices)
 
@@ -3782,6 +4064,132 @@ function predicted_states(r::Matrix, nT, components::TComponents, n_noiseparams:
     states, observation_dist
 end
 
+function posterior_state_probabilities(a, b, p0)
+    N, T = size(b)
+    α, C = forward(a, b, p0, N, T)
+    β = backward_scaled(a, b, C, N, T)
+    γ = α .* β
+    @inbounds for t in 1:T
+        s = sum(@view γ[:, t])
+        if s > 0 && isfinite(s)
+            @views γ[:, t] ./= s
+        else
+            @views γ[:, t] .= inv(N)
+        end
+    end
+    return γ
+end
+
+function posterior_burst_probability(
+    trace,
+    r::AbstractVector,
+    components::TComponents,
+    n_noiseparams::Int,
+    reporters_per_state,
+    probfn,
+    interval;
+    method=Tsit5(),
+)
+    rr = collect(r)
+    a, p0 = make_ap(rr, interval, components, method)
+    noiseparams = rr[end-n_noiseparams+1:end]
+    b = set_b(trace, noiseparams, reporters_per_state, probfn, components.nT)
+    γ = posterior_state_probabilities(a, b, p0)
+    burst_states = findall(>(0), reporters_per_state)
+    return vec(sum(@view γ[burst_states, :]; dims=1))
+end
+
+function posterior_burst_probability(
+    trace,
+    r::AbstractVector,
+    transitions::Tuple,
+    G::Int,
+    R::Int,
+    S::Int,
+    insertstep::Int,
+    interval;
+    n_noiseparams::Int=4,
+    onstates=Int[],
+    probfn=prob_Gaussian,
+    splicetype::String="",
+    method=Tsit5(),
+)
+    components = TComponents(transitions, G, R, S, insertstep, splicetype)
+    reporters_per_state = num_reporters_per_state(G, R, S, insertstep, onstates, sum)
+    posterior_burst_probability(trace, r, components, n_noiseparams, reporters_per_state, probfn, interval; method=method)
+end
+
+function auc_binary_score(scores, truth)
+    s = Float64.(vec(scores))
+    y = Bool.(vec(truth))
+    length(s) == length(y) || throw(ArgumentError("scores and truth must have the same length"))
+    npos = count(y)
+    nneg = length(y) - npos
+    (npos == 0 || nneg == 0) && return NaN
+
+    order = sortperm(s)
+    ranks = zeros(Float64, length(s))
+    i = 1
+    while i <= length(s)
+        j = i
+        while j < length(s) && s[order[j+1]] == s[order[i]]
+            j += 1
+        end
+        ranks[order[i:j]] .= (i + j) / 2
+        i = j + 1
+    end
+    return (sum(ranks[y]) - npos * (npos + 1) / 2) / (npos * nneg)
+end
+
+function burst_prediction_auc(
+    traces,
+    r::AbstractVector,
+    transitions::Tuple,
+    G::Int,
+    R::Int,
+    S::Int,
+    insertstep::Int,
+    interval;
+    n_noiseparams::Int=4,
+    onstates=Int[],
+    probfn=prob_Gaussian,
+    splicetype::String="",
+    method=Tsit5(),
+    intensity_col::Int=1,
+    reporter_col::Int=2,
+)
+    components = TComponents(transitions, G, R, S, insertstep, splicetype)
+    reporters_per_state = num_reporters_per_state(G, R, S, insertstep, onstates, sum)
+    scores = Float64[]
+    truth = Bool[]
+    per_trace_auc = Float64[]
+    per_trace_n = Int[]
+    for tr in traces
+        tr isa AbstractMatrix || error("burst_prediction_auc needs simulated trace matrices with intensity and reporter truth")
+        intensity = tr[:, intensity_col]
+        reporter = tr[:, reporter_col]
+        pburst = posterior_burst_probability(intensity, r, components, n_noiseparams, reporters_per_state, probfn, interval; method=method)
+        y = reporter .> 0
+        append!(scores, pburst)
+        append!(truth, y)
+        push!(per_trace_auc, auc_binary_score(pburst, y))
+        push!(per_trace_n, length(y))
+    end
+    return (
+        auc=auc_binary_score(scores, truth),
+        npoints=length(scores),
+        npositive=count(truth),
+        nnegative=length(truth) - count(truth),
+        true_burst_fraction=mean(Float64.(truth)),
+        mean_score_positive=any(truth) ? mean(scores[truth]) : NaN,
+        mean_score_negative=any(.!truth) ? mean(scores[.!truth]) : NaN,
+        per_trace_auc=per_trace_auc,
+        per_trace_n=per_trace_n,
+        scores=scores,
+        truth=truth,
+    )
+end
+
 
 function predicted_states(rates::Vector, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
     r, couplingStrength, noiseparams = prepare_rates_coupled(rates, coupling, transitions, R, S, insertstep, n_noise)
@@ -3841,5 +4249,3 @@ function predicted_states_grid(r::Vector, Nstates, Ngrid, components::TComponent
     end
     states, observation_dist
 end
-
-

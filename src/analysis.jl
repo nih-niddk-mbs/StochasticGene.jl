@@ -4085,6 +4085,183 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     )
 end
 
+function _write_simulated_burst_traces(traces, output_dir::String, datacond::String; datacol::Int=3)
+    mkpath(output_dir)
+    datacol >= 1 || throw(ArgumentError("datacol must be positive"))
+    created = String[]
+    for (i, tr) in enumerate(traces)
+        tr isa AbstractMatrix || throw(ArgumentError("simulated traces must be matrices with intensity in column 1"))
+        intensity = tr[:, 1]
+        n = length(intensity)
+        out = zeros(Float64, n, max(datacol, 4))
+        out[:, datacol] .= intensity
+        out[:, end] .= 1:n
+        file = joinpath(output_dir, string(lpad(i, 4, "0"), "_", datacond, ".trk"))
+        writedlm(file, out)
+        push!(created, file)
+    end
+    return created
+end
+
+"""
+    simulate_burst_observability_auc(r, transitions, G, R, S, insertstep; ...)
+
+Simulate traces from fixed single-unit rates and compute how well the same rates recover true
+bursts (`reporter_count > 0`) from the noisy intensity trace. This answers the "known rates"
+observability question.
+"""
+function simulate_burst_observability_auc(
+    r::AbstractVector,
+    transitions::Tuple,
+    G::Int,
+    R::Int,
+    S::Int,
+    insertstep::Int;
+    interval::Float64=1.0,
+    totaltime::Float64=720.0,
+    ntraces::Int=100,
+    n_noiseparams::Int=4,
+    onstates=Int[],
+    probfn=prob_Gaussian,
+    splicetype::String="",
+    method=Tsit5(),
+    warmupsteps::Int=1000,
+)
+    traces = simulate_trace_vector(collect(r), transitions, G, R, S, insertstep, interval, totaltime, ntraces;
+        onstates=onstates, warmupsteps=warmupsteps, col=[2, 3, 4])
+    auc = burst_prediction_auc(traces, r, transitions, G, R, S, insertstep, interval;
+        n_noiseparams=n_noiseparams, onstates=onstates, probfn=probfn, splicetype=splicetype, method=method,
+        intensity_col=1, reporter_col=2)
+    return merge(auc, (
+        traces=traces,
+        rates=Float64.(r),
+        transitions=transitions,
+        G=G,
+        R=R,
+        S=S,
+        insertstep=insertstep,
+        interval=interval,
+        totaltime=totaltime,
+        ntraces=ntraces,
+    ))
+end
+
+function _rates_from_fit_result(fits, stats, model, ratetype)
+    rt = lowercase(string(ratetype))
+    if rt == "ml" || rt == "mle"
+        return get_rates(fits.parml, model)
+    elseif rt == "mean"
+        return get_rates(stats.meanparam, model, false)
+    elseif rt == "median"
+        return get_rates(stats.medparam, model, false)
+    elseif rt == "last"
+        return get_rates(fits.param[:, end], model)
+    else
+        throw(ArgumentError("unknown fit_ratetype=$(repr(ratetype)); use ml, mean, median, or last"))
+    end
+end
+
+"""
+    simulate_fit_burst_identifiability_auc(rtrue, transitions, G, R, S, insertstep; ...)
+
+Simulate traces from fixed single-unit rates, write them as ordinary `.trk` files, fit the model through
+the normal `fit(; ...)` stack, and compute burst AUC using both the true and fitted rates on the same
+simulated traces. This answers the identifiability question.
+"""
+function simulate_fit_burst_identifiability_auc(
+    rtrue::AbstractVector,
+    transitions::Tuple,
+    G::Int,
+    R::Int,
+    S::Int,
+    insertstep::Int;
+    interval::Float64=1.0,
+    totaltime::Float64=720.0,
+    ntraces::Int=100,
+    n_noiseparams::Int=4,
+    onstates=Int[],
+    probfn=prob_Gaussian,
+    splicetype::String="",
+    method=Tsit5(),
+    warmupsteps::Int=1000,
+    simfolder::String=mktempdir(prefix="stochasticgene-burst-identifiability-"),
+    datacond::String="sim",
+    datacol::Int=3,
+    key::String="burst-identifiability",
+    root::String=".",
+    resultfolder::String="burst-identifiability",
+    fit_ratetype::String="median",
+    fit_kwargs=Dict{Symbol,Any}(),
+)
+    known = simulate_burst_observability_auc(rtrue, transitions, G, R, S, insertstep;
+        interval=interval, totaltime=totaltime, ntraces=ntraces, n_noiseparams=n_noiseparams,
+        onstates=onstates, probfn=probfn, splicetype=splicetype, method=method, warmupsteps=warmupsteps)
+    tracefiles = _write_simulated_burst_traces(known.traces, simfolder, datacond; datacol=datacol)
+
+    nrates = num_rates(transitions, R, S, insertstep)
+    defaults = Dict{Symbol,Any}(
+        :key => key,
+        :nchains => 1,
+        :datatype => "trace",
+        :datapath => simfolder,
+        :gene => "",
+        :cell => "sim",
+        :datacond => datacond,
+        :resultfolder => resultfolder,
+        :label => key,
+        :root => root,
+        :G => G,
+        :R => R,
+        :S => S,
+        :insertstep => insertstep,
+        :transitions => transitions,
+        :coupling => tuple(),
+        :fittedparam => collect(1:nrates+n_noiseparams),
+        :fixedeffects => tuple(),
+        :hierarchical => tuple(),
+        :priormean => Float64.(rtrue),
+        :priorcv => fill(1.0, length(rtrue)),
+        :noisepriors => Float64.(rtrue[end-n_noiseparams+1:end]),
+        :nalleles => 1,
+        :onstates => onstates,
+        :decayrate => -1.0,
+        :splicetype => splicetype,
+        :probfn => probfn,
+        :method => method,
+        :elongationtime => 1.0,
+        :grid => nothing,
+        :traceinfo => (interval, interval, -1.0),
+        :trace_specs => [(unit=1, interval=interval, start=interval, t_end=-1.0, zeromedian=false)],
+        :dwell_specs => Any[],
+        :zeromedian => false,
+        :datacol => datacol,
+        :ejectnumber => 1,
+        :maxtime => 600.0,
+        :samplesteps => 10_000,
+        :warmupsteps => 0,
+        :sample_stride => 1,
+        :propcv => 0.01,
+        :ratetype => "median",
+        :writesamples => false,
+        :inference_method => :mh,
+        :parallel => nothing,
+        :device => :cpu,
+    )
+    kw = merge(defaults, Dict{Symbol,Any}(pairs(fit_kwargs)))
+    fits, stats, measures, data, model, options = fit(; kw...)
+    rfit = _rates_from_fit_result(fits, stats, model, fit_ratetype)
+    fitted_auc = burst_prediction_auc(known.traces, rfit, transitions, G, R, S, insertstep, interval;
+        n_noiseparams=n_noiseparams, onstates=onstates, probfn=probfn, splicetype=splicetype, method=method,
+        intensity_col=1, reporter_col=2)
+    return (
+        known_rates=known,
+        fitted_rates=merge(fitted_auc, (rates=Float64.(rfit), fit_ratetype=fit_ratetype)),
+        tracefiles=tracefiles,
+        simfolder=simfolder,
+        fit=(fits=fits, stats=stats, measures=measures, data=data, model=model, options=options),
+    )
+end
+
 
 """
     correlation_functions_file(file, transitions=..., G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
@@ -4208,6 +4385,99 @@ function write_correlation_csv(outfile::String, tau, ccON, ac1ON, ac2ON, mON1, m
     ))
 end
 
+function _correlation_default_pairs(observables, pairs)
+    if pairs !== nothing
+        pairs === :default && return [((:ON, 1), (:ON, 2)), ((:reporters, 1), (:reporters, 2))]
+        if pairs === :all
+            obs = observables === nothing ? [(:ON, 1), (:ON, 2), (:reporters, 1), (:reporters, 2)] : collect(observables)
+            out = Tuple[]
+            for i in 1:length(obs)-1
+                for j in i+1:length(obs)
+                    push!(out, (obs[i], obs[j]))
+                end
+            end
+            return out
+        end
+        return collect(pairs)
+    end
+    observables === nothing && return [((:ON, 1), (:ON, 2)), ((:reporters, 1), (:reporters, 2))]
+    return _correlation_default_pairs(observables, :all)
+end
+
+function write_correlation_general_csv(outfile::String, results)
+    pair_col = String[]
+    x_col = String[]
+    y_col = String[]
+    tau_col = Float64[]
+    cc_col = Float64[]
+    ac_x_col = Float64[]
+    ac_y_col = Float64[]
+    mean_x_col = Float64[]
+    mean_y_col = Float64[]
+    var_x_col = Float64[]
+    var_y_col = Float64[]
+    for result in results
+        length(result.tau) == length(result.cc) || error("correlation result $(result.x),$(result.y) has mismatched tau/cc lengths")
+        length(result.tau) == length(result.ac_x) || error("correlation result $(result.x),$(result.y) has mismatched tau/ac_x lengths")
+        length(result.tau) == length(result.ac_y) || error("correlation result $(result.x),$(result.y) has mismatched tau/ac_y lengths")
+        pair = result.x * "__" * result.y
+        for i in eachindex(result.tau)
+            push!(pair_col, pair)
+            push!(x_col, result.x)
+            push!(y_col, result.y)
+            push!(tau_col, Float64(result.tau[i]))
+            push!(cc_col, Float64(result.cc[i]))
+            push!(ac_x_col, Float64(result.ac_x[i]))
+            push!(ac_y_col, Float64(result.ac_y[i]))
+            push!(mean_x_col, Float64(result.mean_x))
+            push!(mean_y_col, Float64(result.mean_y))
+            push!(var_x_col, Float64(result.var_x))
+            push!(var_y_col, Float64(result.var_y))
+        end
+    end
+    CSV.write(outfile, DataFrame(
+        pair=pair_col,
+        x=x_col,
+        y=y_col,
+        tau=tau_col,
+        cc=cc_col,
+        ac_x=ac_x_col,
+        ac_y=ac_y_col,
+        mean_x=mean_x_col,
+        mean_y=mean_y_col,
+        var_x=var_x_col,
+        var_y=var_y_col,
+    ))
+end
+
+function _find_correlation_result(results, x::String, y::String)
+    for result in results
+        result.x == x && result.y == y && return result
+    end
+    return nothing
+end
+
+function _validate_general_correlations(results, ccON, ccReporters; atol::Float64=1e-8, rtol::Float64=1e-6)
+    checks = [
+        ("ON_unit1", "ON_unit2", ccON),
+        ("reporters_unit1", "reporters_unit2", ccReporters),
+    ]
+    for (x, y, reference) in checks
+        result = _find_correlation_result(results, x, y)
+        result === nothing && continue
+        if length(result.cc) != length(reference)
+            @warn "general correlation validation length mismatch" x y general=length(result.cc) legacy=length(reference)
+            continue
+        end
+        delta = maximum(abs.(result.cc .- reference))
+        scale = maximum(abs.(reference))
+        if !(delta <= atol + rtol * max(scale, 1.0))
+            @warn "general correlation validation mismatch" x y max_abs_delta=delta legacy_scale=scale
+        end
+    end
+    return nothing
+end
+
 """
     write_correlation_functions(folder, transitions=..., G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
 
@@ -4329,10 +4599,23 @@ function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3
     end
 end
 
-function write_correlation_functions_key(folder::String; lags=collect(0:1:200), ratetype::String="median", insertstep=nothing)
+function write_correlation_functions_key(
+    folder::String;
+    lags=collect(0:1:200),
+    ratetype::String="median",
+    insertstep=nothing,
+    observables=nothing,
+    pairs=nothing,
+    write_legacy::Bool=true,
+    write_general::Bool=true,
+    validate::Bool=true,
+    validation_atol::Float64=1e-8,
+    validation_rtol::Float64=1e-6,
+)
     n = 0
     nrates = 0
     skipped = String[]
+    pair_specs = _correlation_default_pairs(observables, pairs)
     for (root, _, files) in walkdir(folder)
         for f in files
             if startswith(f, "info_") && endswith(f, ".jld2")
@@ -4369,8 +4652,18 @@ function write_correlation_functions_key(folder::String; lags=collect(0:1:200), 
                     @info "computing correlations for $ratefile with insertstep=$(this_insertstep)"
                     tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
                         correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], lags; splicetype=splicetype)
-                    outname = joinpath(root, "crosscorrelation_" * suffix * "_insertstep" * _analysis_insertstep_token(this_insertstep) * ".csv")
-                    write_correlation_csv(outname, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+                    token = "_insertstep" * _analysis_insertstep_token(this_insertstep)
+                    if write_legacy
+                        outname = joinpath(root, "crosscorrelation_" * suffix * token * ".csv")
+                        write_correlation_csv(outname, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+                    end
+                    if write_general
+                        ctx = build_correlation_context(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], lags; splicetype=splicetype)
+                        results = [correlate_observables(ctx, p[1], p[2]) for p in pair_specs]
+                        validate && _validate_general_correlations(results, ccON, ccReporters; atol=validation_atol, rtol=validation_rtol)
+                        outname_general = joinpath(root, "crosscorrelation-general_" * suffix * token * ".csv")
+                        write_correlation_general_csv(outname_general, results)
+                    end
                 end
             elseif startswith(f, "rates_") && endswith(f, ".txt")
                 # Legacy folders may have rates without key info files; keep the old warning behavior.
