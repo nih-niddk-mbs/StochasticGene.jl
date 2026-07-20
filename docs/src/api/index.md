@@ -4,7 +4,7 @@
 
 ### Model Fitting
 - [`fit`](fit.md): Main function for fitting models to data (MH, NUTS, ADVI via `inference_method`)
-- [v1.10 CombinedData API](combined_data.md): Tuple/vector `datatype`, modality-keyed `datapath`, and migration notes for retired legacy input keywords
+- [v1.11 beta CombinedData API](combined_data.md): Tuple/vector `datatype`, modality-keyed `datapath`, and migration notes for retired legacy input keywords
 - `load_options`: Build `MHOptions` / `NUTSOptions` / `ADVIOptions` from a run-spec dict
 - `run_inference`: Unified entry point used by `fit(nchains, data, model, …)`
 - `run_mh`: Metropolis–Hastings MCMC sampling
@@ -325,14 +325,16 @@ A structure for parameter transformations during fitting.
 - `folder_path`: Construct folder paths
 - `folder_setup`: Set up directory structure
 - `datapdf`: Generate data PDFs
-- `make_dataframes`: Create DataFrames from results
-- `write_dataframes_only`: Write DataFrames to files
+- `make_dataframes`: Create result DataFrames from legacy RNA-style summary files; also supports keyword arguments
+- `make_dataframes_key`: Create `Summary_key.csv`-style DataFrames from key-based result folders
+- `write_dataframes_only`: Write RNA-style DataFrames to files
+- `write_dataframes_only_key`: Write key-based DataFrames to files
 
 ### Cluster and combined-rate batch workflows
 
 Narrative guide (when to use which function, file layout, order of operations): [Cluster and batch workflows](../cluster_batch_workflows.md).
 
-Relevant APIs include stage-native `make_fitscript`, `make_fitscripts_from_csv`, `build_julia_script_command`, `make_commandfile`, `make_commandfile_from_csv`, `make_fitscripts_and_commandfile_from_csv`, compatibility wrappers `make_swarmfile_from_csv`, `make_fitscripts_and_swarm_from_csv`, plus Biowulf-oriented `makeswarm`, `makeswarm_models`, `makeswarmfiles`, `makeswarmfiles_h3_latent`, `write_run_spec_preset`, `normalize_trace_specs_legacy_t_end!`, and combined-rate helpers `create_combined_file`, `create_combined_file_mult`, `combined_rates_key`, `read_combined_file_specs_csv`, `create_combined_files_driver`, `create_combined_files`, `create_combined_files_h3_latent`, `read_rates_table`, `write_rates_table`.
+Relevant APIs include stage-native `make_fitscript`, `make_fitscripts_from_csv`, `build_julia_script_command`, `make_commandfile`, `make_commandfile_from_csv`, `make_fitscripts_and_commandfile_from_csv`, compatibility wrappers `make_swarmfile_from_csv`, `make_fitscripts_and_swarm_from_csv`, plus Biowulf-oriented `makeswarm`, `makeswarm_genes`, `makeswarm_models`, `makeswarmfiles`, `makeswarmfiles_h3_latent`, `write_run_spec_preset`, `normalize_trace_specs_legacy_t_end!`, and combined-rate helpers `create_combined_file`, `create_combined_file_mult`, `combined_rates_key`, `read_combined_file_specs_csv`, `create_combined_files_driver`, `create_combined_files`, `create_combined_files_h3_latent`, `read_rates_table`, `write_rates_table`.
 
 ## Analysis Functions
 

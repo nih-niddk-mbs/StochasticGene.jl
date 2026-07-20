@@ -129,8 +129,34 @@ Legacy separate input-folder routing (`infolder`) is retired; use `datapath`, `r
 # Example
 ```julia
 makeswarm_genes(["MYC", "SOX9"]; cell="HBEC", datatype="rna", datapath="data/", resultfolder="out")
+makeswarm_genes(; cell="HCT116", datatype="rna", datapath="data/HCT116_testdata", datacond="MOCK")
 ```
 """
+function _genes_from_rna_datafolder(datapath::String, datacond; root::String=".")
+    isempty(strip(datapath)) && throw(ArgumentError("datapath must be set when genes are inferred from a folder"))
+    datadir = folder_path(datapath, root, "data")
+    isdir(datadir) || throw(ArgumentError("data folder not found: $(repr(datadir))"))
+    conds = datacond isa AbstractVector ? String.(datacond) : [String(datacond)]
+    genesets = Vector{String}[]
+    for cond in conds
+        push!(genesets, unique(String.(get_genes(cond, datadir))))
+    end
+    isempty(genesets) && return String[]
+    genes = genesets[1]
+    for g in genesets[2:end]
+        genes = intersect(genes, g)
+    end
+    sort!(unique!(genes))
+    return genes
+end
+
+function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", kwargs...)
+    genes = _genes_from_rna_datafolder(datapath, datacond; root=String(root))
+    isempty(genes) && throw(ArgumentError("no genes found in datapath=$(repr(datapath)) matching datacond=$(repr(datacond))"))
+    makeswarm_genes(genes; datapath=datapath, datacond=datacond, root=root, cell=cell, kwargs...)
+    return genes
+end
+
 function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=nothing, resultfolder::String="HCT116_test", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="")
@@ -385,7 +411,7 @@ function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacon
     if datacond_q isa AbstractString
         datacond_q = "$s$datacond_q$s"
     end
-    line = "@time fit($nchains, $s$datatype$s, $datapath, ARGS[1], $s$cell$s, $datacond_q, $s$resultfolder$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)"
+    line = "@time fit($nchains, $s$datatype$s, $datapath, ARGS[1], $s$cell$s, $datacond_q, $s$resultfolder$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs"
     extra = String[]
     if dttype !== nothing && !(dttype isa AbstractVector && isempty(dttype))
         push!(extra, "dttype=" * repr(dttype))

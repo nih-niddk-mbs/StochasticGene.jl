@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-**Version 1.10.1**
+**Version 1.11.0**
 
 [![Documents](https://img.shields.io/badge/Documents-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 
@@ -27,7 +27,7 @@ From the Julia REPL, enter package mode with `]` and run:
 pkg> add StochasticGene
 ```
 
-Julia **≥ 1.9.3** is required (see `Project.toml`). For development, clone the repo and `pkg> dev path/to/StochasticGene.jl`.
+Julia **≥ 1.11** is required for the v1.11 beta / 2.0-beta line (see `Project.toml`). For development, clone the repo and `pkg> dev path/to/StochasticGene.jl`.
 
 ---
 
@@ -35,7 +35,7 @@ Julia **≥ 1.9.3** is required (see `Project.toml`). For development, clone the
 
 - **Models:** Generalized telegraph / GRSM dynamics — arbitrary **G** (gene) states, **R** pre-RNA steps, **S** splice sites, reporter **insertstep**, multiple alleles, **coupled** transcribing units (e.g. enhancer–gene, hidden latent units).
 - **Inference:** `fit` selects **MH**, **NUTS**, or **ADVI** via `inference_method`; shared budgets (`samplesteps`, `warmupsteps`, …) map through `load_options` to method-specific structs. MH uses adaptive proposals and multi-chain `Distributed` pooling; cluster helpers emit compatible `fit(; …)` overrides (see **Cluster & batch workflows** in the manual).
-- **Data:** Stationary RNA histograms, ON/OFF and dwell-time histograms, intensity traces (`.trk` etc.), joint traces, grids — alone or in combination. In v1.10, new multimodal fits use `CombinedData` via tuple/vector `datatype` values such as `(:rna, :dwelltime)`.
+- **Data:** Stationary RNA histograms, ON/OFF and dwell-time histograms, intensity traces (`.trk` etc.), joint traces, grids — alone or in combination. In the v1.11 beta / 2.0-beta line, multimodal fits use `CombinedData` via tuple/vector `datatype` values such as `(:rna, :dwelltime)`.
 - **Batch & HPC:** Helpers in `biowulf.jl` write **swarm** files and **fit scripts** for NIH Biowulf or any scheduler; run specs can be saved as `info_<key>.toml` + `info_<key>.jld2` for reproducible `fit(; key=...)`.
 
 ---
@@ -75,7 +75,7 @@ fits, stats, measures, data, model, options = fit(
 
 Defaults in `fit()` point at bundled mock data if paths match the package examples.
 
-For multimodal data, prefer the v1.10 `CombinedData` API:
+For multimodal data, prefer the `CombinedData` API:
 
 ```julia
 fits, stats, measures, data, model, options = fit(
@@ -104,6 +104,7 @@ Batch helpers:
 
 - **`makeswarm(["key1", "key2"]; filedir=..., resultfolder=..., ...)`** — one swarm line and **`fitscript_<key>.jl`** per key (`fit(; key=..., ...)`).
 - **`makeswarm_genes(["GENE1", "GENE2"]; ...)`** — same model, one job per **gene** (genome-scale scRNA-style).
+- **`makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK", ...)`** — scan the RNA data folder for matching `GENE_COND.txt` files, then run the same gene-panel writer. This is the current replacement for the old v0.7-style `makeswarm(; datafolder=..., conds=...)` RNA sweep.
 - **`makeswarm_models`** / **`makeswarmfiles`** — model sweeps, coupled CSV workflows, combined-rate keys; see the [cluster & batch chapter](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html).
 
 **Coupled models:** fit each unit separately, merge rates with **`create_combined_file`** / **`create_combined_file_mult`**, then run the coupled fit warm-started from that table (detailed steps in the manual).
@@ -141,6 +142,45 @@ Rates are in **inverse minutes**; halflife files use **hours** where applicable.
 ## NIH Biowulf
 
 Load Julia (`module load julialang`), generate swarm files from the REPL with **`makeswarm`** / **`makeswarm_genes`**, then submit with **`swarm`** (allocate time ≥ `maxtime`, enough `-t` / memory for `nchains`). If **`method`** is passed through swarm-generating functions, it must be a **String** in the generated script (e.g. `"Tsit5()"`) so the file parses correctly — see docstrings in `biowulf.jl`.
+
+Example RNA folder sweep:
+
+```julia
+using StochasticGene
+
+makeswarm_genes(
+    datapath="data/HCT116_testdata",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
+    filedir="run-HCT116-testdata-rna",
+    cell="HCT116",
+    datatype="rna",
+    G=2,
+    R=0,
+    S=0,
+    insertstep=1,
+    transitions=([1, 2], [2, 1]),
+    nchains=8,
+    project="/home/carsonc/github/StochasticGene.jl/",
+)
+```
+
+After the jobs finish, assemble result tables:
+
+```julia
+write_dataframes_only(
+    "results/HCT116_test",
+    "data/HCT116_testdata";
+    datatype="rna",
+)
+```
+
+For key-based folders containing `rates_<key>.txt`, `param-stats_<key>.txt`,
+and `info_<key>.jld2`, write one key summary with:
+
+```julia
+write_dataframes_only_key("results/HCT116_test"; datatype="rna")
+```
 
 ---
 

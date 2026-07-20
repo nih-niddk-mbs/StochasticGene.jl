@@ -5155,11 +5155,18 @@ function get_propcv(propcv, results_dir, label, gene, G, R, S, insertstep, nalle
             try
                 cv = jldopen(proposal_cov_file, "r") do f
                     # Validate metadata matches current parameters
-                    if f["metadata/fittedparam"] != fittedparam ||
+                    r_saved = haskey(f, "metadata/R") ? f["metadata/R"] : 0
+                    s_saved = haskey(f, "metadata/S") ? f["metadata/S"] : 0
+                    insert_saved = haskey(f, "metadata/insertstep") ? f["metadata/insertstep"] : 1
+                    if !haskey(f, "metadata/fittedparam") ||
+                       !haskey(f, "metadata/G") ||
+                       !haskey(f, "metadata/Gtransitions") ||
+                       !haskey(f, "metadata/nalleles") ||
+                       f["metadata/fittedparam"] != fittedparam ||
                        f["metadata/G"] != G ||
-                       f["metadata/R"] != R ||
-                       f["metadata/S"] != S ||
-                       f["metadata/insertstep"] != insertstep ||
+                       r_saved != R ||
+                       s_saved != S ||
+                       insert_saved != insertstep ||
                        f["metadata/Gtransitions"] != Gtransitions ||
                        f["metadata/nalleles"] != nalleles
                         println("Proposal covariance metadata mismatch for ", basename(proposal_cov_file), "; trying next candidate.")

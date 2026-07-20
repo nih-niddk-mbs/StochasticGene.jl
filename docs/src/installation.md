@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Julia version 1.9.3 or higher
+- Julia version 1.11 or higher
 - Git (for development installation)
 
 ## Basic Installation
@@ -57,7 +57,7 @@ If no errors occur, the package is installed correctly.
 
 If you encounter any issues during installation:
 
-1. Ensure you have the correct Julia version (1.9.3 or higher)
+1. Ensure you have the correct Julia version (1.11 or higher)
 2. Try updating your package registry:
    ```julia
    using Pkg
@@ -120,5 +120,5 @@ Then start Julia and re-add StochasticGene as above.
 
 ## Requirements
 
-- Julia 1.9.3 or higher
+- Julia 1.11 or higher
 - Required packages will be automatically installed during installation

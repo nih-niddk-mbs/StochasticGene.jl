@@ -1,6 +1,6 @@
-# v1.10 CombinedData API
+# v1.11 Beta CombinedData API
 
-StochasticGene v1.10 introduces a new `CombinedData` path for multimodal fits. The goal is to let each elementary modality keep its own loader and likelihood while `fit` combines the scalar log-likelihoods and WAIC pointwise predictions in a stable order.
+StochasticGene v1.10 introduced the `CombinedData` path for multimodal fits. The v1.11 beta / 2.0-beta line continues that migration: each elementary modality keeps its own loader and likelihood while `fit` combines the scalar log-likelihoods and WAIC pointwise predictions in a stable order.
 
 This API is intended to replace new uses of legacy combined datatypes such as `"tracerna"` and `"rnadwelltime"` over time. Those legacy datatypes are still supported for compatibility, but new multimodal workflows should prefer tuple or vector `datatype` values.
 
@@ -52,7 +52,7 @@ The combined API currently recognizes these modality symbols:
 - `:dwelltime`
 - `:grid` is reserved for future work
 
-The v1.10 likelihood stack has focused support for the combinations already used in the refactor:
+The current likelihood stack has focused support for the combinations already used in the refactor:
 
 - `(:rna, :trace)` for the split equivalent of legacy `"tracerna"`
 - `(:rna, :dwelltime)` for the split equivalent of legacy `"rnadwelltime"`
@@ -77,7 +77,7 @@ datapath = (
 
 Each entry is resolved recursively under `root/data` when needed, so the example above resolves to paths under `joinpath(root, "data", ...)`.
 
-For transition workflows, v1.10 also accepts the legacy positional layout for the two common combinations:
+For transition workflows, the stack also accepts the legacy positional layout for the two common combinations:
 
 ```julia
 # Equivalent to the NamedTuple form for (:rna, :dwelltime)

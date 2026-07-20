@@ -26,7 +26,59 @@ Use these in new code:
 | Write scripts + command file from CSV | [`make_fitscripts_and_commandfile_from_csv`][make_fitscripts_and_commandfile_from_csv] |
 | Biowulf naming wrappers | [`make_swarmfile_from_csv`][make_swarmfile_from_csv], [`make_fitscripts_and_swarm_from_csv`][make_fitscripts_and_swarm_from_csv] |
 
-**Gene panels:** [`write_fitfile_genes`][write_fitfile_genes] and [`makeswarm_genes`][makeswarm_genes] produce **one** shared script with `gene=ARGS[1]` and one swarm line per gene (still the recommended pattern for many genes, one model).
+**Gene panels:** [`write_fitfile_genes`][write_fitfile_genes] and [`makeswarm_genes`][makeswarm_genes] produce **one** shared script with `gene=ARGS[1]` and one swarm line per gene (still the recommended pattern for many genes, one model). Pass an explicit gene vector, or omit the vector and let `makeswarm_genes(; datapath=..., datacond=...)` scan an RNA data folder for matching `GENE_COND.txt` files.
+
+```julia
+using StochasticGene
+
+# v0.7-style RNA folder sweep, current API
+makeswarm_genes(
+    datapath="data/HCT116_testdata",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
+    filedir="run-HCT116-testdata-rna",
+    cell="HCT116",
+    datatype="rna",
+    G=2,
+    R=0,
+    S=0,
+    insertstep=1,
+    transitions=([1, 2], [2, 1]),
+    nchains=8,
+    project="/home/carsonc/github/StochasticGene.jl/",
+)
+```
+
+In v0.7.8, `makeswarm(; datafolder=..., conds=...)` inferred genes from the data folder. Current `makeswarm(["key1", ...])` is key-based; the folder-scanning RNA behavior now lives in `makeswarm_genes(; datapath=..., datacond=...)`.
+
+---
+
+## RNA result tables after a batch run
+
+After an RNA histogram/count swarm finishes, convert raw fit outputs into CSV
+tables with the dataframe helpers:
+
+```julia
+write_dataframes_only(
+    "results/HCT116_test",
+    "data/HCT116_testdata";
+    datatype = "rna",
+)
+```
+
+This calls `make_dataframes`, assembles raw `rates_*.txt`, `measures_*.txt`,
+and `param-stats_*.txt` files when needed, and writes summary CSVs such as
+`Summary_rna-HCT116_2.csv`. The summary includes fitted rates, parameter
+statistics, model/condition metadata, and observed RNA moments.
+
+For key-based result folders, use the key-specific helper:
+
+```julia
+write_dataframes_only_key("results/HCT116_test"; datatype = "rna")
+```
+
+This writes `Summary_key.csv`, preserving the original fit key in the `Key`
+column and reading `info_<key>.jld2` metadata when available.
 
 ---
 

@@ -385,41 +385,85 @@ datapdf(rna_data, "data_summary.pdf")
 ### make_dataframes
 
 ```julia
-make_dataframes(results, model::AbstractModel) -> DataFrame
+make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
+make_dataframes(; resultfolder, datapath, assemble=true, multicond=false, datatype="rna")
 ```
 
-Create DataFrames from analysis results.
+Create summary DataFrames from fit results written under a result folder.
+When `assemble=true`, raw `rates_*.txt`, `measures_*.txt`, and `param-stats_*.txt`
+files are first assembled into summary CSVs. The returned value is a nested vector of
+`(filename, DataFrame)` pairs; use `write_dataframes_only` to write those summaries.
 
 **Arguments:**
-- `results`: Analysis results
-- `model`: Model structure
+- `resultfolder`: Folder containing fit output files, for example `"results/HCT116_test"`
+- `datapath`: Folder containing input RNA data, for example `"data/HCT116_testdata"`
+- `assemble`: Whether to assemble raw output files into summary CSVs first
+- `multicond`: Whether condition names encode multiple conditions
+- `datatype`: `"rna"` or `"rnacount"` for observed moment calculation
 
 **Returns:**
-- DataFrame with results
+- Nested vector of `(filename, DataFrame)` pairs
 
 **Example:**
 ```julia
-# Convert results to DataFrame
-df = make_dataframes(fit_results, model)
+dfs = make_dataframes(
+    resultfolder = "results/HCT116_test",
+    datapath = "data/HCT116_testdata",
+    datatype = "rna",
+)
+```
+
+### make_dataframes_key
+
+```julia
+make_dataframes_key(resultfolder::String; datapath=nothing, assemble=true, datatype="rna")
+```
+
+Create a key-based summary dataframe from `rates_<key>.txt` and
+`param-stats_<key>.txt` outputs. The output preserves the fit key in a `Key`
+column and uses `info_<key>.jld2` metadata, when present, to add `Gene`,
+`Condition`, `Model`, `Nalleles`, and `DataPath`. For RNA data, observed
+`Expression`, `Variance`, and `ThirdMoment` are added when the data file can be
+resolved.
+
+**Example:**
+```julia
+dfs = make_dataframes_key("results/HCT116_test"; datatype = "rna")
 ```
 
 ### write_dataframes_only
 
 ```julia
-write_dataframes_only(dataframes::Vector{DataFrame}, folder::String, label::String) -> Nothing
+write_dataframes_only(resultfolder::String, datapath::String; assemble=true, multicond=false, datatype="rna")
 ```
 
-Write DataFrames to CSV files.
+Write the dataframes returned by `make_dataframes` to CSV files in `resultfolder`.
 
 **Arguments:**
-- `dataframes`: Vector of DataFrames
-- `folder`: Output folder
-- `label`: File label
+- `resultfolder`: Folder containing fit output files
+- `datapath`: Folder containing input RNA data
+- `assemble`, `multicond`, `datatype`: Passed through to `make_dataframes`
 
 **Example:**
 ```julia
-# Write results to CSV
-write_dataframes_only([df1, df2], "results", "analysis")
+write_dataframes_only(
+    "results/HCT116_test",
+    "data/HCT116_testdata";
+    datatype = "rna",
+)
+```
+
+### write_dataframes_only_key
+
+```julia
+write_dataframes_only_key(resultfolder::String; datapath=nothing, assemble=true, datatype="rna")
+```
+
+Write `Summary_key.csv` for key-based result folders.
+
+**Example:**
+```julia
+write_dataframes_only_key("results/HCT116_test"; datatype = "rna")
 ```
 
 ## Advanced Utility Functions

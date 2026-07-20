@@ -1,6 +1,6 @@
 # RNA Dwell Time Analysis
 
-This example demonstrates how to analyze RNA dwell-time data together with RNA histograms. For new code, use the v1.10 `CombinedData` API with `datatype = (:rna, :dwelltime)`. The older `"rnadwelltime"` datatype remains available for legacy scripts.
+This example demonstrates how to analyze RNA dwell-time data together with RNA histograms. For new code, use the `CombinedData` API with `datatype = (:rna, :dwelltime)`. The older `"rnadwelltime"` datatype remains available for legacy scripts.
 
 ## Setup
 

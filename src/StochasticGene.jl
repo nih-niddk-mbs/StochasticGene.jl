@@ -6,7 +6,7 @@
 
 A Julia package for stochastic modeling of gene transcription and Bayesian inference.
 
-**Version:** 1.10.1
+**Version:** 1.11.0
 
 # Overview
 StochasticGene.jl is a comprehensive Julia package for simulating and fitting stochastic models of gene transcription. It provides tools for:
@@ -112,7 +112,7 @@ Batch workflows (swarms, combined starts, key-based runs) are documented in the 
 
 # Documentation
 
-Hosted manual: [stable](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) · [dev](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/). Stable docs track the released version (v1.10.1).
+Hosted manual: [stable](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) · [dev](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/). Stable docs track the released version (v1.11.0).
 """
 module StochasticGene
 # __precompile__(true)
@@ -203,6 +203,7 @@ export
     lsoda,
     make_array,
     make_dataframes,
+    make_dataframes_key,
     make_mat,
     makeswarm,
     makeswarm_models,
@@ -421,6 +422,7 @@ export
     compute_correlation_functions,
     write_dataframes,
     write_dataframes_only,
+    write_dataframes_only_key,
     write_histograms,
     write_ONOFFhistograms,
     write_ONOFFhistograms_key,

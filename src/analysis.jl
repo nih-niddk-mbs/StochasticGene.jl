@@ -68,6 +68,124 @@ function make_dataframes(resultfolder::String, datapath::String, assemble=true, 
     return df
 end
 
+function make_dataframes(;
+    resultfolder::String,
+    datapath::String,
+    assemble::Bool=true,
+    multicond::Bool=false,
+    datatype::String="rna",
+)
+    make_dataframes(resultfolder, datapath, assemble, multicond, datatype)
+end
+
+function _key_run_spec(resultfolder::String, key)
+    infofile = joinpath(resultfolder, "info_" * string(key) * ".jld2")
+    isfile(infofile) || return Dict{Symbol,Any}()
+    try
+        return read_run_spec(infofile)
+    catch e
+        @warn "Could not read run spec for key dataframe row" key exception = (e, catch_backtrace())
+        return Dict{Symbol,Any}()
+    end
+end
+
+_key_scalar(x) = x
+_key_scalar(x::AbstractVector) = isempty(x) ? missing : x[1]
+_key_scalar(x::Tuple) = isempty(x) ? missing : x[1]
+_key_string_or_missing(x) = x === nothing || x === missing ? missing : string(_key_scalar(x))
+
+function _resolve_key_datapath(datapath, spec)
+    datapath !== nothing && return string(datapath)
+    dp = get(spec, :datapath, nothing)
+    dp === nothing && return missing
+    dp = string(_key_scalar(dp))
+    isabspath(dp) && return dp
+    root = string(get(spec, :root, "."))
+    candidates = (joinpath(root, dp), joinpath(root, "data", dp), dp)
+    for candidate in candidates
+        isdir(candidate) && return candidate
+    end
+    return first(candidates)
+end
+
+function _key_gene_fallback(key)
+    parts = split(string(key), "_")
+    length(parts) >= 4 && return parts[end-2]
+    return missing
+end
+
+function _annotate_key_dataframe!(df::DataFrame, resultfolder::String, datapath)
+    keys = string.(df.Key)
+    specs = [_key_run_spec(resultfolder, key) for key in keys]
+    genes = [_key_string_or_missing(get(specs[i], :gene, _key_gene_fallback(keys[i]))) for i in eachindex(keys)]
+    conds = [_key_string_or_missing(get(specs[i], :datacond, missing)) for i in eachindex(keys)]
+    models = [get(specs[i], :G, missing) for i in eachindex(keys)]
+    nalleles = [get(specs[i], :nalleles, missing) for i in eachindex(keys)]
+    datapaths = [_resolve_key_datapath(datapath, specs[i]) for i in eachindex(keys)]
+    insertcols!(df, 1, :Gene => genes)
+    insertcols!(df, :Condition => conds)
+    insertcols!(df, :Model => models)
+    insertcols!(df, :Nalleles => nalleles)
+    insertcols!(df, :DataPath => datapaths)
+    return df
+end
+
+function _add_moments_key!(df::DataFrame, datatype::String)
+    datatype in ("rna", "rnacount") || return df
+    all(name -> name in names(df), ("Gene", "Condition", "DataPath")) || return df
+    m = Vector{Union{Missing,Float64}}(missing, nrow(df))
+    v = similar(m)
+    t = similar(m)
+    for i in 1:nrow(df)
+        if ismissing(df[i, :Gene]) || ismissing(df[i, :Condition]) || ismissing(df[i, :DataPath])
+            continue
+        end
+        try
+            if datatype == "rna"
+                _, h = read_rna(df[i, :Gene], df[i, :Condition], df[i, :DataPath])
+                m[i] = mean_histogram(h)
+                v[i] = var_histogram(h)
+                t[i] = moment_histogram(h, 3)
+            elseif datatype == "rnacount"
+                c, _, _ = read_rnacount(df[i, :Gene], df[i, :Condition], df[i, :DataPath])
+                m[i] = mean(c)
+                v[i] = var(c)
+                t[i] = moment(c, 3)
+            end
+        catch e
+            @warn "Could not add observed moments for key dataframe row" key = df[i, :Key] gene = df[i, :Gene] condition = df[i, :Condition] datapath = df[i, :DataPath] exception = (e, catch_backtrace())
+        end
+    end
+    insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
+    return df
+end
+
+"""
+    make_dataframes_key(resultfolder::String; datapath=nothing, assemble=true, datatype="rna")
+
+Create a key-based result dataframe from `rates_<key>.txt` and `param-stats_<key>.txt`
+outputs. The key column is preserved as `Key`; run-spec metadata supplies `Gene`,
+`Condition`, `Model`, `Nalleles`, and `DataPath` when `info_<key>.jld2` exists.
+"""
+function make_dataframes_key(resultfolder::String; datapath=nothing, assemble::Bool=true, datatype::String="rna")
+    if assemble
+        assemble_all_key(resultfolder)
+    end
+    ratefile = joinpath(resultfolder, "rates_key.csv")
+    isfile(ratefile) || throw(ArgumentError("key rates summary not found: $(repr(ratefile))"))
+    df = read_dataframe(ratefile)
+    rename!(df, :Model => :Key)
+    statfile = joinpath(resultfolder, "stats_key.csv")
+    if isfile(statfile)
+        dfstats = read_dataframe(statfile)
+        rename!(dfstats, :Model => :Key)
+        df = leftjoin(df, dfstats, on=:Key, makeunique=true)
+    end
+    _annotate_key_dataframe!(df, resultfolder, datapath)
+    _add_moments_key!(df, datatype)
+    return [("Summary_key.csv", df)]
+end
+
 """
     statfile_from_ratefile(ratefile)
 
@@ -91,7 +209,13 @@ statfile = statfile_from_ratefile(ratefile)
 # Returns: "stats_gene_condition_3401_2.txt"
 ```
 """
-statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
+function statfile_from_ratefile(ratefile)
+    statsfile = replace(ratefile, "rates_" => "stats_")
+    isfile(statsfile) && return statsfile
+    param_statsfile = replace(ratefile, "rates_" => "param-stats_")
+    isfile(param_statsfile) && return param_statsfile
+    return statsfile
+end
 
 """
     make_dataframe(ratefile::String, datapath::String, multicond::Bool, datatype::String)

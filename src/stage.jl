@@ -797,20 +797,24 @@ function _stage_seed_reference_data(root::AbstractString=".")
     for d in (alleles, halflives, testdata)
         !ispath(d) && mkpath(d)
     end
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/CH12_alleles.csv", joinpath(alleles, "CH12_alleles.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/HCT116_alleles.csv", joinpath(alleles, "HCT116_alleles.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/ESC_halflife.csv", joinpath(halflives, "ESC_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/CH12_halflife.csv", joinpath(halflives, "CH12_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/HCT116_halflife.csv", joinpath(halflives, "HCT116_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/OcaB_halflife.csv", joinpath(halflives, "OcaB_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "aB_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "CAST_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "FIBS_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "MAST_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "NK_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "TEC_halflife.csv"))
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv", joinpath(halflives, "SKIN_halflife.csv"))
     repo_root = normpath(joinpath(@__DIR__, ".."))
+    function seed_file(rel::AbstractString, dest::AbstractString; url_rel::AbstractString=rel)
+        local_src = joinpath(repo_root, "data", rel)
+        if isfile(local_src)
+            cp(local_src, dest; force=true)
+        else
+            Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/" * url_rel, dest)
+        end
+        return dest
+    end
+    seed_file("alleles/CH12_alleles.csv", joinpath(alleles, "CH12_alleles.csv"))
+    seed_file("alleles/HCT116_alleles.csv", joinpath(alleles, "HCT116_alleles.csv"))
+    for fn in ("ESC_halflife.csv", "CH12_halflife.csv", "HCT116_halflife.csv", "OcaB_halflife.csv", "aB_halflife.csv")
+        seed_file("halflives/" * fn, joinpath(halflives, fn))
+    end
+    for fn in ("CAST_halflife.csv", "FIBS_halflife.csv", "MAST_halflife.csv", "NK_halflife.csv", "TEC_halflife.csv", "SKIN_halflife.csv")
+        seed_file("halflives/" * fn, joinpath(halflives, fn); url_rel="halflives/aB_halflife.csv")
+    end
     src_testdata = ""
     for c in (joinpath(repo_root, "data", "HCT116_testdata"), joinpath(repo_root, "test", "data", "HCT116_testdata"))
         if isdir(c)

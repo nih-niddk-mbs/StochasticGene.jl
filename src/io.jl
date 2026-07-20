@@ -415,13 +415,20 @@ Write dataframes to CSV files without selecting winners.
 """
 function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
     dfs = make_dataframes(resultfolder, datapath, assemble, multicond, datatype)
-    for df in dfs
-        for dff in dfs
-            for dfff in dff
-                csvfile = joinpath(resultfolder, dfff[1])
-                CSV.write(csvfile, dfff[2])
-            end
+    for dff in dfs
+        for dfff in dff
+            csvfile = joinpath(resultfolder, dfff[1])
+            CSV.write(csvfile, dfff[2])
         end
+    end
+    nothing
+end
+
+function write_dataframes_only_key(resultfolder::String; datapath=nothing, assemble::Bool=true, datatype::String="rna")
+    dfs = make_dataframes_key(resultfolder; datapath=datapath, assemble=assemble, datatype=datatype)
+    for dff in dfs
+        csvfile = joinpath(resultfolder, dff[1])
+        CSV.write(csvfile, dff[2])
     end
     nothing
 end
@@ -829,7 +836,13 @@ Extract key from a filename.
 - Uses fields() to parse filename structure
 - Returns the key field from the parsed structure
 """
-get_key(file::String) = fields(file)[2]
+function get_key(file::String)
+    stem, _ = get_suffix(file)
+    for prefix in ("param-stats_", "measures_", "rates_", "info_")
+        startswith(stem, prefix) && return stem[length(prefix)+1:end]
+    end
+    return fields(file)[2]
+end
 
 """
     get_gene(file::String)
@@ -1487,7 +1500,10 @@ function key_resultfiles(folder::String, resultname::String)
     files = get_resultfiles(folder, resultname)
     filter(files) do file
         stem, suffix = get_suffix(file)
-        suffix == "txt" && length(split(stem, "_")) == 2
+        suffix == "txt" || return false
+        length(split(stem, "_")) == 2 && return true
+        key = get_key(file)
+        isfile(joinpath(folder, "info_" * key * ".jld2")) || isfile(joinpath(folder, "info_" * key * ".toml"))
     end
 end
 
@@ -3587,6 +3603,27 @@ Only saves if covariance is valid (positive definite).
 # Returns
 - `true` if successful, `false` otherwise
 """
+_proposal_metadata_R(model) = hasproperty(model, :R) ? getproperty(model, :R) : 0
+_proposal_metadata_S(model) = hasproperty(model, :S) ? getproperty(model, :S) : 0
+_proposal_metadata_insertstep(model) = hasproperty(model, :insertstep) ? getproperty(model, :insertstep) : 1
+
+function _proposal_metadata_matches(f, model)
+    haskey(f, "metadata/fittedparam") || return false
+    haskey(f, "metadata/G") || return false
+    haskey(f, "metadata/Gtransitions") || return false
+    haskey(f, "metadata/nalleles") || return false
+    r_saved = haskey(f, "metadata/R") ? f["metadata/R"] : 0
+    s_saved = haskey(f, "metadata/S") ? f["metadata/S"] : 0
+    insert_saved = haskey(f, "metadata/insertstep") ? f["metadata/insertstep"] : 1
+    return f["metadata/fittedparam"] == model.fittedparam &&
+           f["metadata/G"] == model.G &&
+           r_saved == _proposal_metadata_R(model) &&
+           s_saved == _proposal_metadata_S(model) &&
+           insert_saved == _proposal_metadata_insertstep(model) &&
+           f["metadata/Gtransitions"] == model.Gtransitions &&
+           f["metadata/nalleles"] == model.nalleles
+end
+
 function save_proposal_covariance(file, covparam, model, label="")
     if !isposdef(covparam)
         @warn "Proposal covariance not positive definite. Not saving."
@@ -3598,9 +3635,9 @@ function save_proposal_covariance(file, covparam, model, label="")
             f["covparam"] = covparam
             f["metadata/fittedparam"] = model.fittedparam
             f["metadata/G"] = model.G
-            f["metadata/R"] = model.R
-            f["metadata/S"] = model.S
-            f["metadata/insertstep"] = model.insertstep
+            f["metadata/R"] = _proposal_metadata_R(model)
+            f["metadata/S"] = _proposal_metadata_S(model)
+            f["metadata/insertstep"] = _proposal_metadata_insertstep(model)
             f["metadata/Gtransitions"] = model.Gtransitions
             f["metadata/nalleles"] = model.nalleles
             f["metadata/timestamp"] = now()
@@ -3641,13 +3678,7 @@ function load_proposal_covariance(file, model)
     try
         jldopen(file, "r") do f
             # Validate metadata matches current model
-            if f["metadata/fittedparam"] != model.fittedparam ||
-               f["metadata/G"] != model.G ||
-               f["metadata/R"] != model.R ||
-               f["metadata/S"] != model.S ||
-               f["metadata/insertstep"] != model.insertstep ||
-               f["metadata/Gtransitions"] != model.Gtransitions ||
-               f["metadata/nalleles"] != model.nalleles
+            if !_proposal_metadata_matches(f, model)
                 @info "Saved proposal covariance has different model parameters. Starting fresh."
                 return nothing
             end

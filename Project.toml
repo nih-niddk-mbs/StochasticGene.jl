@@ -1,7 +1,7 @@
 name = "StochasticGene"
 uuid = "a2598c62-e771-4eb8-9887-959a94ab00ef"
 authors = ["Carson C Chow <ccc1685@users.noreply.github.com> and contributors"]
-version = "1.10.1"
+version = "1.11.0"
 
 [deps]
 AdvancedHMC = "0bf59076-c3b1-5ca4-86bd-e02cd72cde3d"
@@ -73,7 +73,7 @@ StatsBase = "0.34.5"
 TOML = "1.0"
 Test = "1.11.0"
 Zygote = "0.6, 0.7"
-julia = "1.9.3"
+julia = "1.11"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

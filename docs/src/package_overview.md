@@ -50,7 +50,7 @@ Common values for [fit](api/fit.md):
 | `"tracejoint"` | Coupled / joint traces between units |
 | `"tracegrid"` | Grid-based trace likelihood |
 
-For v1.10 and later, `datatype` may also be a tuple or vector of elementary modalities to request `CombinedData`:
+For current multimodal workflows, `datatype` may also be a tuple or vector of elementary modalities to request `CombinedData`:
 
 ```julia
 datatype = (:rna, :dwelltime)

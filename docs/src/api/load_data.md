@@ -14,7 +14,7 @@ load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna,
 
 ### Required Arguments
 
-- `datatype`: Type of data to load. Use a string or symbol for a single datatype; use a tuple/vector such as `(:rna, :dwelltime)` for v1.10 `CombinedData`.
+- `datatype`: Type of data to load. Use a string or symbol for a single datatype; use a tuple/vector such as `(:rna, :dwelltime)` for `CombinedData`.
 - `dttype::Vector`: Dwell time types (for dwell time data)
 - `datapath`: Path to data file(s). For combined data, prefer a `NamedTuple` keyed by modality, e.g. `(rna = "smFISH", dwelltime = ["ON.csv", "OFF.csv"])`.
 - `label::String`: Label for the dataset
@@ -33,7 +33,7 @@ load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna,
 
 ## Supported Data Types
 
-## v1.10 CombinedData Loading
+## CombinedData Loading
 
 New multimodal workflows should prefer tuple/vector `datatype` values. The modalities are sorted into a canonical order and loaded as independent elementary legs inside `CombinedData`.
 
@@ -68,7 +68,7 @@ data = load_data(
 )
 ```
 
-Supported v1.10 modality names are `:rna`, `:trace`, and `:dwelltime`; `:grid` is reserved. The most developed combinations are `(:rna, :trace)` and `(:rna, :dwelltime)`. Legacy strings such as `"tracerna"` and `"rnadwelltime"` still load their legacy combined structs for compatibility.
+Supported modality names are `:rna`, `:trace`, and `:dwelltime`; `:grid` is reserved. The most developed combinations are `(:rna, :trace)` and `(:rna, :dwelltime)`. Legacy strings such as `"tracerna"` and `"rnadwelltime"` still load their legacy combined structs for compatibility.
 
 ### RNA Data Types
 
@@ -350,7 +350,7 @@ println("Total counts: ", sum(rna_data.histRNA))
 ### Multi-Modal Data Loading
 
 ```julia
-# Load combined RNA and trace data with the v1.10 split representation
+# Load combined RNA and trace data with the split representation
 combined_data = load_data(
     (:rna, :trace),
     String[],

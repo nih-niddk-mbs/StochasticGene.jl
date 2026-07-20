@@ -24,7 +24,64 @@ rna_setup("scRNA")    # Sets up folders in ./scRNA
 cd("scRNA")           # Move into the project directory (if you want to work there)
 ```
 
-This will create the necessary folders and download reference CSV files for alleles and halflives. It does not generate arbitrary mock data, but provides the standard structure and example reference files needed to get started.
+This creates the necessary folders and seeds bundled reference CSV files for alleles, halflives, and the small `HCT116_testdata` mock RNA histogram set. If a reference file is not bundled in the local checkout, setup falls back to downloading it.
+
+To generate Biowulf scripts for the mock RNA histogram data in the folder created by `rna_setup`, scan the data folder with `makeswarm_genes`:
+
+```julia
+using StochasticGene
+
+root = "scRNA"
+rna_setup(root)
+
+makeswarm_genes(
+    root=root,
+    datapath="HCT116_testdata",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
+    filedir=joinpath(root, "run-HCT116-testdata-rna"),
+    cell="HCT116",
+    datatype="rna",
+    G=2,
+    R=0,
+    S=0,
+    insertstep=1,
+    transitions=([1, 2], [2, 1]),
+    nchains=8,
+)
+```
+
+This writes one shared fitscript with `gene=ARGS[1]` and one swarm line per gene found in `root/data/HCT116_testdata`.
+
+After the jobs finish, assemble the fit outputs into analysis CSVs:
+
+```julia
+make_dataframes(
+    resultfolder = joinpath(root, "results", "HCT116_test"),
+    datapath = joinpath(root, "data", "HCT116_testdata"),
+    datatype = "rna",
+)
+
+write_dataframes_only(
+    joinpath(root, "results", "HCT116_test"),
+    joinpath(root, "data", "HCT116_testdata");
+    datatype = "rna",
+)
+```
+
+This creates files such as `Summary_rna-HCT116_2.csv`, with fitted rates,
+parameter summaries, condition/model metadata, and observed RNA moments.
+
+For key-based result folders with `rates_<key>.txt`, `param-stats_<key>.txt`,
+and `info_<key>.jld2`, use:
+
+```julia
+make_dataframes_key(joinpath(root, "results", "HCT116_test"); datatype = "rna")
+write_dataframes_only_key(joinpath(root, "results", "HCT116_test"); datatype = "rna")
+```
+
+The key version writes `Summary_key.csv` and keeps the original fit key in a
+`Key` column.
 
 ## Data Preparation
 
