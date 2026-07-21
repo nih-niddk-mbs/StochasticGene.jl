@@ -38,7 +38,7 @@ makedocs(
             "Advanced Examples" => [
                 "Parallel Processing" => "examples/parallel_processing.md",
                 "Hierarchical Trace Analysis" => "examples/hierarchical_trace.md",
-                "Recursive Parameter-Sharing Trace Fits" => "examples/recursive_parameter_sharing.md",
+                "Shared Parameter Trace Fits" => "examples/shared_parameter_fits.md",
                 "Joint Trace Analysis" => "examples/joint_trace.md",
                 "Coupled Model Analysis" => "examples/coupled_models.md",
             ],
@@ -47,7 +47,7 @@ makedocs(
             "API Reference" => "api/index.md",
             "Core Functions" => [
                 "Model Fitting" => "api/fit.md",
-                "v1.10 CombinedData API" => "api/combined_data.md",
+                "v1.11 Beta CombinedData API" => "api/combined_data.md",
                 "Model Simulation" => "api/simulator.md",
                 "Data Loading" => "api/load_data.md",
             ],
