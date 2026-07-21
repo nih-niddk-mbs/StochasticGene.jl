@@ -225,6 +225,9 @@ The script calls `fit(...)` with `ARGS[1]` as the gene.
 # Arguments
 - `genes`: vector of gene names
 - `batchsize=1000`: number of jobs per swarm file when `genes` is large
+- `filter_metadata=true`: for folder-scanned RNA runs, use [`checkgenes`](@ref) so genes are filtered by
+  available halflife and allele metadata. Set `false` to scan filenames only.
+- `thresholdlow=0.0`, `thresholdhigh=1e8`: halflife bounds passed to [`checkgenes`](@ref)
 - `filedir="."`: directory to write swarm and script files
 - Plus the same fit/model kwargs (datatype, `datapath`, cell, `datacond`, optional legacy `dttype` / `traceinfo`,
   `trace_specs`, `dwell_specs`, transitions, G, R, S, insertstep, etc.) and swarm options (nchains, nthreads, swarmfile, juliafile, project, src).
@@ -260,8 +263,12 @@ function _genes_from_rna_datafolder(datapath::String, datacond; root::String="."
     return genes
 end
 
-function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", kwargs...)
-    genes = _genes_from_rna_datafolder(datapath, datacond; root=String(root))
+function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", filter_metadata::Bool=true, thresholdlow::Float64=0.0, thresholdhigh::Float64=1e8, kwargs...)
+    genes = if filter_metadata
+        checkgenes(String(root), datacond isa AbstractVector ? String.(datacond) : String(datacond), datapath, cell, thresholdlow, thresholdhigh)
+    else
+        _genes_from_rna_datafolder(datapath, datacond; root=String(root))
+    end
     isempty(genes) && throw(ArgumentError("no genes found in datapath=$(repr(datapath)) matching datacond=$(repr(datacond))"))
     makeswarm_genes(genes; datapath=datapath, datacond=datacond, root=root, cell=cell, kwargs...)
 end
@@ -672,10 +679,10 @@ function checkgenes(root, conds::Vector, datapath, celltype::String, thresholdlo
         push!(genes, checkgenes(root, c, d, celltype, thresholdlow, thresholdhigh))
     end
     geneset = genes[1]
-    for g in genes
-        genesest = convert(Vector{String}, intersect(geneset, g))
+    for g in genes[2:end]
+        geneset = convert(Vector{String}, intersect(geneset, g))
     end
-    return genesest
+    return sort!(unique!(geneset))
 end
 
 function checkgenes(root, cond::String, datapath::String, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
@@ -685,12 +692,14 @@ function checkgenes(root, cond::String, datapath::String, cell::String, threshol
         return get_genes(cond, datapath)
     else
         datapath = folder_path(datapath, root, "data")
-        genes = intersect(get_halflives(root, cell, thresholdlow, thresholdhigh), get_genes(cond, datapath))
+        data_genes = get_genes(cond, datapath)
+        halflife_genes = get_halflives(root, cell, thresholdlow, thresholdhigh)
+        genes = isnothing(halflife_genes) ? data_genes : intersect(halflife_genes, data_genes)
         alleles = get_alleles(root, cell)
         if ~isnothing(alleles)
-            return convert(Vector{String}, intersect(genes, alleles))
+            return sort!(unique!(convert(Vector{String}, intersect(genes, alleles))))
         else
-            return convert(Vector{String}, genes)
+            return sort!(unique!(convert(Vector{String}, genes)))
         end
     end
 end
