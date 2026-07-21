@@ -282,6 +282,9 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
     commandfiles = String[]
     if ngenes > batchsize
         batches = getbatches(genes, ngenes, batchsize)
+        println("number of genes: ", ngenes)
+        println("batchsize: ", batchsize)
+        println("number of batch files: ", length(batches))
         for batch in eachindex(batches)
             sfile = (endswith(swarmfile, ".swarm") ? swarmfile[1:end-6] : swarmfile) * "_" * label_safe * "_" * model_safe * "_" * "$batch" * ".swarm"
             commandfile = joinpath(filedir, sfile)
@@ -290,6 +293,9 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
             write_scheduler_launcher(commandfile; scheduler=scheduler, jobs=scheduler_jobs, cpus_per_task=max(1, nchains * Int(nthreads)), mem=slurm_mem, time=slurm_time, jobname=slurm_jobname)
         end
     else
+        println("number of genes: ", ngenes)
+        println("batchsize: ", batchsize)
+        println("number of batch files: 1")
         sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
         commandfile = joinpath(filedir, sfile)
         push!(commandfiles, commandfile)
