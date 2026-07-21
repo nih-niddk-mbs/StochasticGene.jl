@@ -49,6 +49,35 @@ makeswarm_genes(
 )
 ```
 
+By default this writes a Biowulf-style command file named `fit.swarm`.
+The same writer can also add launch wrappers for non-Biowulf systems:
+
+```julia
+# Slurm array wrapper, submit with: sbatch fit_slurm.sh
+makeswarm_genes(
+    datapath="data/HCT116_testdata",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
+    filedir="run-HCT116-testdata-rna",
+    project="/path/to/StochasticGene.jl",
+    scheduler=:slurm,
+    scheduler_jobs=100,       # max array jobs running at once
+    slurm_mem="8G",
+    slurm_time="02:00:00",
+)
+
+# GNU Parallel wrapper, run with: ./fit_parallel.sh
+makeswarm_genes(
+    datapath="data/HCT116_testdata",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
+    filedir="run-HCT116-testdata-rna",
+    project="/path/to/StochasticGene.jl",
+    scheduler=:parallel,
+    scheduler_jobs=16,
+)
+```
+
 In v0.7.8, `makeswarm(; datafolder=..., conds=...)` inferred genes from the data folder. Current `makeswarm(["key1", ...])` is key-based; the folder-scanning RNA behavior now lives in `makeswarm_genes(; datapath=..., datacond=...)`.
 
 ---
@@ -108,11 +137,22 @@ This order—**individual fits → merge → coupled fit**—is the standard way
 
 ## Scheduler launch files and Biowulf swarm
 
-Stage helpers **do not** submit jobs to a scheduler by themselves. They **write files** you submit with Biowulf’s **`swarm`** or another launcher (`sbatch`, GNU parallel, custom wrappers):
+Stage helpers **do not** submit jobs to a scheduler by themselves. They **write files** you submit with Biowulf’s **`swarm`** or another launcher (`sbatch`, GNU Parallel, custom wrappers):
 
 - **`<commandfile>`** (default `fit.commands`) — one command line per run key (`julia ... fitscript_<key>.jl`).
 - **`<swarmfile>.swarm`** — same content style, Biowulf-compatible extension via [`make_swarmfile_from_csv`][make_swarmfile_from_csv].
 - **`fitscript_<key>.jl`** per key — typically calls `fit(; key="<key>", ...)` with shared options (`resultfolder`, `maxtime`, `samplesteps`, `warmupsteps`, `inference_method`, `device`, `parallel`, `gradient`, etc.).
+
+The `biowulf.jl` convenience writers (`makeswarm`, `makeswarm_folder`, and
+`makeswarm_genes`) also accept:
+
+- `scheduler=:swarm` — default; write the `.swarm` command list and no extra wrapper.
+- `scheduler=:slurm` — write the `.swarm` command list plus a submit-ready Slurm array script, for example `fit_slurm.sh`.
+- `scheduler=:parallel` — write the `.swarm` command list plus a GNU Parallel wrapper, for example `fit_parallel.sh`.
+- `scheduler=:command` — write only the command list, useful for simple sequential shell runs.
+
+For Slurm and GNU Parallel, `scheduler_jobs` means the maximum number of commands
+running at the same time.
 
 **Typical use on Biowulf**
 
@@ -150,6 +190,72 @@ swarm -g 4 -t 16 -b 1 --time 24:00:00 --module julialang -f fit.swarm
 ```
 
 Adjust **`-g`**, **`-t`**, **time**, and **module** to match your allocation and Julia module name on Biowulf.
+
+**Typical use on Slurm**
+
+Generate the scripts with `scheduler=:slurm`:
+
+```julia
+makeswarm_genes(
+    datapath="data/HCT116_testdata",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
+    filedir="run-HCT116-testdata-rna",
+    project="/path/to/StochasticGene.jl",
+    nchains=8,
+    scheduler=:slurm,
+    scheduler_jobs=100,
+    slurm_mem="8G",
+    slurm_time="02:00:00",
+)
+```
+
+Then submit the generated wrapper:
+
+```bash
+cd run-HCT116-testdata-rna
+sbatch fit_slurm.sh
+```
+
+The wrapper contains the Slurm array directive and reads one command line from
+`fit.swarm` for each array task.
+
+**Typical use with GNU Parallel**
+
+Generate the scripts with `scheduler=:parallel`:
+
+```julia
+makeswarm_genes(
+    datapath="data/HCT116_testdata",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
+    filedir="run-HCT116-testdata-rna",
+    project="/path/to/StochasticGene.jl",
+    nchains=8,
+    scheduler=:parallel,
+    scheduler_jobs=16,
+)
+```
+
+Then run the generated wrapper:
+
+```bash
+cd run-HCT116-testdata-rna
+./fit_parallel.sh
+```
+
+Override the job count without regenerating files by setting `JOBS`:
+
+```bash
+JOBS=32 ./fit_parallel.sh
+```
+
+For a simple sequential run on any Unix shell, run the command file directly:
+
+```bash
+cd run-HCT116-testdata-rna
+bash fit.swarm
+```
 
 **Generating keys and `info_<key>` in bulk**
 

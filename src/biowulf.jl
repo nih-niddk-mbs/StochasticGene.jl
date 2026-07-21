@@ -12,6 +12,93 @@ Use when building swarm/.jl filenames from label or coupling spec (e.g. "24,35|3
 """
 sanitize_for_filename(s::AbstractString) = replace(replace(string(s), "," => "-"), "|" => "-")
 
+function _scheduler_symbol(scheduler)
+    s = Symbol(lowercase(string(scheduler)))
+    s in (:swarm, :biowulf) && return :swarm
+    s in (:slurm, :sbatch) && return :slurm
+    s in (:parallel, :gnu_parallel, :gnuparallel) && return :parallel
+    s in (:command, :commands, :bash, :serial, :none) && return :command
+    throw(ArgumentError("unknown scheduler=$(repr(scheduler)); use :swarm, :slurm, :parallel, or :command"))
+end
+
+function _scheduler_script_base(commandfile::AbstractString, scheduler::Symbol)
+    stem = splitext(basename(String(commandfile)))[1]
+    stem = isempty(stem) ? "fit" : stem
+    return "$(stem)_$(scheduler).sh"
+end
+
+"""
+    write_scheduler_launcher(commandfile; scheduler=:swarm, jobs=16, cpus_per_task=1,
+        mem="4G", time="02:00:00", jobname="sg-fit", launcherfile=nothing)
+
+Optionally write a shell launcher next to a StochasticGene command file.
+
+- `scheduler=:swarm` or `:command`: write no extra launcher; submit/run the command file yourself.
+- `scheduler=:slurm`: write a Slurm array script, default `<commandfile stem>_slurm.sh`.
+  The script contains `#SBATCH --array=1-N%jobs`, where `N` is the number of command lines.
+- `scheduler=:parallel`: write a GNU Parallel script, default `<commandfile stem>_parallel.sh`.
+
+The command file itself is unchanged: one `julia ... fitscript.jl` command per line.
+"""
+function write_scheduler_launcher(
+    commandfile::AbstractString;
+    scheduler=:swarm,
+    jobs::Int=16,
+    cpus_per_task::Int=1,
+    mem::AbstractString="4G",
+    time::AbstractString="02:00:00",
+    jobname::AbstractString="sg-fit",
+    launcherfile::Union{Nothing,AbstractString}=nothing,
+)
+    sched = _scheduler_symbol(scheduler)
+    sched in (:swarm, :command) && return nothing
+    cpath = String(commandfile)
+    dir = dirname(cpath)
+    cbase = basename(cpath)
+    lfile = launcherfile === nothing ? _scheduler_script_base(cpath, sched) : String(launcherfile)
+    lpath = joinpath(dir, lfile)
+    ncommands = isfile(cpath) ? count(line -> !isempty(strip(line)), readlines(cpath)) : 0
+    ncommands > 0 || throw(ArgumentError("cannot write scheduler launcher for empty command file: $(repr(cpath))"))
+    open(lpath, "w") do io
+        if sched == :slurm
+            array_spec = jobs > 0 ? "1-$(ncommands)%$(jobs)" : "1-$(ncommands)"
+            write(io, """
+#!/bin/bash
+#SBATCH --job-name=$(jobname)
+#SBATCH --array=$(array_spec)
+#SBATCH --cpus-per-task=$(cpus_per_task)
+#SBATCH --mem=$(mem)
+#SBATCH --time=$(time)
+#SBATCH --output=logs/slurm_%A_%a.out
+#SBATCH --error=logs/slurm_%A_%a.err
+
+set -euo pipefail
+mkdir -p logs
+
+COMMAND_FILE="$(cbase)"
+CMD=\$(sed -n "\${SLURM_ARRAY_TASK_ID}p" "\${COMMAND_FILE}")
+echo "Running task \${SLURM_ARRAY_TASK_ID}: \${CMD}"
+bash -lc "\${CMD}"
+""")
+        elseif sched == :parallel
+            write(io, """
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p logs
+
+COMMAND_FILE="$(cbase)"
+JOBS="\${JOBS:-$(jobs)}"
+parallel -j "\${JOBS}" --joblog "logs/$(splitext(cbase)[1]).joblog" --results "logs/$(splitext(cbase)[1])" < "\${COMMAND_FILE}"
+""")
+        end
+    end
+    try
+        chmod(lpath, 0o755)
+    catch
+    end
+    return lpath
+end
+
 """
     makeswarm(keys::Vector{String}; <keyword arguments>)
     makeswarm(; key::String, <keyword arguments>)
@@ -29,6 +116,12 @@ run is defined by `info_<key>.toml` (if present) plus any overrides.
 - `filedir="."`: directory for swarm and script files.
 - `project=""`, `sysimage=""`: optional `--project` and `--sysimage` for the julia command.
 - `src=""`: path to StochasticGene src (for script prolog; empty if package is installed).
+- `scheduler=:swarm`: launcher style. `:swarm` preserves the traditional Biowulf command
+  file only; `:slurm` also writes `<swarmfile>_slurm.sh`; `:parallel` also writes
+  `<swarmfile>_parallel.sh`; `:command` writes only the command list.
+- `scheduler_jobs=16`: max Slurm array jobs at once (`%scheduler_jobs`) or GNU Parallel jobs.
+- `slurm_mem="4G"`, `slurm_time="02:00:00"`, `slurm_jobname="sg-fit"`:
+  Slurm wrapper settings.
 - Overrides (optional): `resultfolder`, `root`, `maxtime`, `samplesteps`, etc. are written into each
   script so `fit(; key=key, resultfolder=..., ...)` uses them. Only simple types (String, Number, Bool) are serialized.
 
@@ -36,15 +129,18 @@ run is defined by `info_<key>.toml` (if present) plus any overrides.
 ```julia
 makeswarm(["33il", "44il"]; filedir="swarm", resultfolder="HCT116_test", root=".")
 makeswarm(; key="33il", resultfolder="HCT116_test", maxtime=120.0)
+makeswarm(["33il", "44il"]; filedir="slurm-jobs", scheduler=:slurm, scheduler_jobs=50)
 ```
 """
-function makeswarm(keys::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", filedir=".", project="", sysimage="", src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, kwargs...)
+function makeswarm(keys::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", filedir=".", project="", sysimage="", src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, scheduler=:swarm, scheduler_jobs::Int=16, slurm_mem::String="4G", slurm_time::String="02:00:00", slurm_jobname::String="sg-fit", kwargs...)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
     isempty(keys) && return
     sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
-    write_swarmfile_keys(joinpath(filedir, sfile), nchains, nthreads, juliafile, keys, project, sysimage)
+    commandfile = joinpath(filedir, sfile)
+    write_swarmfile_keys(commandfile, nchains, nthreads, juliafile, keys, project, sysimage)
+    write_scheduler_launcher(commandfile; scheduler=scheduler, jobs=scheduler_jobs, cpus_per_task=max(1, nchains * Int(nthreads)), mem=slurm_mem, time=slurm_time, jobname=slurm_jobname)
     for k in keys
         scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
         write_fitfile_key(scriptpath, k; src=src, resultfolder=resultfolder, root=root, maxtime=maxtime, samplesteps=samplesteps, kwargs...)
@@ -75,6 +171,8 @@ end
 Scan `joinpath(root, \"results\", resultfolder)` for `info_<key>.jld2`, collect each `<key>`, then write
 [`write_fitfile_key`](@ref) scripts and a [`write_swarmfile_keys`](@ref) swarm under `filedir`.
 Returns the discovered keys (sorted). Extra keywords are forwarded to `write_fitfile_key`.
+Pass `scheduler=:slurm` or `scheduler=:parallel` to also write a portable launcher for the
+generated command file.
 """
 function makeswarm_folder(
     resultfolder::AbstractString;
@@ -87,6 +185,11 @@ function makeswarm_folder(
     project::String="",
     sysimage::String="",
     src::String="",
+    scheduler=:swarm,
+    scheduler_jobs::Int=16,
+    slurm_mem::String="4G",
+    slurm_time::String="02:00:00",
+    slurm_jobname::String="sg-fit",
     kwargs...,
 )
     rdir = joinpath(root, "results", String(resultfolder))
@@ -102,7 +205,9 @@ function makeswarm_folder(
     isempty(keys) && return keys
     !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
     sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
-    write_swarmfile_keys(joinpath(filedir, sfile), nchains, nthreads, juliafile, keys, project, sysimage)
+    commandfile = joinpath(filedir, sfile)
+    write_swarmfile_keys(commandfile, nchains, nthreads, juliafile, keys, project, sysimage)
+    write_scheduler_launcher(commandfile; scheduler=scheduler, jobs=scheduler_jobs, cpus_per_task=max(1, nchains * Int(nthreads)), mem=slurm_mem, time=slurm_time, jobname=slurm_jobname)
     for k in keys
         scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
         write_fitfile_key(scriptpath, k; src=src, kwargs...)
@@ -123,6 +228,10 @@ The script calls `fit(...)` with `ARGS[1]` as the gene.
 - `filedir="."`: directory to write swarm and script files
 - Plus the same fit/model kwargs (datatype, `datapath`, cell, `datacond`, optional legacy `dttype` / `traceinfo`,
   `trace_specs`, `dwell_specs`, transitions, G, R, S, insertstep, etc.) and swarm options (nchains, nthreads, swarmfile, juliafile, project, src).
+- `scheduler=:swarm`: output style. `:swarm` writes the command file only; `:slurm`
+  also writes a submit-ready Slurm array script; `:parallel` also writes a GNU Parallel wrapper;
+  `:command` writes only the command list.
+- `scheduler_jobs=16`: max Slurm array jobs at once or GNU Parallel jobs.
 
 Legacy separate input-folder routing (`infolder`) is retired; use `datapath`, `resultfolder`, `label`, and `root` like [`fit`](@ref).
 
@@ -130,6 +239,7 @@ Legacy separate input-folder routing (`infolder`) is retired; use `datapath`, `r
 ```julia
 makeswarm_genes(["MYC", "SOX9"]; cell="HBEC", datatype="rna", datapath="data/", resultfolder="out")
 makeswarm_genes(; cell="HCT116", datatype="rna", datapath="data/HCT116_testdata", datacond="MOCK")
+makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK", scheduler=:slurm, scheduler_jobs=100)
 ```
 """
 function _genes_from_rna_datafolder(datapath::String, datacond; root::String=".")
@@ -159,7 +269,7 @@ end
 
 function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=nothing, resultfolder::String="HCT116_test", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="")
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", scheduler=:swarm, scheduler_jobs::Int=16, slurm_mem::String="4G", slurm_time::String="02:00:00", slurm_jobname::String="sg-fit")
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
@@ -173,11 +283,15 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
         batches = getbatches(genes, ngenes, batchsize)
         for batch in eachindex(batches)
             sfile = (endswith(swarmfile, ".swarm") ? swarmfile[1:end-6] : swarmfile) * "_" * label_safe * "_" * model_safe * "_" * "$batch" * ".swarm"
-            write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile_full, batches[batch], project, sysimage)
+            commandfile = joinpath(filedir, sfile)
+            write_swarmfile(commandfile, nchains, nthreads, juliafile_full, batches[batch], project, sysimage)
+            write_scheduler_launcher(commandfile; scheduler=scheduler, jobs=scheduler_jobs, cpus_per_task=max(1, nchains * Int(nthreads)), mem=slurm_mem, time=slurm_time, jobname=slurm_jobname)
         end
     else
         sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
-        write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile_full, genes, project, sysimage)
+        commandfile = joinpath(filedir, sfile)
+        write_swarmfile(commandfile, nchains, nthreads, juliafile_full, genes, project, sysimage)
+        write_scheduler_launcher(commandfile; scheduler=scheduler, jobs=scheduler_jobs, cpus_per_task=max(1, nchains * Int(nthreads)), mem=slurm_mem, time=slurm_time, jobname=slurm_jobname)
     end
     write_fitfile_genes(joinpath(filedir, juliafile_full), nchains, datatype, datapath, cell, datacond, resultfolder, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates,

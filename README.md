@@ -107,6 +107,25 @@ Batch helpers:
 - **`makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK", ...)`** — scan the RNA data folder for matching `GENE_COND.txt` files, then run the same gene-panel writer. This is the current replacement for the old v0.7-style `makeswarm(; datafolder=..., conds=...)` RNA sweep.
 - **`makeswarm_models`** / **`makeswarmfiles`** — model sweeps, coupled CSV workflows, combined-rate keys; see the [cluster & batch chapter](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html).
 
+The `makeswarm` family always writes a plain command list (`fit.swarm` by default).
+Use `scheduler` to add a launcher for the machine you are on:
+
+```julia
+# Biowulf default: submit fit.swarm with swarm
+makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK")
+
+# Slurm: writes fit.swarm and fit_slurm.sh
+makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK",
+    scheduler=:slurm, scheduler_jobs=100, slurm_mem="8G", slurm_time="02:00:00")
+
+# GNU Parallel: writes fit.swarm and fit_parallel.sh
+makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK",
+    scheduler=:parallel, scheduler_jobs=16)
+```
+
+Then run `swarm -f fit.swarm` on Biowulf, `sbatch fit_slurm.sh` on Slurm,
+`./fit_parallel.sh` with GNU Parallel, or `bash fit.swarm` for a sequential local run.
+
 **Coupled models:** fit each unit separately, merge rates with **`create_combined_file`** / **`create_combined_file_mult`**, then run the coupled fit warm-started from that table (detailed steps in the manual).
 
 ---
@@ -164,6 +183,9 @@ makeswarm_genes(
     project="/home/carsonc/github/StochasticGene.jl/",
 )
 ```
+
+On non-Biowulf systems, pass `scheduler=:slurm` to also write `fit_slurm.sh`,
+or `scheduler=:parallel` to also write `fit_parallel.sh`.
 
 After the jobs finish, assemble result tables:
 
