@@ -264,12 +264,12 @@ function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell:
     genes = _genes_from_rna_datafolder(datapath, datacond; root=String(root))
     isempty(genes) && throw(ArgumentError("no genes found in datapath=$(repr(datapath)) matching datacond=$(repr(datacond))"))
     makeswarm_genes(genes; datapath=datapath, datacond=datacond, root=root, cell=cell, kwargs...)
-    return genes
 end
 
 function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=nothing, resultfolder::String="HCT116_test", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", scheduler=:swarm, scheduler_jobs::Int=16, slurm_mem::String="4G", slurm_time::String="02:00:00", slurm_jobname::String="sg-fit")
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", scheduler=:swarm, scheduler_jobs::Int=16, slurm_mem::String="4G", slurm_time::String="02:00:00", slurm_jobname::String="sg-fit",
+    inference_method=nothing, sample_stride=nothing, parallel=nothing, device=nothing, merge_max_memory=nothing, merge_max_gb=nothing, likelihood_executor=nothing, gradient_checkpoint_length=nothing, proposal_cv_rates=nothing, proposal_cv_noise=nothing, init_jitter=nothing, init_jitter_individual=nothing, init_jitter_noise=nothing)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
@@ -279,23 +279,28 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
     model_safe = sanitize_for_filename(modelstring)
     ngenes = length(genes)
     juliafile_full = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
+    commandfiles = String[]
     if ngenes > batchsize
         batches = getbatches(genes, ngenes, batchsize)
         for batch in eachindex(batches)
             sfile = (endswith(swarmfile, ".swarm") ? swarmfile[1:end-6] : swarmfile) * "_" * label_safe * "_" * model_safe * "_" * "$batch" * ".swarm"
             commandfile = joinpath(filedir, sfile)
+            push!(commandfiles, commandfile)
             write_swarmfile(commandfile, nchains, nthreads, juliafile_full, batches[batch], project, sysimage)
             write_scheduler_launcher(commandfile; scheduler=scheduler, jobs=scheduler_jobs, cpus_per_task=max(1, nchains * Int(nthreads)), mem=slurm_mem, time=slurm_time, jobname=slurm_jobname)
         end
     else
         sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
         commandfile = joinpath(filedir, sfile)
+        push!(commandfiles, commandfile)
         write_swarmfile(commandfile, nchains, nthreads, juliafile_full, genes, project, sysimage)
         write_scheduler_launcher(commandfile; scheduler=scheduler, jobs=scheduler_jobs, cpus_per_task=max(1, nchains * Int(nthreads)), mem=slurm_mem, time=slurm_time, jobname=slurm_jobname)
     end
     write_fitfile_genes(joinpath(filedir, juliafile_full), nchains, datatype, datapath, cell, datacond, resultfolder, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates,
-        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; src=src, dttype=dttype, traceinfo=traceinfo)
+        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; src=src, dttype=dttype, traceinfo=traceinfo,
+        inference_method=inference_method, sample_stride=sample_stride, parallel=parallel, device=device, merge_max_memory=merge_max_memory, merge_max_gb=merge_max_gb, likelihood_executor=likelihood_executor, gradient_checkpoint_length=gradient_checkpoint_length, proposal_cv_rates=proposal_cv_rates, proposal_cv_noise=proposal_cv_noise, init_jitter=init_jitter, init_jitter_individual=init_jitter_individual, init_jitter_noise=init_jitter_noise)
+    return (genes=genes, fitfile=joinpath(filedir, juliafile_full), commandfiles=commandfiles)
 end
 
 """
@@ -515,7 +520,7 @@ optionally appending `; dttype=…` / `; traceinfo=…` for legacy loaders when 
 function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs;
-    src="", dttype=nothing, traceinfo=nothing, inference_method=nothing)
+    src="", dttype=nothing, traceinfo=nothing, inference_method=nothing, sample_stride=nothing, parallel=nothing, device=nothing, merge_max_memory=nothing, merge_max_gb=nothing, likelihood_executor=nothing, gradient_checkpoint_length=nothing, proposal_cv_rates=nothing, proposal_cv_noise=nothing, init_jitter=nothing, init_jitter_individual=nothing, init_jitter_noise=nothing)
     s = '"'
     transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
     f = open(fitfile, "w")
@@ -535,6 +540,23 @@ function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacon
     end
     if inference_method !== nothing
         push!(extra, "inference_method=" * repr(inference_method))
+    end
+    for (name, value) in (
+        (:sample_stride, sample_stride),
+        (:parallel, parallel),
+        (:device, device),
+        (:merge_max_memory, merge_max_memory),
+        (:merge_max_gb, merge_max_gb),
+        (:likelihood_executor, likelihood_executor),
+        (:gradient_checkpoint_length, gradient_checkpoint_length),
+        (:proposal_cv_rates, proposal_cv_rates),
+        (:proposal_cv_noise, proposal_cv_noise),
+        (:init_jitter, init_jitter),
+        (:init_jitter_individual, init_jitter_individual),
+        (:init_jitter_noise, init_jitter_noise),
+    )
+        value === nothing && continue
+        push!(extra, string(name) * "=" * repr(value))
     end
     if !isempty(extra)
         line *= "; " * join(extra, ", ")
@@ -608,13 +630,14 @@ Divides the list of genes into batches of a specified size.
 This function divides the list of genes into batches of a specified size. The last batch may contain fewer genes if the total number of genes is not a multiple of the batch size.
 """
 function getbatches(genes, ngenes, batchsize)
-    nbatches = div(ngenes, batchsize)
-    batches = Vector{Vector{String}}(undef, nbatches + 1)
-    println(batchsize, " ", nbatches + 1)
+    batchsize > 0 || throw(ArgumentError("batchsize must be positive"))
+    nbatches = cld(ngenes, batchsize)
+    batches = Vector{Vector{String}}(undef, nbatches)
     for i in 1:nbatches
-        batches[i] = genes[batchsize*(i-1)+1:batchsize*(i)]
+        first = batchsize * (i - 1) + 1
+        last = min(batchsize * i, ngenes)
+        batches[i] = genes[first:last]
     end
-    batches[end] = genes[batchsize*nbatches+1:end]
     return batches
 end
 

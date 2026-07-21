@@ -50,6 +50,35 @@ makeswarm_genes(
 ```
 
 By default this writes a Biowulf-style command file named `fit.swarm`.
+For large gene panels, leave `batchsize=1000` or set it explicitly; when the
+gene count is larger than `batchsize`, `makeswarm_genes` writes numbered swarm
+files such as `fit_rna-HCT116_MOCK_2001_1.swarm`,
+`fit_rna-HCT116_MOCK_2001_2.swarm`, and so on. The return value is a named tuple
+with `genes`, `fitfile`, and `commandfiles`.
+
+```julia
+out = makeswarm_genes(
+    datapath="data/HCT116_testdata",
+    datacond="MOCK",
+    resultfolder="HCT116_test",
+    filedir="run-HCT116-testdata-rna",
+    batchsize=1000,
+    nchains=2,
+    nthreads=1,
+)
+
+out.commandfiles
+```
+
+Submit each command file on Biowulf:
+
+```bash
+cd run-HCT116-testdata-rna
+for f in fit_*.swarm; do
+    swarm -f "$f" -g 4 -t 2 --time 02:00:00 --merge-output --module julia
+done
+```
+
 The same writer can also add launch wrappers for non-Biowulf systems:
 
 ```julia
