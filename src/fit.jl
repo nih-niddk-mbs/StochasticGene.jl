@@ -3346,8 +3346,8 @@ function _fit_base_parameter_index(idx::Integer, nbase::Integer)
     return mod1(idx, nbase)
 end
 
-_fit_proposal_cv_at(propcv::AbstractVector, i::Integer, default_cv::Real) = Float64(propcv[i])
-_fit_proposal_cv_at(propcv, i::Integer, default_cv::Real) = Float64(default_cv)
+_fit_proposal_scalar_fallback(propcv::AbstractVector, default_cv::Real) = Float64(default_cv)
+_fit_proposal_scalar_fallback(propcv, default_cv::Real) = Float64(propcv)
 
 function _normalize_proposal_cv_levels(proposal_cv_levels)
     proposal_cv_levels === nothing && return Dict{Any,Float64}()
@@ -3452,14 +3452,13 @@ function _assemble_proposalcv(
         @warn "split proposal CV options ignored because proposal covariance is matrix-based"
         return propcv
     end
-    fallback_cv = propcv isa AbstractVector ? one(Float64) : Float64(propcv)
+    fallback_cv = _fit_proposal_scalar_fallback(propcv, one(Float64))
     noise_inds = _fit_noise_parameter_indices(nrates, reporter)
     nbase = nrates isa Integer ? nrates + reporter.n : 0
     cv = Vector{Float64}(undef, length(fittedparam))
     for i in eachindex(fittedparam)
         base_idx = _fit_base_parameter_index(fittedparam[i], nbase)
-        inherited_cv = _fit_proposal_cv_at(propcv, i, fallback_cv)
-        rate_cv = pcv_rates > 0.0 ? pcv_rates : inherited_cv
+        rate_cv = pcv_rates > 0.0 ? pcv_rates : fallback_cv
         noise_cv = pcv_noise > 0.0 ? pcv_noise : rate_cv
         cv[i] = base_idx in noise_inds ? noise_cv : rate_cv
     end
@@ -3613,18 +3612,30 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         nrates,
         reporter,
     )
-    propcv = _assemble_proposalcv(
-        propcv,
-        fittedparam,
-        nrates,
-        reporter,
-        recursive_trait;
-        proposal_cv_rates=proposal_cv_rates,
-        proposal_cv_noise=proposal_cv_noise,
-        proposal_cv_levels=proposal_cv_levels,
-    )
+    if isempty(hierarchical)
+        propcv = _assemble_proposalcv(
+            propcv,
+            fittedparam,
+            nrates,
+            reporter,
+            recursive_trait;
+            proposal_cv_rates=proposal_cv_rates,
+            proposal_cv_noise=proposal_cv_noise,
+            proposal_cv_levels=proposal_cv_levels,
+        )
+    end
     if !isempty(hierarchical)
         hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor, ratetransforms, zeromedian)
+        propcv = _assemble_proposalcv(
+            propcv,
+            fittedparam,
+            nrates,
+            reporter,
+            recursive_trait;
+            proposal_cv_rates=proposal_cv_rates,
+            proposal_cv_noise=proposal_cv_noise,
+            proposal_cv_levels=proposal_cv_levels,
+        )
     else
         # priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor, ratetransforms)
         priord = prior_distribution(rmean, priorcv, ratetransforms, fittedparam)

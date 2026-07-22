@@ -31,6 +31,24 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
+    @testset "hierarchical split proposal CV expands to sampled parameters" begin
+        fittedparam, _, _ = StochasticGene.make_fitted_hierarchical([1, 2, 3, 4, 5], 2, [10, 12], 13, 145)
+        reporter = StochasticGene.HMMReporter(4, Int[], StochasticGene.prob_Gaussian, 0, Int[], collect(10:13))
+        cv = StochasticGene._assemble_proposalcv(
+            fill(0.7, 5),
+            fittedparam,
+            9,
+            reporter,
+            nothing;
+            proposal_cv_rates=0.05,
+            proposal_cv_noise=0.001,
+        )
+        @test length(fittedparam) == 299
+        @test length(cv) == length(fittedparam)
+        @test cv[1:5] == fill(0.05, 5)
+        @test all(==(0.001), cv[6:end])
+    end
+
     @testset "shared parameter vocabulary is passive and composable" begin
         spec3 = DatasetSpec(
             :ThreePrime,
