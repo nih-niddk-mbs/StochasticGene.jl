@@ -75,15 +75,24 @@ Supported modality names are `:rna`, `:trace`, and `:dwelltime`; `:grid` is rese
 #### "rna" - RNA Count Histograms
 Load steady-state RNA count distributions from smFISH or scRNA-seq data.
 
-**File Format**: Text files with RNA count histograms
+**File Format**: one text file per gene/condition named `GENE_COND.txt` in
+`datapath`; the first column is the RNA count histogram over copy number bins.
 **Returns**: `RNAData` structure
+
+Example:
+
+```text
+data/HCT116_testdata/
+├── CENPL_MOCK.txt
+└── MYC_MOCK.txt
+```
 
 ```julia
 # Load RNA histogram data
 data = load_data(
     "rna",                    # datatype
     String[],                 # dttype (unused for RNA)
-    "data/smFISH/",          # datapath
+    "data/HCT116_testdata",   # datapath
     "control",               # label
     "MYC",                   # gene
     "MOCK",                  # datacond

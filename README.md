@@ -34,7 +34,7 @@ Julia **≥ 1.11** is required for the v1.11 beta / 2.0-beta line (see `Project.
 ## What this package provides
 
 - **Models:** Generalized telegraph / GRSM dynamics — arbitrary **G** (gene) states, **R** pre-RNA steps, **S** splice sites, reporter **insertstep**, multiple alleles, **coupled** transcribing units (e.g. enhancer–gene, hidden latent units).
-- **Inference:** `fit` selects **MH**, **NUTS**, or **ADVI** via `inference_method`; shared budgets (`samplesteps`, `warmupsteps`, …) map through `load_options` to method-specific structs. MH uses adaptive proposals and multi-chain `Distributed` pooling; cluster helpers emit compatible `fit(; …)` overrides (see **Cluster & batch workflows** in the manual).
+- **Inference:** `fit` selects **MH**, **NUTS**, or **ADVI** via `inference_method`; shared budgets (`samplesteps`, `warmupsteps`, …) map through `load_options` to method-specific structs. MH uses fixed proposal CVs or saved covariance proposals and multi-chain `Distributed` pooling; cluster helpers emit compatible `fit(; …)` overrides (see **Cluster & batch workflows** in the manual).
 - **Data:** Stationary RNA histograms, ON/OFF and dwell-time histograms, intensity traces (`.trk` etc.), joint traces, grids — alone or in combination. In the v1.11 beta / 2.0-beta line, multimodal fits use `CombinedData` via tuple/vector `datatype` values such as `(:rna, :dwelltime)`.
 - **Batch & HPC:** Helpers in `biowulf.jl` write **swarm** files and **fit scripts** for NIH Biowulf or any scheduler; run specs can be saved as `info_<key>.toml` + `info_<key>.jld2` for reproducible `fit(; key=...)`.
 
@@ -55,6 +55,17 @@ Helper: `rna_setup("myproject")` creates a sensible `data/` / `results/` skeleto
 
 ## Quick start (RNA histogram)
 
+For `datatype="rna"`, data are steady-state RNA count histograms stored as one
+text file per gene/condition:
+
+```text
+data/HCT116_testdata/
+├── CENPL_MOCK.txt
+└── MYC_MOCK.txt
+```
+
+Each file's first column is the histogram over RNA copy number bins.
+
 ```julia
 using StochasticGene
 
@@ -65,7 +76,7 @@ fits, stats, measures, data, model, options = fit(
     insertstep = 1,
     transitions = ([1, 2], [2, 1]),
     datatype = "rna",
-    datapath = "data/HCT116_testdata/",
+    datapath = "data/HCT116_testdata",
     gene = "MYC",
     cell = "HCT116",
     datacond = "MOCK",
@@ -104,7 +115,7 @@ Batch helpers:
 
 - **`makeswarm(["key1", "key2"]; filedir=..., resultfolder=..., ...)`** — one swarm line and **`fitscript_<key>.jl`** per key (`fit(; key=..., ...)`).
 - **`makeswarm_genes(["GENE1", "GENE2"]; ...)`** — same model, one job per **gene** (genome-scale scRNA-style).
-- **`makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK", ...)`** — scan the RNA data folder for matching `GENE_COND.txt` files, then run the same gene-panel writer. This is the current replacement for the old v0.7-style `makeswarm(; datafolder=..., conds=...)` RNA sweep.
+- **`makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK", ...)`** — scan the RNA data folder for matching `GENE_COND.txt` files, then run the same gene-panel writer. This is the current replacement for the old v0.7-style `makeswarm(; datafolder=..., conds=...)` RNA sweep. Pass `filter_metadata=true` to use `checkgenes` and restrict to genes with available halflife/allele metadata.
 - **`makeswarm_models`** / **`makeswarmfiles`** — model sweeps, coupled CSV workflows, combined-rate keys; see the [cluster & batch chapter](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html).
 
 The `makeswarm` family always writes a plain command list (`fit.swarm` by default).
@@ -183,6 +194,29 @@ makeswarm_genes(
     project="/home/carsonc/github/StochasticGene.jl/",
 )
 ```
+
+For genome-scale scRNA folders, `makeswarm_genes` prints the number of genes,
+the batch size, and the number of generated swarm/command files. Use `batchsize`
+to control how many gene commands go in each file:
+
+```julia
+out = makeswarm_genes(
+    root="/data/carsonc/scrna",
+    datapath="RamosNELFA_NEG_IFNa_rep1_Sdata",
+    datacond="NIr1",
+    cell="U3A",
+    resultfolder="RamosNELFA_NEG_IFNa_rep1",
+    filedir="run-RamosNELFA_NEG_IFNa_rep1",
+    batchsize=4800,
+    nchains=2,
+    nthreads=1,
+    project="/home/carsonc/github/StochasticGene.jl/",
+)
+```
+
+By default the gene list is inferred from filenames only. Pass
+`filter_metadata=true` to use `checkgenes` and restrict to genes with available
+halflife/allele metadata.
 
 On non-Biowulf systems, pass `scheduler=:slurm` to also write `fit_slurm.sh`,
 or `scheduler=:parallel` to also write `fit_parallel.sh`.

@@ -1,233 +1,207 @@
 # RNA Histogram Analysis
 
-This example demonstrates how to analyze RNA count distributions (histograms) from single-molecule FISH (smFISH) or single-cell RNA sequencing (scRNA-seq) data.
+This example shows the current `datatype="rna"` workflow for steady-state RNA
+count histograms from smFISH or scRNA-seq.
 
-## Setup
+## Data Layout
 
-First, let's set up our project directory and load the package:
+For `datatype="rna"`, StochasticGene expects one text file per gene/condition:
+
+```text
+data/HCT116_testdata/
+├── CENPL_MOCK.txt
+└── MYC_MOCK.txt
+```
+
+The filename pattern is:
+
+```text
+GENE_COND.txt
+```
+
+The first column is the histogram over RNA copy number bins. For example,
+`MYC_MOCK.txt` is loaded with:
+
+```julia
+gene = "MYC"
+datacond = "MOCK"
+datapath = "data/HCT116_testdata"
+```
+
+Paths are resolved the same way as `fit`: if needed, a relative `datapath` is
+looked up under `root/data`.
+
+## Single-Gene Fit
 
 ```julia
 using StochasticGene
 
-# Create project directory
-mkdir("histogram_example")
-cd("histogram_example")
-
-# Generate example data using test_fit_simrna
-fitted_rates, target_rates = test_fit_simrna(
-    rtarget=[0.33, 0.19, 2.5, 1.0],  # Target rates for simulation
-    transitions=([1, 2], [2, 1]),    # Simple two-state model
-    G=2,                             # 2 gene states
-    nRNA=100,                        # Number of RNA molecules
-    nalleles=2,                      # Number of alleles
-    fittedparam=[1, 2, 3],          # Parameters to fit
-    nchains=1                        # Single MCMC chain for example
-)
-
-# Print results
-println("Fitted rates: ", fitted_rates)
-println("Target rates: ", target_rates)
-```
-
-## Data Preparation
-
-Place your RNA count data in the `data/` directory. The data should be organized as follows:
-
-```
-data/
-├── gene_name/
-│   ├── condition1/
-│   │   ├── counts.csv
-│   │   └── metadata.csv
-│   └── condition2/
-│       ├── counts.csv
-│       └── metadata.csv
-```
-
-The `counts.csv` file should contain:
-- Cell IDs
-- RNA counts per cell
-- Optional: Additional cell metadata
-
-## Model Definition
-
-We'll fit a model with:
-- 2 gene states (G=2)
-- No pre-RNA steps (R=0)
-- Simple transitions between states
-
-```julia
-# Define model parameters
-G = 2  # Number of gene states
-R = 0  # Number of pre-RNA steps
-transitions = ([1,2], [2,1])  # Gene state transitions
-```
-
-## Fitting the Model
-
-Now we can fit the model to our RNA count data:
-
-```julia
-# Fit the model
 fits, stats, measures, data, model, options = fit(
-    G = G,
-    R = R,
-    transitions = transitions,
+    G = 2,
+    R = 0,
+    S = 0,
+    insertstep = 1,
+    transitions = ([1, 2], [2, 1]),
     datatype = "rna",
-    datapath = "data/",
+    datapath = "data/HCT116_testdata",
     gene = "MYC",
-    datacond = "CONTROL"
+    cell = "HCT116",
+    datacond = "MOCK",
+    resultfolder = "HCT116_test",
+    nchains = 2,
+    maxtime = 60.0,
+    samplesteps = 1_000_000,
+    propcv = 0.01,
 )
 ```
 
-## Analyzing Results
+If `decayrate=-1.0` (the default), `fit` tries to look up gene-specific decay
+information from `data/halflives` under `root`. If allele metadata exist under
+`data/alleles`, `fit` can also use those to set `nalleles`.
 
-### Basic Analysis
+## Genome-Scale scRNA Sweeps
+
+For many genes, use `makeswarm_genes`. The folder-scanning form infers genes
+from filenames matching `GENE_COND.txt`, writes one shared fitscript using
+`ARGS[1]` as the gene name, and writes one command per gene.
 
 ```julia
-# Print basic statistics
-println(stats)
-
-# Plot the results
-using Plots
-plot(fits)
-
-# Save results
-save_results(fits, "results/")
+out = makeswarm_genes(
+    root = "/data/carsonc/scrna",
+    datapath = "RamosNELFA_NEG_IFNa_rep1_Sdata",
+    datacond = "NIr1",
+    cell = "U3A",
+    resultfolder = "RamosNELFA_NEG_IFNa_rep1",
+    filedir = "run-RamosNELFA_NEG_IFNa_rep1",
+    G = 2,
+    R = 0,
+    S = 0,
+    insertstep = 1,
+    transitions = ([1, 2], [2, 1]),
+    nchains = 2,
+    nthreads = 1,
+    batchsize = 4800,
+    maxtime = 3600.0,
+    samplesteps = 1_000_000,
+    propcv = 0.01,
+    project = "/home/carsonc/github/StochasticGene.jl/",
+)
 ```
 
-### Histogram Analysis
+`makeswarm_genes` prints the number of genes, the batch size, and the number of
+batch command files. It also returns:
 
 ```julia
-# Generate and plot histograms
-plot_histograms(fits, "results/histograms/")
-
-# Calculate histogram statistics
-hist_stats = analyze_histograms(fits)
-println(hist_stats)
+out.genes
+out.fitfile
+out.commandfiles
 ```
 
-### Burst Analysis
+By default, folder scanning uses filenames only. To restrict to genes that pass
+the older metadata gate, use:
 
 ```julia
-# Analyze transcriptional bursts
-burst_stats = analyze_bursts(fits)
-println(burst_stats)
-
-# Plot burst statistics
-plot_bursts(fits, "results/bursts/")
+filter_metadata = true
 ```
 
-## Advanced Analysis
+## Submit On Biowulf
 
-### Multiple Conditions
+If `batchsize` splits the run into numbered swarm files, submit each file:
+
+```bash
+cd run-RamosNELFA_NEG_IFNa_rep1
+for f in fit_*.swarm; do
+    swarm -f "$f" -g 4 -t 2 --time 2:00:00 --merge-output --module julia
+done
+```
+
+Here `-t 2` matches `nchains=2, nthreads=1`. Increase memory or walltime if
+your model settings require it.
+
+## Local Or Other Schedulers
+
+The generated `.swarm` file is a plain command list, so it can be run
+sequentially from a regular shell:
+
+```bash
+bash fit.swarm
+```
+
+For Slurm or GNU Parallel wrappers, request a scheduler launcher:
 
 ```julia
-# Compare different conditions
-conditions = ["CONTROL", "TREATMENT"]
-fits_list = []
+makeswarm_genes(
+    datapath = "data/HCT116_testdata",
+    datacond = "MOCK",
+    resultfolder = "HCT116_test",
+    filedir = "run-HCT116-testdata-rna",
+    scheduler = :slurm,
+    scheduler_jobs = 100,
+    slurm_mem = "8G",
+    slurm_time = "02:00:00",
+)
+```
 
-for cond in conditions
-    fits, stats, measures, data, model, options = fit(
+or:
+
+```julia
+makeswarm_genes(
+    datapath = "data/HCT116_testdata",
+    datacond = "MOCK",
+    resultfolder = "HCT116_test",
+    filedir = "run-HCT116-testdata-rna",
+    scheduler = :parallel,
+    scheduler_jobs = 16,
+)
+```
+
+## Result Tables
+
+After fits finish, assemble the legacy RNA result files into summary CSVs:
+
+```julia
+write_dataframes_only(
+    "results/HCT116_test",
+    "data/HCT116_testdata";
+    datatype = "rna",
+)
+```
+
+This calls `make_dataframes`, assembles raw `rates_*.txt`, `measures_*.txt`,
+and `param-stats_*.txt` files when needed, and writes summary CSV files.
+
+For key-based folders containing `rates_<key>.txt`, `param-stats_<key>.txt`,
+and `info_<key>.jld2`, use:
+
+```julia
+write_dataframes_only_key("results/HCT116_test"; datatype = "rna")
+```
+
+## Model Variants
+
+The same input files can be used for different model structures:
+
+```julia
+for (G, R, transitions) in [
+    (2, 0, ([1, 2], [2, 1])),
+    (3, 0, ([1, 2], [2, 1], [2, 3], [3, 2])),
+    (2, 1, ([1, 2], [2, 1])),
+]
+    fit(
         G = G,
         R = R,
+        S = 0,
+        insertstep = 1,
         transitions = transitions,
         datatype = "rna",
-        datapath = "data/",
+        datapath = "data/HCT116_testdata",
         gene = "MYC",
-        datacond = cond
+        cell = "HCT116",
+        datacond = "MOCK",
+        resultfolder = "HCT116_test",
     )
-    push!(fits_list, fits)
 end
-
-# Compare conditions
-compare_conditions(fits_list, conditions, "results/comparison/")
 ```
 
-### Model Comparison
-
-```julia
-# Fit different models
-models = [
-    (G=2, R=0),  # Basic telegraph
-    (G=3, R=0),  # Three-state
-    (G=2, R=1)   # With pre-RNA
-]
-
-model_fits = []
-for (G, R) in models
-    fits, stats, measures, data, model, options = fit(
-        G = G,
-        R = R,
-        transitions = ([1,2], [2,1]),
-        datatype = "rna",
-        datapath = "data/",
-        gene = "MYC",
-        datacond = "CONTROL"
-    )
-    push!(model_fits, (fits, stats))
-end
-
-# Compare models
-compare_models(model_fits, models, "results/model_comparison/")
-```
-
-## Best Practices
-
-1. **Data Quality**
-   - Check for outliers
-   - Verify count normalization
-   - Consider batch effects
-
-2. **Model Selection**
-   - Start with simple models
-   - Use model selection criteria
-   - Validate assumptions
-
-3. **Analysis Pipeline**
-   - Document analysis steps
-   - Save intermediate results
-   - Use consistent naming conventions
-
-## Common Issues and Solutions
-
-### Zero-Inflation
-```julia
-# Handle zero-inflation
-fits = fit(
-    G = G,
-    R = R,
-    transitions = transitions,
-    datatype = "rna",
-    datapath = "data/",
-    gene = "MYC",
-    datacond = "CONTROL",
-    zero_inflation = true
-)
-```
-
-### Batch Effects
-```julia
-# Account for batch effects
-fits = fit(
-    G = G,
-    R = R,
-    transitions = transitions,
-    datatype = "rna",
-    datapath = "data/",
-    gene = "MYC",
-    datacond = "CONTROL",
-    batch_correction = true
-)
-```
-
-## Next Steps
-
-- Try different model configurations
-- Experiment with more complex models
-- Compare results across different genes
-
-For more advanced examples, see:
-- Multi-State Models
-- Pre-RNA Steps
-- Coupled Models 
+Rates are reported in inverse minutes. Halflife metadata, when used, are read
+from the project `data/halflives` folder.

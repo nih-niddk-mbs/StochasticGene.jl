@@ -225,8 +225,8 @@ The script calls `fit(...)` with `ARGS[1]` as the gene.
 # Arguments
 - `genes`: vector of gene names
 - `batchsize=1000`: number of jobs per swarm file when `genes` is large
-- `filter_metadata=true`: for folder-scanned RNA runs, use [`checkgenes`](@ref) so genes are filtered by
-  available halflife and allele metadata. Set `false` to scan filenames only.
+- `filter_metadata=false`: for folder-scanned RNA runs, scan filenames only. Set `true` to use
+  [`checkgenes`](@ref) and filter by available halflife and allele metadata.
 - `thresholdlow=0.0`, `thresholdhigh=1e8`: halflife bounds passed to [`checkgenes`](@ref)
 - `filedir="."`: directory to write swarm and script files
 - Plus the same fit/model kwargs (datatype, `datapath`, cell, `datacond`, optional legacy `dttype` / `traceinfo`,
@@ -263,7 +263,7 @@ function _genes_from_rna_datafolder(datapath::String, datacond; root::String="."
     return genes
 end
 
-function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", filter_metadata::Bool=true, thresholdlow::Float64=0.0, thresholdhigh::Float64=1e8, kwargs...)
+function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", filter_metadata::Bool=false, thresholdlow::Float64=0.0, thresholdhigh::Float64=1e8, kwargs...)
     genes = if filter_metadata
         checkgenes(String(root), datacond isa AbstractVector ? String.(datacond) : String(datacond), datapath, cell, thresholdlow, thresholdhigh)
     else

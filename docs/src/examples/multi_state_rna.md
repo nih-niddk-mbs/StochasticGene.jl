@@ -1,214 +1,120 @@
 # Multi-State RNA Analysis
 
-This example demonstrates how to analyze RNA count data using models with multiple gene states.
+This example shows how to fit `datatype="rna"` histograms with more than two
+gene states.
 
-## Setup
+## Data Layout
 
-First, let's set up our project directory and load the package:
+The RNA loader uses the same `GENE_COND.txt` histogram layout as the basic RNA
+example:
+
+```text
+data/HCT116_testdata/
+├── CENPL_MOCK.txt
+└── MYC_MOCK.txt
+```
+
+The first column is the RNA copy-number histogram.
+
+## Three-State Model
+
+A common three-state topology has reversible transitions between states 1 and 2
+and between states 2 and 3:
 
 ```julia
 using StochasticGene
 
-# Create project directory
-mkdir("multi_state_example")
-cd("multi_state_example")
+transitions = ([1, 2], [2, 1], [2, 3], [3, 2])
 
-# Generate example data using test_fit_simrna with a multi-state model
-fitted_rates, target_rates = test_fit_simrna(
-    rtarget=[0.33, 0.19, 0.15, 2.5, 1.0],  # Target rates for simulation
-    transitions=([1, 2], [2, 1], [2, 3], [3, 2]),  # Three-state model
-    G=3,                             # 3 gene states
-    nRNA=100,                        # Number of RNA molecules
-    nalleles=2,                      # Number of alleles
-    fittedparam=[1, 2, 3, 4],       # Parameters to fit
-    nchains=1                        # Single MCMC chain for example
-)
-
-# Print results
-println("Fitted rates: ", fitted_rates)
-println("Target rates: ", target_rates)
-```
-
-## Data Preparation
-
-Place your RNA count data in the `data/` directory. The data should be organized as follows:
-
-```
-data/
-├── gene_name/
-│   ├── condition1/
-│   │   ├── counts.csv
-│   │   └── metadata.csv
-│   └── condition2/
-│       ├── counts.csv
-│       └── metadata.csv
-```
-
-## Model Definition
-
-We'll fit a model with:
-- 3 gene states (G=3)
-- No pre-RNA steps (R=0)
-- Complex transitions between states
-
-```julia
-# Define model parameters
-G = 3  # Number of gene states
-R = 0  # Number of pre-RNA steps
-
-# Define state transitions
-# Format: (from_states, to_states)
-transitions = (
-    [1, 2, 3],  # From states
-    [2, 3, 1]   # To states
-)
-
-# Define transcription rates for each state
-transcription_rates = [0.0, 1.0, 2.0]  # No transcription in state 1
-```
-
-## Fitting the Model
-
-Now we can fit the model to our RNA count data:
-
-```julia
-# Fit the model
 fits, stats, measures, data, model, options = fit(
-    G = G,
-    R = R,
+    G = 3,
+    R = 0,
+    S = 0,
+    insertstep = 1,
     transitions = transitions,
-    transcription_rates = transcription_rates,
     datatype = "rna",
-    datapath = "data/",
+    datapath = "data/HCT116_testdata",
     gene = "MYC",
-    datacond = "CONTROL"
+    cell = "HCT116",
+    datacond = "MOCK",
+    resultfolder = "HCT116_test",
+    fittedparam = [1, 2, 3, 4],
+    nchains = 2,
+    maxtime = 60.0,
+    samplesteps = 1_000_000,
+    propcv = 0.01,
 )
 ```
 
-## Analyzing Results
+For RNA-only `G` models with `R=0`, the fitted parameters above correspond to
+the transition rates. The final rate is the RNA decay rate; with
+`decayrate=-1.0` (default), `fit` tries to use gene-specific halflife metadata
+when available.
 
-### Basic Analysis
+## Model Comparison
 
-```julia
-# Print basic statistics
-println(stats)
-
-# Plot the results
-using Plots
-plot(fits)
-
-# Save results
-save_results(fits, "results/")
-```
-
-### State Analysis
+You can fit multiple state topologies to the same histogram and compare the
+written `measures_*.txt` / summary CSV outputs:
 
 ```julia
-# Analyze state probabilities
-state_probs = analyze_states(fits)
-plot_states(state_probs, "results/states/")
-
-# Calculate state residence times
-residence_times = analyze_residence_times(fits)
-plot_residence_times(residence_times, "results/residence_times/")
-```
-
-### Burst Analysis
-
-```julia
-# Analyze transcriptional bursts
-burst_stats = analyze_bursts(fits)
-println(burst_stats)
-
-# Plot burst statistics
-plot_bursts(fits, "results/bursts/")
-```
-
-## Advanced Analysis
-
-### State Transition Analysis
-
-```julia
-# Analyze state transitions
-transitions = analyze_transitions(fits)
-
-# Plot transition probabilities
-plot_transitions(transitions, "results/transitions/")
-
-# Calculate transition rates
-rates = calculate_transition_rates(fits)
-println(rates)
-```
-
-### Model Comparison
-
-```julia
-# Compare different state configurations
-configurations = [
-    (G=2, rates=[0.0, 1.0]),           # Two-state
-    (G=3, rates=[0.0, 1.0, 2.0]),      # Three-state
-    (G=4, rates=[0.0, 1.0, 2.0, 3.0])  # Four-state
+models = [
+    (G = 2, transitions = ([1, 2], [2, 1])),
+    (G = 3, transitions = ([1, 2], [2, 1], [2, 3], [3, 2])),
 ]
 
-config_fits = []
-for (G, rates) in configurations
-    fits, stats, measures, data, model, options = fit(
-        G = G,
-        R = R,
-        transitions = ([1:G...], [2:G..., 1]),
-        transcription_rates = rates,
+for spec in models
+    fit(
+        G = spec.G,
+        R = 0,
+        S = 0,
+        insertstep = 1,
+        transitions = spec.transitions,
         datatype = "rna",
-        datapath = "data/",
+        datapath = "data/HCT116_testdata",
         gene = "MYC",
-        datacond = "CONTROL"
+        cell = "HCT116",
+        datacond = "MOCK",
+        resultfolder = "HCT116_test",
+        nchains = 2,
+        maxtime = 60.0,
+        samplesteps = 1_000_000,
     )
-    push!(config_fits, (fits, stats))
 end
-
-# Compare configurations
-compare_configurations(config_fits, configurations, "results/config_comparison/")
 ```
 
-## Best Practices
+Then assemble result tables:
 
-1. **Model Selection**
-   - Start with simpler models
-   - Use model selection criteria
-   - Validate state assumptions
-
-2. **Parameter Estimation**
-   - Check parameter identifiability
-   - Verify convergence
-   - Consider parameter correlations
-
-3. **Interpretation**
-   - Relate states to biological mechanisms
-   - Consider experimental validation
-   - Document assumptions
-
-## Common Issues and Solutions
-
-### Parameter Identifiability
 ```julia
-# Check parameter identifiability
-identifiability = check_identifiability(fits)
-plot_identifiability(identifiability, "results/identifiability/")
+write_dataframes_only(
+    "results/HCT116_test",
+    "data/HCT116_testdata";
+    datatype = "rna",
+)
 ```
 
-### State Validation
+## Gene Panels
+
+The same model can be run over every matching gene file with
+`makeswarm_genes`:
+
 ```julia
-# Validate state assignments
-validation = validate_states(fits)
-plot_validation(validation, "results/validation/")
+out = makeswarm_genes(
+    datapath = "data/HCT116_testdata",
+    datacond = "MOCK",
+    cell = "HCT116",
+    resultfolder = "HCT116_test",
+    filedir = "run-HCT116-three-state",
+    G = 3,
+    R = 0,
+    S = 0,
+    insertstep = 1,
+    transitions = ([1, 2], [2, 1], [2, 3], [3, 2]),
+    fittedparam = [1, 2, 3, 4],
+    nchains = 2,
+    nthreads = 1,
+    batchsize = 1000,
+)
 ```
 
-## Next Steps
-
-- Try different state configurations
-- Experiment with transition patterns
-- Compare results across different genes
-
-For more advanced examples, see:
-- Pre-RNA Steps
-- Coupled Models
-- Hierarchical Models 
+`makeswarm_genes` scans filenames by default. Use `filter_metadata=true` only
+when you want to restrict the gene list through `checkgenes`.

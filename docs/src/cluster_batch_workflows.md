@@ -26,7 +26,17 @@ Use these in new code:
 | Write scripts + command file from CSV | [`make_fitscripts_and_commandfile_from_csv`][make_fitscripts_and_commandfile_from_csv] |
 | Biowulf naming wrappers | [`make_swarmfile_from_csv`][make_swarmfile_from_csv], [`make_fitscripts_and_swarm_from_csv`][make_fitscripts_and_swarm_from_csv] |
 
-**Gene panels:** [`write_fitfile_genes`][write_fitfile_genes] and [`makeswarm_genes`][makeswarm_genes] produce **one** shared script with `gene=ARGS[1]` and one swarm line per gene (still the recommended pattern for many genes, one model). Pass an explicit gene vector, or omit the vector and let `makeswarm_genes(; datapath=..., datacond=...)` scan an RNA data folder for matching `GENE_COND.txt` files.
+**Gene panels:** [`write_fitfile_genes`][write_fitfile_genes] and [`makeswarm_genes`][makeswarm_genes] produce **one** shared script with `gene=ARGS[1]` and one swarm line per gene (still the recommended pattern for many genes, one model). Pass an explicit gene vector, or omit the vector and let `makeswarm_genes(; datapath=..., datacond=...)` scan an RNA data folder for matching `GENE_COND.txt` files. Pass `filter_metadata=true` to use `checkgenes` and restrict to genes with available halflife/allele metadata.
+
+For `datatype="rna"`, each input file is a steady-state RNA histogram named
+`GENE_COND.txt`; the first column is the histogram over RNA copy number bins.
+For example:
+
+```text
+data/HCT116_testdata/
+├── CENPL_MOCK.txt
+└── MYC_MOCK.txt
+```
 
 ```julia
 using StochasticGene
@@ -79,6 +89,35 @@ for f in fit_*.swarm; do
 done
 ```
 
+For a larger scRNA folder on Biowulf, the same pattern applies. If the data are
+under `/data/carsonc/scrna/data/RamosNELFA_NEG_IFNa_rep1_Sdata` and files are
+named like `AFF2_NIr1.txt`, use `root="/data/carsonc/scrna"`,
+`datapath="RamosNELFA_NEG_IFNa_rep1_Sdata"`, and `datacond="NIr1"`:
+
+```julia
+out = makeswarm_genes(
+    root="/data/carsonc/scrna",
+    datapath="RamosNELFA_NEG_IFNa_rep1_Sdata",
+    datacond="NIr1",
+    cell="U3A",
+    resultfolder="RamosNELFA_NEG_IFNa_rep1",
+    filedir="run-RamosNELFA_NEG_IFNa_rep1",
+    batchsize=4800,
+    nchains=2,
+    nthreads=1,
+    project="/home/carsonc/github/StochasticGene.jl/",
+)
+```
+
+The function prints the number of genes, the batch size, and the number of
+generated command files. The return value contains the same information plus
+paths:
+
+```julia
+length(out.genes)
+out.commandfiles
+```
+
 The same writer can also add launch wrappers for non-Biowulf systems:
 
 ```julia
@@ -107,7 +146,7 @@ makeswarm_genes(
 )
 ```
 
-In v0.7.8, `makeswarm(; datafolder=..., conds=...)` inferred genes from the data folder. Current `makeswarm(["key1", ...])` is key-based; the folder-scanning RNA behavior now lives in `makeswarm_genes(; datapath=..., datacond=...)`.
+In v0.7.8, `makeswarm(; datafolder=..., conds=...)` inferred genes from the data folder. Current `makeswarm(["key1", ...])` is key-based; the folder-scanning RNA behavior now lives in `makeswarm_genes(; datapath=..., datacond=...)`. Use `filter_metadata=true` when you want the older `checkgenes` metadata gate.
 
 ---
 
