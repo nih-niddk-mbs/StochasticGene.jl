@@ -1,5 +1,10 @@
 # MS2 Reporter Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. Some snippets use older helper
+    names and should not be copied verbatim without checking the current
+    `fit`, `trace_specs`, and analysis APIs.
+
 This example demonstrates how to analyze live cell imaging data using MS2 reporters.
 
 ## Setup
@@ -61,8 +66,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ## Model Interpretation
@@ -77,16 +81,14 @@ The fitted model provides:
 
 ### Time Series Analysis
 ```julia
-# Analyze time series data
-time_series = analyze_time_series(fits)
-plot(time_series)
+# For fitted key-based trace folders, use:
+write_traces_key("results/my-ms2-run")
 ```
 
 ### Burst Analysis
 ```julia
-# Analyze transcriptional bursts
-burst_stats = analyze_bursts(fits)
-println(burst_stats)
+# For burst summaries, run fits with `burst=true` and inspect the burst output
+# files written by `fit`.
 ```
 
 ## Next Steps
@@ -98,4 +100,4 @@ println(burst_stats)
 For more advanced examples, see:
 - Dual Reporter System
 - Time Series Analysis
-- Coupled Models 
+- Coupled Models

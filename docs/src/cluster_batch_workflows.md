@@ -26,7 +26,7 @@ Use these in new code:
 | Write scripts + command file from CSV | [`make_fitscripts_and_commandfile_from_csv`][make_fitscripts_and_commandfile_from_csv] |
 | Biowulf naming wrappers | [`make_swarmfile_from_csv`][make_swarmfile_from_csv], [`make_fitscripts_and_swarm_from_csv`][make_fitscripts_and_swarm_from_csv] |
 
-**Gene panels:** [`write_fitfile_genes`][write_fitfile_genes] and [`makeswarm_genes`][makeswarm_genes] produce **one** shared script with `gene=ARGS[1]` and one swarm line per gene (still the recommended pattern for many genes, one model). Pass an explicit gene vector, or omit the vector and let `makeswarm_genes(; datapath=..., datacond=...)` scan an RNA data folder for matching `GENE_COND.txt` files. Pass `filter_metadata=true` to use `checkgenes` and restrict to genes with available halflife/allele metadata.
+**Gene panels:** [`write_fitfile_genes`][write_fitfile_genes] and [`makeswarm_genes`][makeswarm_genes] produce **one** shared script with `gene=ARGS[1]` and one command-file line per gene (still the recommended pattern for many genes, one model). Pass an explicit gene vector, or omit the vector and let `makeswarm_genes(; datapath=..., datacond=...)` scan an RNA data folder for matching `GENE_COND.txt` files. By default, folder scanning uses `checkgenes` and restricts to genes with available halflife/allele metadata; pass `filter_metadata=false` to scan filenames only.
 
 For `datatype="rna"`, each input file is a steady-state RNA histogram named
 `GENE_COND.txt`; the first column is the histogram over RNA copy number bins.
@@ -59,12 +59,11 @@ makeswarm_genes(
 )
 ```
 
-By default this writes a Biowulf-style command file named `fit.swarm`.
-For large gene panels, leave `batchsize=1000` or set it explicitly; when the
-gene count is larger than `batchsize`, `makeswarm_genes` writes numbered swarm
-files such as `fit_rna-HCT116_MOCK_2001_1.swarm`,
-`fit_rna-HCT116_MOCK_2001_2.swarm`, and so on. The return value is a named tuple
-with `genes`, `fitfile`, and `commandfiles`.
+By default this writes a single Biowulf-style command file named `fit.swarm`,
+with one command per gene. For large gene panels on Biowulf, keep one command
+file and use `swarm -b <bundle>` when submitting. This reduces the Slurm array
+size without making many separate swarm submissions. The return value is a named
+tuple with `genes`, `fitfile`, and `commandfiles`.
 
 ```julia
 out = makeswarm_genes(
@@ -72,7 +71,6 @@ out = makeswarm_genes(
     datacond="MOCK",
     resultfolder="HCT116_test",
     filedir="run-HCT116-testdata-rna",
-    batchsize=1000,
     nchains=2,
     nthreads=1,
 )
@@ -80,13 +78,12 @@ out = makeswarm_genes(
 out.commandfiles
 ```
 
-Submit each command file on Biowulf:
+Submit the command file on Biowulf. For thousands of genes, use `-b` to bundle
+multiple gene commands serially within each array task:
 
 ```bash
 cd run-HCT116-testdata-rna
-for f in fit_*.swarm; do
-    swarm -f "$f" -g 4 -t 2 --time 02:00:00 --merge-output --module julia
-done
+swarm -f fit.swarm -b 20 -g 4 -t 2 --time 02:00:00 --merge-output --module julia
 ```
 
 For a larger scRNA folder on Biowulf, the same pattern applies. If the data are
@@ -102,16 +99,22 @@ out = makeswarm_genes(
     cell="U3A",
     resultfolder="RamosNELFA_NEG_IFNa_rep1",
     filedir="run-RamosNELFA_NEG_IFNa_rep1",
-    batchsize=4800,
     nchains=2,
     nthreads=1,
     project="/home/carsonc/github/StochasticGene.jl/",
 )
 ```
 
-The function prints the number of genes, the batch size, and the number of
-generated command files. The return value contains the same information plus
-paths:
+The function prints the number of genes and the number of generated command
+files. Submit the single command file with bundling:
+
+```bash
+cd run-RamosNELFA_NEG_IFNa_rep1
+swarm -f fit.swarm -b 20 -g 4 -t 2 --time 02:00:00 --merge-output --module julia
+```
+
+Set `batchsize=<N>` only when you deliberately want several command files. The
+return value contains the gene list and paths:
 
 ```julia
 length(out.genes)
@@ -146,7 +149,7 @@ makeswarm_genes(
 )
 ```
 
-In v0.7.8, `makeswarm(; datafolder=..., conds=...)` inferred genes from the data folder. Current `makeswarm(["key1", ...])` is key-based; the folder-scanning RNA behavior now lives in `makeswarm_genes(; datapath=..., datacond=...)`. Use `filter_metadata=true` when you want the older `checkgenes` metadata gate.
+In v0.7.8, `makeswarm(; datafolder=..., conds=...)` inferred genes from the data folder. Current `makeswarm(["key1", ...])` is key-based; the folder-scanning RNA behavior now lives in `makeswarm_genes(; datapath=..., datacond=...)`. By default it uses the older `checkgenes` metadata gate; pass `filter_metadata=false` only when you want to scan filenames directly.
 
 ---
 

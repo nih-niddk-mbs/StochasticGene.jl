@@ -217,20 +217,28 @@ end
 
 """
     makeswarm_genes(genes::Vector{String}; <keyword arguments>)
+    makeswarm_genes(; datapath, datacond, <keyword arguments>)
 
-Write a swarm file and one shared fit script to run each gene in `genes`. Each swarm line runs the same
-script with the gene as argument: `julia -t nthreads -p nchains fitscript_<label>_<model>.jl gene`.
-The script calls `fit(...)` with `ARGS[1]` as the gene.
+Write command files and one shared fit script for RNA/count gene sweeps. The
+explicit-vector form runs each gene in `genes`. The folder-scanning form infers
+genes from `datapath`/`datacond` and then calls the same vector writer.
+
+Each command line runs the same script with the gene as argument:
+`julia -t nthreads -p nchains fitscript_<label>_<model>.jl gene`. The script
+calls `fit(...)` with `ARGS[1]` as the gene.
 
 # Arguments
 - `genes`: vector of gene names
-- `batchsize=1000`: number of jobs per swarm file when `genes` is large
-- `filter_metadata=false`: for folder-scanned RNA runs, scan filenames only. Set `true` to use
-  [`checkgenes`](@ref) and filter by available halflife and allele metadata.
+- `batchsize=nothing`: write all genes into one swarm/command file by default.
+  On Biowulf, use `swarm -b <bundle>` at submission time to reduce array size.
+  Set `batchsize` to an integer only when you deliberately want multiple files.
+- `filter_metadata=true`: folder-scanning form only. Use [`checkgenes`](@ref)
+  and filter by available halflife/allele metadata before writing scripts. Set
+  `false` to scan filenames only.
 - `thresholdlow=0.0`, `thresholdhigh=1e8`: halflife bounds passed to [`checkgenes`](@ref)
-- `rerun_nonconverged=false`: after the normal gene scan/checkgenes step, read an assembled
-  `measures_*.csv` file and keep only genes that fail QC, plus missing genes when
-  `include_missing=true`.
+- `rerun_nonconverged=false`: folder-scanning form only. After the normal gene
+  scan/checkgenes step, read an assembled `measures_*.csv` file and keep only
+  genes that fail QC, plus missing genes when `include_missing=true`.
 - `measures_file=nothing`: assembled measures CSV used by `rerun_nonconverged=true`; if omitted,
   inferred as `results/<resultfolder>/measures_<label>_<cond>_<model>.csv`.
 - QC defaults are deliberately broad for whole-genome reruns: `Rhat > 1.2`, `ESS < 200`,
@@ -322,7 +330,7 @@ function _select_qc_rerun_genes(
     return genes
 end
 
-function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", filter_metadata::Bool=false, thresholdlow::Float64=0.0, thresholdhigh::Float64=1e8,
+function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", filter_metadata::Bool=true, thresholdlow::Float64=0.0, thresholdhigh::Float64=1e8,
     rerun_nonconverged::Bool=false, measures_file::Union{Nothing,AbstractString}=nothing, include_missing::Bool=true,
     rhat_thresh::Union{Nothing,Real}=1.2, ess_min::Union{Nothing,Real}=200, geweke_thresh::Union{Nothing,Real}=nothing, mcse_max::Union{Nothing,Real}=nothing, accept_min::Union{Nothing,Real}=0.01, temp_val::Union{Nothing,Real}=1.0, verbose=true,
     kwargs...)
@@ -364,7 +372,7 @@ function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell:
     makeswarm_genes(genes; datapath=datapath, datacond=datacond, root=root, cell=cell, kwargs...)
 end
 
-function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=nothing, resultfolder::String="HCT116_test", label::String="",
+function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=nothing, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=nothing, resultfolder::String="HCT116_test", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", scheduler=:swarm, scheduler_jobs::Int=16, slurm_mem::String="4G", slurm_time::String="02:00:00", slurm_jobname::String="sg-fit",
     inference_method=nothing, sample_stride=nothing, parallel=nothing, device=nothing, merge_max_memory=nothing, merge_max_gb=nothing, likelihood_executor=nothing, gradient_checkpoint_length=nothing, proposal_cv_rates=nothing, proposal_cv_noise=nothing, init_jitter=nothing, init_jitter_individual=nothing, init_jitter_noise=nothing)
@@ -378,7 +386,11 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
     ngenes = length(genes)
     juliafile_full = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
     commandfiles = String[]
-    if ngenes > batchsize
+    if batchsize !== nothing
+        batchsize = Int(batchsize)
+        batchsize > 0 || throw(ArgumentError("batchsize must be positive or nothing"))
+    end
+    if batchsize !== nothing && ngenes > batchsize
         batches = getbatches(genes, ngenes, batchsize)
         println("number of genes: ", ngenes)
         println("batchsize: ", batchsize)
@@ -392,7 +404,7 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
         end
     else
         println("number of genes: ", ngenes)
-        println("batchsize: ", batchsize)
+        println("batchsize: all genes in one command file")
         println("number of batch files: 1")
         sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
         commandfile = joinpath(filedir, sfile)

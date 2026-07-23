@@ -51,7 +51,10 @@ makeswarm_genes(
 )
 ```
 
-This writes one shared fitscript with `gene=ARGS[1]` and one swarm line per gene found in `root/data/HCT116_testdata`.
+This writes one shared fitscript with `gene=ARGS[1]` and one command-file line
+per gene found in `root/data/HCT116_testdata`. For large Biowulf RNA sweeps,
+keep the default single `fit.swarm` file and use `swarm -b <bundle>` when
+submitting to bundle several gene commands into each Slurm array task.
 
 After the jobs finish, assemble the fit outputs into analysis CSVs:
 

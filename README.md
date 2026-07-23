@@ -115,7 +115,7 @@ Batch helpers:
 
 - **`makeswarm(["key1", "key2"]; filedir=..., resultfolder=..., ...)`** — one swarm line and **`fitscript_<key>.jl`** per key (`fit(; key=..., ...)`).
 - **`makeswarm_genes(["GENE1", "GENE2"]; ...)`** — same model, one job per **gene** (genome-scale scRNA-style).
-- **`makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK", ...)`** — scan the RNA data folder for matching `GENE_COND.txt` files, then run the same gene-panel writer. This is the current replacement for the old v0.7-style `makeswarm(; datafolder=..., conds=...)` RNA sweep. Pass `filter_metadata=true` to use `checkgenes` and restrict to genes with available halflife/allele metadata.
+- **`makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK", ...)`** — scan the RNA data folder for matching `GENE_COND.txt` files, then run the same gene-panel writer. This is the current replacement for the old v0.7-style `makeswarm(; datafolder=..., conds=...)` RNA sweep. By default it uses `checkgenes` and restricts to genes with available halflife/allele metadata; pass `filter_metadata=false` to scan filenames only.
 - **`makeswarm_models`** / **`makeswarmfiles`** — model sweeps, coupled CSV workflows, combined-rate keys; see the [cluster & batch chapter](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html).
 
 The `makeswarm` family always writes a plain command list (`fit.swarm` by default).
@@ -195,9 +195,10 @@ makeswarm_genes(
 )
 ```
 
-For genome-scale scRNA folders, `makeswarm_genes` prints the number of genes,
-the batch size, and the number of generated swarm/command files. Use `batchsize`
-to control how many gene commands go in each file:
+For genome-scale scRNA folders, `makeswarm_genes` now writes one command file by
+default, with one line per gene. On Biowulf, keep that single file and use
+`swarm -b` at submission time to bundle many gene commands into fewer Slurm
+array tasks:
 
 ```julia
 out = makeswarm_genes(
@@ -207,16 +208,21 @@ out = makeswarm_genes(
     cell="U3A",
     resultfolder="RamosNELFA_NEG_IFNa_rep1",
     filedir="run-RamosNELFA_NEG_IFNa_rep1",
-    batchsize=4800,
     nchains=2,
     nthreads=1,
     project="/home/carsonc/github/StochasticGene.jl/",
 )
 ```
 
-By default the gene list is inferred from filenames only. Pass
-`filter_metadata=true` to use `checkgenes` and restrict to genes with available
-halflife/allele metadata.
+Submit on Biowulf with bundling, choosing `-b` so the bundled walltime remains
+reasonable:
+
+```bash
+cd run-RamosNELFA_NEG_IFNa_rep1
+swarm -f fit.swarm -b 20 -g 4 -t 2 --time 2:00:00 --merge-output --module julia
+```
+
+Set `batchsize=<N>` only if you deliberately want multiple command files.
 
 On non-Biowulf systems, pass `scheduler=:slurm` to also write `fit_slurm.sh`,
 or `scheduler=:parallel` to also write `fit_parallel.sh`.

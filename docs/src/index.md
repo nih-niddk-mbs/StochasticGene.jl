@@ -60,6 +60,7 @@ write_dataframes_only("results/HCT116_test", "data/HCT116_testdata"; datatype = 
 - [Installation](installation.md): How to install StochasticGene.jl
 - [Getting Started](getting_started.md): Basic usage and examples
 - [Package overview](package_overview.md): Project layout, `results/` conventions, nomenclature (states vs steps), datatype summary, output files
+- [Documentation audit](documentation_audit.md): Maintainer checklist for docs/docstrings and known documentation risks
 - [v1.11 beta API changes](api/combined_data.md): `CombinedData`, tuple/vector `datatype`, keyed `datapath`, and retired legacy input keywords
 - [Cluster and batch workflows](cluster_batch_workflows.md): Biowulf swarms, `makeswarmfiles`, combined rate files (`create_combined_file*`), and key-based runs
 - [API Reference](api/index.md): Detailed documentation of all functions and types

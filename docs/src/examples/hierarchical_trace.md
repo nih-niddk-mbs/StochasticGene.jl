@@ -1,5 +1,9 @@
 # Hierarchical Trace Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. New hierarchical trace scripts
+    should use the current `fit` keyword interface and `trace_specs`.
+
 This example demonstrates how to analyze trace data using hierarchical models to account for cell-to-cell variability.
 
 ## Setup
@@ -113,8 +117,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ### Cell-Specific Analysis
@@ -150,8 +153,7 @@ variability = analyze_variability(fits)
 plot_variability(variability, "results/variability/")
 
 # Calculate correlation structure
-correlations = calculate_correlations(fits)
-plot_correlations(correlations, "results/correlations/")
+# For key-based coupled trace folders, use `write_correlation_functions_key`.
 ```
 
 ### Model Comparison
@@ -180,7 +182,7 @@ for (hier, name) in models
 end
 
 # Compare models
-compare_models(model_fits, "results/model_comparison/")
+# Compare models using assembled measures, e.g. `write_dataframes(...; measure=:AIC)`.
 ```
 
 ## Best Practices
@@ -229,4 +231,4 @@ plot_parameter_correlations(correlations, "results/parameter_correlations/")
 For more advanced examples, see:
 - Joint Analysis
 - Coupled Models
-- Time Series Analysis 
+- Time Series Analysis

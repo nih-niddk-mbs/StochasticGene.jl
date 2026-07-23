@@ -95,10 +95,11 @@ binary = digit_vector(10, 2)  # [1, 0, 1, 0]
 ### prepare_rates
 
 ```julia
-prepare_rates(rates::Vector{Float64}, model::AbstractModel) -> Vector{Float64}
+prepare_rates(rates, model)
 ```
 
-Prepare rate parameters for model fitting by applying transformations.
+Convert a complete likelihood-ready rate vector into the parameter vector used
+by the sampler for a fitted model.
 
 **Arguments:**
 - `rates`: Raw rate parameters
@@ -117,18 +118,18 @@ prepared = prepare_rates(raw_rates, model)
 ### get_rates
 
 ```julia
-get_rates(parameters::Vector{Float64}, model::AbstractModel, log_scale::Bool=true) -> Vector{Float64}
+get_rates(parameters, model, inverse=true)
 ```
 
-Extract rate parameters from fitted parameters.
+Convert sampler parameters back into complete model rates.
 
 **Arguments:**
 - `parameters`: Fitted parameter vector
 - `model`: Model structure
-- `log_scale`: Whether parameters are in log scale
+- `inverse`: whether to apply the model's inverse parameter transform
 
 **Returns:**
-- Rate parameters
+- Complete rate vector used by likelihood and prediction functions
 
 **Example:**
 ```julia
@@ -140,23 +141,22 @@ rates = get_rates(fitted_params, model, true)
 ### get_param
 
 ```julia
-get_param(parameters::Vector{Float64}, model::AbstractModel, param_type::String) -> Vector{Float64}
+get_param(model)
 ```
 
-Extract specific parameter types from fitted parameters.
+Return the fitted parameters from a model in the transformed space used by the
+sampler. For positive rates this is typically log scale; coupled/sign-constrained
+parameters use their model-specific transforms.
 
 **Arguments:**
-- `parameters`: Fitted parameter vector
 - `model`: Model structure
-- `param_type`: Type of parameters to extract ("rates", "noise", "coupling")
 
 **Returns:**
-- Requested parameters
+- Transformed fitted parameter vector
 
 **Example:**
 ```julia
-# Extract noise parameters
-noise_params = get_param(fitted_params, model, "noise")
+θ0 = get_param(model)
 ```
 
 ### num_rates
@@ -367,7 +367,7 @@ folder_setup("project", ["data", "results", "figures"])
 ### datapdf
 
 ```julia
-datapdf(data::AbstractExperimentalData, filename::String) -> Nothing
+datapdf(data, filename::String) -> Nothing
 ```
 
 Generate PDF summary of data.
@@ -576,45 +576,46 @@ unconverged = large_rhat(mcmc_stats, 1.05)
 ### assemble_measures_model
 
 ```julia
-assemble_measures_model(measures::Vector, model::AbstractModel) -> Dict
+assemble_measures_model(folder, label, model)
 ```
 
-Assemble model measures for analysis.
+Assemble per-fit measure files for a model/label into a summary table.
 
 **Arguments:**
-- `measures`: Vector of measure objects
-- `model`: Model structure
+- `folder`: result folder
+- `label`: output/data label
+- `model`: model string or model identifier used in output filenames
 
 **Returns:**
-- Dictionary of assembled measures
+- Data written to disk; see the function docstring for exact file naming
 
 **Example:**
 ```julia
 # Assemble measures
-assembled = assemble_measures_model(measures, model)
+assemble_measures_model("results/HCT116_test", "rna-HCT116_MOCK", "2001")
 ```
 
 ### assemble_all
 
 ```julia
-assemble_all(fits, stats, measures, model::AbstractModel) -> Dict
+assemble_all(resultfolder, multicond=false)
 ```
 
-Assemble all analysis results.
+Assemble raw rates, measures, and parameter-stat files in a legacy/RNA-style
+result folder.
 
 **Arguments:**
-- `fits`: Fit results
-- `stats`: Statistics
-- `measures`: Measures
-- `model`: Model structure
+- `resultfolder`: folder containing raw `rates_*.txt`, `measures_*.txt`, and
+  `param-stats_*.txt` files
+- `multicond`: whether to parse multi-condition labels
 
 **Returns:**
-- Dictionary of all results
+- Writes assembled CSVs; returns `nothing`
 
 **Example:**
 ```julia
 # Assemble all results
-all_results = assemble_all(fits, stats, measures, model)
+assemble_all("results/HCT116_test")
 ```
 
 ## Performance Utilities
@@ -622,13 +623,14 @@ all_results = assemble_all(fits, stats, measures, model)
 ### set_indices
 
 ```julia
-set_indices(model::AbstractModel) -> Vector{Int}
+set_indices(ntransitions, R, S, insertstep)
 ```
 
 Set parameter indices for efficient computation.
 
 **Arguments:**
-- `model`: Model structure
+- `ntransitions`: Number of G-state transition rates
+- `R`, `S`, `insertstep`: GRS model structure
 
 **Returns:**
 - Vector of parameter indices
@@ -636,13 +638,13 @@ Set parameter indices for efficient computation.
 ### T_dimension
 
 ```julia
-T_dimension(model::AbstractModel) -> Int
+T_dimension(G, R, S)
 ```
 
 Calculate transition matrix dimension.
 
 **Arguments:**
-- `model`: Model structure
+- `G`, `R`, `S`: GRS model dimensions
 
 **Returns:**
 - Matrix dimension

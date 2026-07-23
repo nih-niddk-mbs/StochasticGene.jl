@@ -1,5 +1,10 @@
 # RNA Dwell Time Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. New RNA+dwell workflows should
+    prefer tuple/vector `datatype` values, modality-keyed `datapath`, and
+    `dwell_specs`; see the [CombinedData API](../api/combined_data.md).
+
 This example demonstrates how to analyze RNA dwell-time data together with RNA histograms. For new code, use the `CombinedData` API with `datatype = (:rna, :dwelltime)`. The older `"rnadwelltime"` datatype remains available for legacy scripts.
 
 ## Setup
@@ -120,8 +125,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ### Dwell Time Analysis
@@ -139,12 +143,7 @@ plot_residence_times(residence_times, "results/residence_times/")
 ### Burst Analysis
 
 ```julia
-# Analyze transcriptional bursts
-burst_stats = analyze_bursts(fits)
-println(burst_stats)
-
-# Plot burst statistics
-plot_bursts(fits, "results/bursts/")
+# For burst summaries, run fits with `burst=true` and inspect the burst output files written by `fit`.
 ```
 
 ## Advanced Analysis
@@ -152,11 +151,7 @@ plot_bursts(fits, "results/bursts/")
 ### State Transition Analysis
 
 ```julia
-# Analyze state transitions
-transitions = analyze_transitions(fits)
-
-# Plot transition probabilities
-plot_transitions(transitions, "results/transitions/")
+# Inspect fitted transition rates in `rates_*.txt` or assembled summary CSVs.
 
 # Calculate transition rates
 rates = calculate_transition_rates(fits)

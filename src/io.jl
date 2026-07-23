@@ -367,8 +367,14 @@ end
 
 """
     write_dataframes(resultfolder::String, datapath::String; kwargs...)
+    write_dataframes(; resultfolder, datapath, kwargs...)
 
-Write and assemble model fitting results into CSV files
+Assemble RNA-style result files into summary CSVs and write winner tables.
+
+Use this for legacy/RNA-style result folders whose files are named by
+label/condition/model. For modern key-based folders (`rates_<key>.txt` plus
+`info_<key>.jld2`), use [`write_dataframes_only_key`](@ref) or
+[`make_dataframes_key`](@ref).
 
 # Arguments
 - `resultfolder::String`: Path to folder containing result files
@@ -379,15 +385,14 @@ Write and assemble model fitting results into CSV files
 - `datatype::String="rna"`: Type of data ("rna", "trace", etc.)
 
 # Returns
-- Nothing, but writes:
-  - Individual result files
-  - Summary files (if assemble=true)
-  - Winner files based on selected measure
+Returns `nothing`, but writes summary CSVs and winner files based on selected
+`measure`.
 
 # Notes
-- Creates hierarchical directory structure for results
-- Uses CSV format for better readability and compatibility
-- Automatically handles multiple conditions if specified
+- Calls [`write_dataframes_only`](@ref), then [`write_winners`](@ref).
+- `datatype="rna"` and `datatype="rnacount"` add observed RNA moments when
+  possible.
+- Keyword form is available for scripts that prefer named arguments.
 """
 function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
     write_dataframes_only(resultfolder, datapath, assemble=assemble, multicond=multicond, datatype=datatype)
@@ -408,7 +413,9 @@ end
 """
     write_dataframes_only(resultfolder::String, datapath::String; kwargs...)
 
-Write dataframes to CSV files without selecting winners.
+Assemble and write RNA-style summary CSV files without selecting winners.
+
+For key-based result folders, use [`write_dataframes_only_key`](@ref).
 
 # Arguments
 - `resultfolder::String`: Path to folder containing result files
@@ -418,11 +425,11 @@ Write dataframes to CSV files without selecting winners.
 - `datatype::String="rna"`: Type of data ("rna", "trace", etc.)
 
 # Returns
-- Nothing, but writes individual result files and summary files
+Returns `nothing`, but writes each `(filename, DataFrame)` returned by
+[`make_dataframes`](@ref) into `resultfolder`.
 
 # Notes
-- This function only writes the dataframes, unlike write_dataframes which also selects winners
-- Creates CSV files for each dataframe in the results
+- Unlike [`write_dataframes`](@ref), this does not call [`write_winners`](@ref).
 """
 function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
     dfs = make_dataframes(resultfolder, datapath, assemble, multicond, datatype)
@@ -435,6 +442,18 @@ function write_dataframes_only(resultfolder::String, datapath::String; assemble:
     nothing
 end
 
+"""
+    write_dataframes_only_key(resultfolder::String; datapath=nothing, assemble=true, datatype="rna")
+
+Write `Summary_key.csv` for a key-based result folder.
+
+The folder should contain `rates_<key>.txt` files and, ideally,
+`info_<key>.jld2` files. Metadata from the run specs are used to annotate rows
+with gene, condition, model, allele count, and resolved data path. Set
+`datapath` to override or supply the data path used for observed RNA moments.
+
+Returns `nothing`.
+"""
 function write_dataframes_only_key(resultfolder::String; datapath=nothing, assemble::Bool=true, datatype::String="rna")
     dfs = make_dataframes_key(resultfolder; datapath=datapath, assemble=assemble, datatype=datatype)
     for dff in dfs

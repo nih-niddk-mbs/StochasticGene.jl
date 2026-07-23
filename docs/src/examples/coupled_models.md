@@ -1,5 +1,10 @@
 # Coupled Model Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. For current coupled CSV,
+    combined-rate, and key-based coupled workflows, see
+    [Cluster and batch workflows](../cluster_batch_workflows.md).
+
 This example demonstrates how to analyze coupled models of gene expression, where multiple genes interact with each other.
 
 !!! note "Batch jobs and combined rate files"
@@ -124,8 +129,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ### Gene-Specific Analysis
@@ -157,13 +161,9 @@ plot_coupling_effects(coupling_effects, "results/coupling_effects/")
 ### Time Series Analysis
 
 ```julia
-# Analyze time series
-time_series = analyze_time_series(fits)
-plot_time_series(time_series, "results/time_series/")
-
-# Calculate cross-correlation
-cross_corr = calculate_cross_correlation(fits)
-plot_cross_correlation(cross_corr, "results/cross_correlation/")
+# For fitted key-based coupled trace folders, use:
+write_traces_key("results/my-coupled-trace-run")
+write_correlation_functions_key("results/my-coupled-trace-run")
 ```
 
 ### Model Comparison
@@ -242,4 +242,4 @@ plot_parameter_correlations(correlations, "results/parameter_correlations/")
 For more advanced examples, see:
 - Hierarchical Models
 - Joint Analysis
-- Time Series Analysis 
+- Time Series Analysis

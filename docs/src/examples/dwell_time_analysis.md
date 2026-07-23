@@ -1,5 +1,9 @@
 # Dwell Time Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. New dwell-time workflows
+    should prefer `dwell_specs` and the current `fit` keyword interface.
+
 This example demonstrates how to analyze dwell time distributions from live cell imaging data.
 
 ## Setup
@@ -61,8 +65,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ## Model Interpretation
@@ -83,14 +86,13 @@ write_ONOFFhistograms(fits, "results/")
 ### State Residency
 ```julia
 # Calculate state residency probabilities
-write_residency_G_folder(fits, "results/")
+write_residency_G_folder("results/my-run")
 ```
 
 ### Burst Analysis
 ```julia
-# Analyze transcriptional bursts
-burst_stats = analyze_bursts(fits)
-println(burst_stats)
+# For burst summaries, run fits with `burst=true` and inspect the burst output
+# files written by `fit`.
 ```
 
 ## Next Steps
@@ -102,4 +104,4 @@ println(burst_stats)
 For more advanced examples, see:
 - Coupled States
 - Multiple Conditions
-- Hierarchical Models 
+- Hierarchical Models

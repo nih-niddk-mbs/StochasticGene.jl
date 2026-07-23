@@ -21,6 +21,7 @@ makedocs(
         "Installation" => "installation.md",
         "Getting Started" => "getting_started.md",
         "Package overview" => "package_overview.md",
+        "Documentation audit" => "documentation_audit.md",
         "Cluster and batch workflows" => "cluster_batch_workflows.md",
         "Examples" => [
             "Overview" => "examples/index.md",

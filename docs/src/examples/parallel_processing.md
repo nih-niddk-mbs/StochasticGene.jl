@@ -1,139 +1,118 @@
-# Parallel Processing
+# Parallel And Batch Processing
 
-This example demonstrates how to use parallel processing for analyzing large datasets.
+This page summarizes current options for running many fits. For complete
+cluster examples, see [Cluster and batch workflows](../cluster_batch_workflows.md).
 
-## Setup
+## Parallel Chains In One Fit
 
-First, let's set up our project directory and load the package:
+For Metropolis-Hastings, `nchains` controls how many chains are run and merged.
+When using distributed workers, start Julia with `-p` to match the number of
+parallel chains:
 
-```julia
-using StochasticGene
-
-# Create project directory
-rna_setup("parallel_example")
-cd("parallel_example")
+```bash
+julia -t 1 -p 4 fitscript_rna-HCT116_MOCK_2001.jl CENPL
 ```
 
-## Setting Up Parallel Processing
-
-Initialize parallel processing with the desired number of workers:
+The corresponding fit call should use:
 
 ```julia
-# Set up parallel processing
-setup_parallel(nworkers=4)  # Adjust based on your system
-```
-
-## Fitting Models in Parallel
-
-### Basic Parallel Fitting
-
-```julia
-# Fit multiple models in parallel
-fits = fit_parallel(
-    G = 2,
-    R = 0,
-    transitions = ([1,2], [2,1]),
-    datatype = "rna",
-    datapath = "data/",
-    gene = "MYC",
-    nchains = 4  # Number of parallel chains
-)
-```
-
-### Hierarchical Parallel Fitting
-
-```julia
-# Fit hierarchical models in parallel
-fits = fit_hierarchical(
-    G = 2,
-    R = 0,
-    transitions = ([1,2], [2,1]),
-    datatype = "rna",
-    datapath = "data/",
-    gene = "MYC",
+fit(;
     nchains = 4,
-    hierarchical = true
-)
-```
-
-## Analyzing Results
-
-Let's examine the parallel fitting results:
-
-```julia
-# Print basic statistics
-println(stats)
-
-# Plot the results
-using Plots
-plot(fits)
-
-# Save results
-save_results(fits, "results/")
-```
-
-## Advanced Usage
-
-### Cluster Computing
-
-For large-scale analysis on a computing cluster:
-
-```julia
-# Set up cluster-specific parameters
-setup_parallel(
-    nworkers = 16,
-    cluster = true,
-    memory_limit = "4G"
-)
-
-# Run large-scale analysis
-fits = fit_parallel(
-    G = 2,
-    R = 0,
-    transitions = ([1,2], [2,1]),
+    parallel = :distributed,
     datatype = "rna",
-    datapath = "data/",
-    gene = "MYC",
-    nchains = 16
+    datapath = "HCT116_testdata",
+    gene = "CENPL",
+    datacond = "MOCK",
+    resultfolder = "HCT116_test",
 )
 ```
 
-### Resource Management
+## Many Genes
 
-Monitor and manage parallel resources:
+For scRNA/RNA histogram sweeps, generate one shared fitscript and one command
+file with one command per gene:
 
 ```julia
-# Check worker status
-check_workers()
-
-# Clean up resources
-cleanup_parallel()
+out = makeswarm_genes(
+    root = "/data/carsonc/scrna",
+    datapath = "RamosNELFA_NEG_IFNa_rep1_Sdata",
+    datacond = "NIr1",
+    cell = "U3A",
+    resultfolder = "RamosNELFA_NEG_IFNa_rep1",
+    filedir = "run-RamosNELFA_NEG_IFNa_rep1",
+    nchains = 4,
+    nthreads = 1,
+)
 ```
 
-## Best Practices
+By default, folder scanning uses `checkgenes` and keeps genes with available
+halflife/allele metadata. Pass `filter_metadata=false` only when you want to
+scan filenames directly.
 
-1. **Resource Allocation**
-   - Match worker count to available CPU cores
-   - Consider memory requirements per worker
-   - Monitor system load
+## Biowulf Swarm
 
-2. **Error Handling**
-   - Implement proper error handling for parallel tasks
-   - Log errors and warnings
-   - Implement retry mechanisms
+On Biowulf, submit the single command file with `swarm`. For large gene panels,
+use `-b` to bundle several gene commands into each Slurm array task:
 
-3. **Performance Optimization**
-   - Use appropriate chunk sizes
-   - Balance load across workers
-   - Monitor memory usage
+```bash
+cd run-RamosNELFA_NEG_IFNa_rep1
+swarm -f fit.swarm -b 20 -g 24 -t 4 --time 25:00 --merge-output --module julia
+```
 
-## Next Steps
+Here each Julia command gets `-t 4` CPUs and 24 GB. The `-b 20` flag means each
+array task runs 20 gene commands serially; it reduces scheduler overhead without
+changing per-command resources.
 
-- Try different parallel configurations
-- Experiment with hierarchical models
-- Scale up to cluster computing
+## Slurm Or GNU Parallel
 
-For more advanced examples, see:
-- Cluster Computing
-- Hierarchical Models
-- Large Dataset Analysis 
+On systems without Biowulf `swarm`, ask `makeswarm_genes` to write a launcher:
+
+```julia
+makeswarm_genes(
+    datapath = "HCT116_testdata",
+    datacond = "MOCK",
+    resultfolder = "HCT116_test",
+    filedir = "run-HCT116-testdata-rna",
+    scheduler = :slurm,
+    scheduler_jobs = 100,
+    slurm_mem = "8G",
+    slurm_time = "02:00:00",
+)
+```
+
+Submit with:
+
+```bash
+sbatch run-HCT116-testdata-rna/fit_slurm.sh
+```
+
+For GNU Parallel:
+
+```julia
+makeswarm_genes(
+    datapath = "HCT116_testdata",
+    datacond = "MOCK",
+    resultfolder = "HCT116_test",
+    filedir = "run-HCT116-testdata-rna",
+    scheduler = :parallel,
+    scheduler_jobs = 16,
+)
+```
+
+Run with:
+
+```bash
+./run-HCT116-testdata-rna/fit_parallel.sh
+```
+
+## Sequential Local Fallback
+
+The generated `fit.swarm` file is a plain shell command list, so a regular
+terminal can run it sequentially:
+
+```bash
+bash fit.swarm
+```
+
+This is useful for smoke tests or small panels, but it will not parallelize
+across genes.

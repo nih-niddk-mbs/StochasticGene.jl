@@ -1,5 +1,10 @@
 # Trace Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. Some snippets use older helper
+    names or simplified trace arguments and should not be copied verbatim. For
+    current trace batch/key workflows, see [Cluster and batch workflows](../cluster_batch_workflows.md).
+
 This example demonstrates how to analyze trace data from live cell imaging experiments.
 
 ## Setup
@@ -105,29 +110,19 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ### Trace Visualization
 
 ```julia
-# Plot individual traces
-plot_traces(fits, "results/traces/")
-
-# Plot average trace
-plot_average_trace(fits, "results/average_trace/")
+# For trace predictions, use `write_traces_key` or `write_traces` after fitting.
 ```
 
 ### Burst Analysis
 
 ```julia
-# Analyze transcriptional bursts
-burst_stats = analyze_bursts(fits)
-println(burst_stats)
-
-# Plot burst statistics
-plot_bursts(fits, "results/bursts/")
+# For burst summaries, run fits with `burst=true` and inspect the burst output files written by `fit`.
 ```
 
 ## Advanced Analysis
@@ -135,25 +130,15 @@ plot_bursts(fits, "results/bursts/")
 ### Time Series Analysis
 
 ```julia
-# Analyze time series
-time_series = analyze_time_series(fits)
-
-# Plot time series
-plot_time_series(time_series, "results/time_series/")
-
-# Calculate autocorrelation
-autocorr = calculate_autocorrelation(fits)
-plot_autocorrelation(autocorr, "results/autocorrelation/")
+# For fitted key-based trace folders, use:
+write_traces_key("results/my-trace-run")
+write_correlation_functions_key("results/my-coupled-trace-run")
 ```
 
 ### State Transitions
 
 ```julia
-# Analyze state transitions
-transitions = analyze_transitions(fits)
-
-# Plot transition probabilities
-plot_transitions(transitions, "results/transitions/")
+# Inspect fitted transition rates in `rates_*.txt` or assembled summary CSVs.
 
 # Calculate transition rates
 rates = calculate_transition_rates(fits)
@@ -233,4 +218,4 @@ corrected_fits = correct_background(fits)
 For more advanced examples, see:
 - Hierarchical Models
 - Joint Analysis
-- Coupled Models 
+- Coupled Models

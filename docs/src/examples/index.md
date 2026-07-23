@@ -1,29 +1,41 @@
 # Examples
 
-This section contains detailed examples of using StochasticGene.jl for various analysis scenarios.
+This section contains examples of using StochasticGene.jl for various analysis
+scenarios.
+
+The most current, runnable workflow examples are:
+
+- [RNA Histogram Analysis](rna_histogram.md)
+- [Multi-State Model](multi_state_rna.md)
+- [Shared Parameter Trace Fits](shared_parameter_fits.md)
+- [Cluster and batch workflows](../cluster_batch_workflows.md)
+
+Several older pages in this section are retained as conceptual sketches while
+the v1.11/2.0 API is being finalized. Those pages are marked with a legacy
+notice and should not be copied verbatim until refreshed.
 
 ## Basic Examples
 
 ### RNA Count Analysis
-- [Basic Telegraph Model](basic_telegraph.md): Fitting a simple two-state model to RNA count data
-- [Multi-State Model](multi_state_rna.md): Fitting a model with multiple gene states
-- [RNA Histogram Analysis](rna_histogram.md): Analyzing RNA count distributions
+- [Basic Telegraph Model](basic_telegraph.md): Legacy conceptual sketch for a simple two-state model
+- [Multi-State Model](multi_state_rna.md): Current workflow for fitting a model with multiple gene states
+- [RNA Histogram Analysis](rna_histogram.md): Current workflow for RNA histogram/scRNA sweeps
 
 ### Live Cell Imaging
-- [MS2 Reporter Analysis](ms2_analysis.md): Analyzing MS2 reporter data
-- [Trace Analysis](trace_analysis.md): Analyzing time series data
+- [MS2 Reporter Analysis](ms2_analysis.md): Legacy conceptual sketch for MS2 reporter data
+- [Trace Analysis](trace_analysis.md): Legacy conceptual sketch for time-series data
 
 ### Dwell Time Analysis
-- [Basic Dwell Times](dwell_time_analysis.md): Analyzing basic dwell time distributions
-- [RNA Dwell Time Analysis](rna_dwell_time.md): Advanced dwell time analysis
+- [Basic Dwell Times](dwell_time_analysis.md): Legacy conceptual sketch for dwell-time distributions
+- [RNA Dwell Time Analysis](rna_dwell_time.md): Legacy conceptual sketch for RNA+dwell-time analysis
 
 ## Advanced Examples
 
 Cluster / Biowulf batch generation and combined rate files are documented on the top-level page [Cluster and batch workflows](../cluster_batch_workflows.md) (`makeswarmfiles`, `create_combined_file`, etc.), not in this examples tree.
 
 ### Parallel Processing
-- [Parallel Processing](parallel_processing.md): Using parallel processing for large datasets
-- [Shared Parameter Trace Fits](shared_parameter_fits.md): Combining datasets across folders with arbitrary grouping levels and exact parameter sharing
+- [Parallel Processing](parallel_processing.md): Legacy conceptual sketch; use [Cluster and batch workflows](../cluster_batch_workflows.md) for current batch generation
+- [Shared Parameter Trace Fits](shared_parameter_fits.md): Current workflow for exact parameter sharing across grouped datasets
 
 ## Contributing Examples
 

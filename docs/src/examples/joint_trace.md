@@ -1,5 +1,9 @@
 # Joint Trace Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. For current joint/coupled
+    trace setup and batch generation, see [Cluster and batch workflows](../cluster_batch_workflows.md).
+
 This example demonstrates how to analyze joint trace data from multiple reporters (e.g., MS2 and PP7) in live cell imaging experiments.
 
 ## Setup
@@ -115,8 +119,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ### Reporter-Specific Analysis
@@ -124,19 +127,15 @@ save_results(fits, "results/")
 ```julia
 # Analyze MS2 reporter
 ms2_analysis = analyze_reporter(fits, "ms2")
-plot_reporter(ms2_analysis, "results/ms2/")
 
 # Analyze PP7 reporter
 pp7_analysis = analyze_reporter(fits, "pp7")
-plot_reporter(pp7_analysis, "results/pp7/")
 ```
 
 ### Cross-Correlation Analysis
 
 ```julia
-# Calculate cross-correlation
-cross_corr = calculate_cross_correlation(fits)
-plot_cross_correlation(cross_corr, "results/cross_correlation/")
+# For fitted key-based coupled trace folders, use `write_correlation_functions_key`.
 
 # Analyze time lag
 time_lag = analyze_time_lag(fits)
@@ -148,12 +147,7 @@ plot_time_lag(time_lag, "results/time_lag/")
 ### Burst Analysis
 
 ```julia
-# Analyze transcriptional bursts
-burst_stats = analyze_bursts(fits)
-println(burst_stats)
-
-# Plot burst statistics
-plot_bursts(fits, "results/bursts/")
+# For burst summaries, run fits with `burst=true` and inspect the burst output files written by `fit`.
 ```
 
 ### Multiple Conditions
@@ -230,4 +224,4 @@ corrected_fits = correct_background(fits)
 For more advanced examples, see:
 - Hierarchical Models
 - Coupled Models
-- Time Series Analysis 
+- Time Series Analysis

@@ -1,5 +1,11 @@
 # Basic Telegraph Model
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. Some snippets use older helper
+    names or simplified arguments and should not be copied verbatim. For a
+    current RNA workflow, use [RNA Histogram Analysis](rna_histogram.md) or
+    [Multi-State RNA Analysis](multi_state_rna.md).
+
 This example demonstrates how to fit a simple two-state telegraph model to RNA count data.
 
 ## Setup
@@ -61,8 +67,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ## Model Interpretation
@@ -82,4 +87,4 @@ The fitted model provides:
 For more advanced examples, see:
 - Multi-State Model
 - Pre-RNA Steps
-- Coupled Models 
+- Coupled Models

@@ -80,7 +80,6 @@ out = makeswarm_genes(
     transitions = ([1, 2], [2, 1]),
     nchains = 2,
     nthreads = 1,
-    batchsize = 4800,
     maxtime = 3600.0,
     samplesteps = 1_000_000,
     propcv = 0.01,
@@ -88,8 +87,13 @@ out = makeswarm_genes(
 )
 ```
 
-`makeswarm_genes` prints the number of genes, the batch size, and the number of
-batch command files. It also returns:
+By default, folder scanning uses `checkgenes`, so the gene list is restricted to
+genes with the halflife/allele metadata needed by the RNA fit. Pass
+`filter_metadata=false` only when you deliberately want to scan filenames
+without that metadata gate.
+
+`makeswarm_genes` writes all genes into one command file by default and prints
+the number of genes and command files. It also returns:
 
 ```julia
 out.genes
@@ -97,26 +101,22 @@ out.fitfile
 out.commandfiles
 ```
 
-By default, folder scanning uses filenames only. To restrict to genes that pass
-the older metadata gate, use:
-
-```julia
-filter_metadata = true
-```
-
 ## Submit On Biowulf
 
-If `batchsize` splits the run into numbered swarm files, submit each file:
+Submit the single command file with Biowulf `swarm`. For large gene panels, use
+`-b` at submission time to bundle several gene commands into each Slurm array
+task:
 
 ```bash
 cd run-RamosNELFA_NEG_IFNa_rep1
-for f in fit_*.swarm; do
-    swarm -f "$f" -g 4 -t 2 --time 2:00:00 --merge-output --module julia
-done
+swarm -f fit.swarm -b 20 -g 4 -t 2 --time 2:00:00 --merge-output --module julia
 ```
 
-Here `-t 2` matches `nchains=2, nthreads=1`. Increase memory or walltime if
-your model settings require it.
+Here `-t 2` matches `nchains=2, nthreads=1`. The `-b 20` option makes each
+Slurm array task run 20 gene commands serially; it reduces array size without
+changing the resources used by each Julia command. Set `batchsize=<N>` in
+`makeswarm_genes` only if you deliberately want several numbered command files.
+Increase memory or walltime if your model settings require it.
 
 ## Local Or Other Schedulers
 

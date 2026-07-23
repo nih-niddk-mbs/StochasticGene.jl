@@ -1,5 +1,10 @@
 # Dual Reporter Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. Some snippets use older helper
+    names and should be checked against the current `trace_specs`,
+    `dwell_specs`, and coupled-model APIs before use.
+
 This example demonstrates how to analyze data from dual reporter systems (e.g., MS2 and PP7) in live cell imaging experiments.
 
 ## Setup
@@ -89,8 +94,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ### Reporter-Specific Analysis
@@ -98,11 +102,9 @@ save_results(fits, "results/")
 ```julia
 # Analyze MS2 data
 ms2_stats = analyze_reporter(fits, "MS2")
-plot_reporter(ms2_stats, "results/ms2/")
 
 # Analyze PP7 data
 pp7_stats = analyze_reporter(fits, "PP7")
-plot_reporter(pp7_stats, "results/pp7/")
 ```
 
 ### Cross-Correlation Analysis
@@ -112,7 +114,6 @@ plot_reporter(pp7_stats, "results/pp7/")
 correlation = analyze_correlation(fits)
 
 # Plot correlation
-plot_correlation(correlation, "results/correlation/")
 ```
 
 ## Advanced Analysis
@@ -131,8 +132,7 @@ plot_time_lags(time_lags, "results/time_lags/")
 
 ```julia
 # Analyze bursts for each reporter
-ms2_bursts = analyze_bursts(fits, "MS2")
-pp7_bursts = analyze_bursts(fits, "PP7")
+# For reporter-specific burst summaries, run fits with `burst=true` and inspect the burst output files.
 
 # Compare burst statistics
 compare_bursts(ms2_bursts, pp7_bursts, "results/bursts/")
@@ -189,4 +189,4 @@ compare_conditions(fits_list, conditions, "results/comparison/")
 For more advanced examples, see:
 - Time Series Analysis
 - Coupled Models
-- Hierarchical Models 
+- Hierarchical Models

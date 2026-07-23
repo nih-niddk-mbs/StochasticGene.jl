@@ -1,5 +1,10 @@
 # RNA On-Off Analysis
 
+!!! warning "Legacy conceptual example"
+    This page is retained as a conceptual sketch. Some snippets use older helper
+    names and simplified arguments. Prefer current `fit` keyword calls and
+    key-aware analysis helpers for new work.
+
 This example demonstrates how to analyze RNA data with explicit on-off states.
 
 ## Setup
@@ -99,8 +104,7 @@ println(stats)
 using Plots
 plot(fits)
 
-# Save results
-save_results(fits, "results/")
+# Fit writes rates, measures, and parameter statistics under `resultfolder`.
 ```
 
 ### On-Off Analysis
@@ -118,12 +122,7 @@ plot_residence_times(residence_times, "results/residence_times/")
 ### Burst Analysis
 
 ```julia
-# Analyze transcriptional bursts
-burst_stats = analyze_bursts(fits)
-println(burst_stats)
-
-# Plot burst statistics
-plot_bursts(fits, "results/bursts/")
+# For burst summaries, run fits with `burst=true` and inspect the burst output files written by `fit`.
 ```
 
 ## Advanced Analysis
@@ -131,11 +130,7 @@ plot_bursts(fits, "results/bursts/")
 ### State Transition Analysis
 
 ```julia
-# Analyze state transitions
-transitions = analyze_transitions(fits)
-
-# Plot transition probabilities
-plot_transitions(transitions, "results/transitions/")
+# Inspect fitted transition rates in `rates_*.txt` or assembled summary CSVs.
 
 # Calculate transition rates
 rates = calculate_transition_rates(fits)
@@ -213,4 +208,4 @@ plot_validation(validation, "results/validation/")
 For more advanced examples, see:
 - Pre-RNA Steps
 - Coupled Models
-- Hierarchical Models 
+- Hierarchical Models

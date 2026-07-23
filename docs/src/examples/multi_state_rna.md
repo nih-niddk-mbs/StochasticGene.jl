@@ -112,9 +112,19 @@ out = makeswarm_genes(
     fittedparam = [1, 2, 3, 4],
     nchains = 2,
     nthreads = 1,
-    batchsize = 1000,
 )
 ```
 
-`makeswarm_genes` scans filenames by default. Use `filter_metadata=true` only
-when you want to restrict the gene list through `checkgenes`.
+`makeswarm_genes` uses `checkgenes` by default, so folder-scanned RNA runs keep
+the older halflife/allele metadata gate. Pass `filter_metadata=false` only when
+you want to scan matching filenames without that metadata filter.
+
+For large panels, keep the default single `fit.swarm` file and bundle commands
+when submitting on Biowulf:
+
+```bash
+swarm -f fit.swarm -b 20 -g 4 -t 2 --time 2:00:00 --merge-output --module julia
+```
+
+Use `batchsize=<N>` only if you deliberately want `makeswarm_genes` to split the
+commands into several numbered files.

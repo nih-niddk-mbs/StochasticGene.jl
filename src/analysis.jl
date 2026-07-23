@@ -4735,6 +4735,35 @@ function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3
     end
 end
 
+"""
+    write_correlation_functions_key(folder::String; lags=0:200, ratetype="median",
+                                    insertstep=nothing, observables=nothing,
+                                    pairs=nothing, write_legacy=true,
+                                    write_general=true, validate=true)
+
+Compute theoretical correlation functions for key-based result folders.
+
+The function walks `folder` for `info_<key>.jld2` files, loads the matching
+`rates_<key>.txt` files, and writes correlation CSVs for coupled/tuple models.
+For shared fits, it uses the shared-rate output metadata in the run spec and
+processes each complete group-specific rate file separately.
+
+# Keywords
+- `lags`: lag values passed to the HMM correlation machinery.
+- `ratetype`: row selector for each rate file (`"median"`, `"ml"`, `"mean"`,
+  or `"last"`).
+- `insertstep`: override the run-spec insertion step. `nothing` uses the saved
+  value.
+- `observables`, `pairs`: generalized observable selection. If omitted, the
+  default validation pairs reproduce the historical ON/reporter outputs.
+- `write_legacy`: write the historical `crosscorrelation_*.csv` file.
+- `write_general`: write `crosscorrelation-general_*.csv` with the generalized
+  observable-pair outputs.
+- `validate`: compare generalized ON/reporter outputs against the legacy
+  computation as a regression check.
+
+Returns the number of usable rate/info jobs processed.
+"""
 function write_correlation_functions_key(
     folder::String;
     lags=collect(0:1:200),
