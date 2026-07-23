@@ -93,6 +93,19 @@ Status: current.
 
 ## Audit Checklist For Future Changes
 
+Run the static audit helper first. It does not import `StochasticGene`, so it is
+safe to run before dependency precompilation is clean:
+
+```bash
+julia --startup-file=no docs/audit_docs.jl
+```
+
+To make missing exported-symbol docstring candidates fail the audit:
+
+```bash
+julia --startup-file=no docs/audit_docs.jl --strict-docstrings
+```
+
 1. Search docs and source docstrings for stale keywords:
 
    ```bash

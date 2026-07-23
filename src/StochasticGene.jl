@@ -147,306 +147,132 @@ using Zygote
 using Random
 # using CUDA
 
-export
-    assemble_all,
-    assemble_all_key,
-    assemble_measures_key,
-    assemble_measures_model,
-    assemble_rates_key,
-    assemble_stats_key,
-    CSV,
-    DataFrame,
-    datapdf,
-    digit_vector,
-    fix,
-    fix_filenames,
-    find_best_models,
-    fit,
-    fit_default_spec,
-    fit_coupled_default_spec,
-    maxtime_seconds,
-    INFERENCE_ADVI,
-    INFERENCE_CHOICES,
-    INFERENCE_MH,
-    INFERENCE_NUTS,
-    normalize_trace_specs_legacy_t_end!,
-    AbstractPriorContext,
-    PriorContextCoupled,
-    PriorContextTraceSingleUnit,
-    PriorContextGenericSingle,
-    prior_context,
-    set_priormean_empty,
-    prior_ratemean_trace,
-    trace_prior_variables,
-    create_label,
-    folder_path,
-    folder_setup,
-    get_param,
-    get_rates,
-    get_rates_ad,
-    fixed_rates_ad,
-    GMmodel,
-    GRSMmodel,
-    AbstractGRSMmodel,
-    AbstractGeneTransitionModel,
-    AbstractGMmodel,
-    large_deviance,
-    large_rhat,
-    load_data,
-    load_model,
-    loglikelihood,
-    loglikelihood_ad,
-    HMM_STACK_MH,
-    HMM_STACK_AD,
-    set_hmm_zygote_checkpoint_steps!,
-    hmm_zygote_checkpoint_steps,
-    lsoda,
-    make_array,
-    make_dataframes,
-    make_dataframes_key,
-    make_mat,
-    makeswarm,
-    makeswarm_models,
-    csv_row_to_connections_simple,
-    build_coupled_fit_spec_from_csv_cells,
-    parse_coupling_sign_csv,
-    replace_csv_cell_legacy_r,
-    csv_row_has_legacy_r,
-    makeswarm_coupled,
-    makeswarm_genes,
-    write_fitfile_coupled,
-    make_traces,
-    make_traces_dataframe,
-    mean,
-    mean_elongationtime,
-    metropolis_hastings,
-    GenePosteriorLogDensity,
-    NUTSOptions,
-    ADVIOptions,
-   longest_trace_timesteps,
-   check_ad_gradient_feasibility,
-   run_nuts_fit,
-   run_inference,
-   load_options,
-    logposterior,
-    norm,
-    normalize_histogram,
-    num_all_parameters,
-    n_observed_trace_units,
-    num_rates,
-    on_states,
-    predictedarray,
-    predictedfn,
-    prepare_rates,
-    prepare_rates_ad,
-    plot_empirical_vs_theory,
-    prob_Gaussian,
-    prob_Gaussian_grid,
-    CorrelationAlgorithm,
-    CorrelationTrait,
-    StandardCorrelation,
-    WindowedCorrelation,
-    MultiTauCorrelation,
-    IDLCorrelation,
-    DEFAULT_CORRELATION_ALGORITHM,
-    hastrait,
-    readfile,
-    RNAData,
-    score_models_from_traces,
-    RNADwellTimeData,
-    RNAOnOffData,
-    AbstractCombinedData,
-    CombinedData,
-    combined_modalities,
-    reconstruct_tracerna,
-    DatasetSpec,
-    HierarchyNode,
-    HierarchySpec,
-    HierarchyAssignment,
-    SharedParameterCachePlan,
-    SharedParameterTrait,
-    RecursiveHierarchyCachePlan,
-    RecursiveHierarchyTrait,
-    MultiDatasetData,
-    hierarchy_assignments,
-    hierarchy_node_names,
-    hierarchy_parameter_groups,
-    hierarchy_path,
-    hierarchy_parameter_levels,
-    n_emission_groups,
-    n_transition_rate_groups,
-    compile_shared_parameter_trait,
-    shared_parameter_cache_plan,
-    shared_assignment_rates,
-    shared_transition_group_rates,
-    shared_emission_group_rates,
-    compile_recursive_hierarchy_trait,
-    recursive_hierarchy_cache_plan,
-    recursive_assignment_rates,
-    recursive_transition_group_rates,
-    recursive_emission_group_rates,
-    readrates,
-    read_run_spec,
-    read_run_spec_for_rates_file,
-    info_jld2_path,
-    info_toml_path_for_rates_file,
-    read_rates_folder,
-    rate_distribution_summary,
-    rna_setup,
-   run_mh,
-    set_indices,
-    set_elements_TCoupledUnit,
-    simulate_trace,
-    simulate_trace_data,
-    simulate_trace_vector,
-    simulate_trials,
-    get_3unit_model_params,
-    simulator,
-    simulator_dwell_specs,
-    source_states,
-    stage_combine_rates,
-    stage_combine_rates_specs_from_csv,
-    stage_combine_rates_from_csv,
-    stage_write_run_specs,
-    make_fitscript,
-    write_fitfile_full,
-    make_fitscripts_from_csv,
-    build_julia_script_command,
-    write_julia_command_file,
-    make_commandfile,
-    make_commandfile_from_csv,
-    make_swarmfile_from_csv,
-    make_fitscripts_and_commandfile_from_csv,
-    make_fitscripts_and_swarm_from_csv,
-    stage_label_to_key,
-    label_to_key,
-    staging_key_segment,
-    sparse,
-    summarize_model_scores,
-    joint_residence_prob_onoff,
-    write_joint_residence_prob_onoff,
-    write_shared_group_measures_from_samples,
-    test_compare,
-    test_compare_3unit,
-    test_compare_coupling,
-    test_num_reporters_consistency,
-    diagnose_sim_vs_cme,
-    test_fit_rna,
-    test_fit_rnadwelltime,
-    test_load_model_keyword_compatibility,
-    test_fit_rnaonoff,
-    test_fit_simrna,
-    test_compare_mh_nuts_posterior,
-    test_fit_simrna_mh_nuts,
-    test_simulate_trials,
-    test_fit_trace,
-    test_fit_trace_hierarchical,
-    test_fit_tracejoint,
-    test_fit_tracejoint_hierarchical,
-    test_ad_gradient_smoke,
-    test_get_rates_ad_consistency,
-    test_run_nuts_fit_smoke,
-    test_run_advi_fit_smoke,
-    test_run_advi_trace_smoke,
-    test_nuts_vs_advi_consistency,
-    test_normalized_nullspace_augmented_pullback_fd,
-    test_trace_specs_utilities,
-    test_trace_subset_benchmark_keyword_bundle,
-    test_benchmark_trace_joint_fit_stacks,
-    benchmark_inference_simrna_small,
-    benchmark_inference_trace_gr2r2,
-    benchmark_inference_trace_coupled_3x3,
-    benchmark_scenario_coupled_3x3_10traces_220frames,
-    benchmark_inference_trace_coupled_3x3_g3r0,
-    benchmark_inference_ensure_workers,
-    benchmark_inference_setup_parallel_workers,
-    benchmark_inference_run_mh,
-    benchmark_combined_likelihood_stack,
-    benchmark_inference_run_nuts_parallel,
-    benchmark_trace_zygote_gradient,
-    benchmark_trace_forwarddiff_gradient,
-    benchmark_trace_finitediff_gradient,
-    benchmark_trace_compare_forwarddiff_vs_finitediff,
-    benchmark_trace_zygote_subset_gradient,
-    compare_trace_subset_gradient_benchmarks,
-    benchmark_inference_run_advi,
-    benchmark_inference_compare_mh_nuts_advi,
-    benchmark_inference_print_summary,
-    makeswarmfiles_driver,
-    makeswarmfiles,
-    makeswarmfiles_coupled,
-    makeswarmfiles_h3_latent,
-    parse_h3_transition_key,
-    COUPLING_MODE_RECIPROCAL_DEFAULT,
-    coupling_ranges,
-    default_coupling_prior_mean,
-    default_coupling_prior_means,
-    make_coupling_hidden_latent,
-    default_trace_specs_for_coupled,
-    coupling_parameter_labels,
-    TComponents,
-    T_dimension,
-    TraceData,
-    TraceRNAData,
-    Tsit5,
-    TransientMasterProblem,
-    transient_master_problem,
-    transient_master_initial,
-    transient_master_strang,
-    transient_master_marginal,
-    transient_A_flow!,
-    transient_B_flow!,
-    unbiased_crosscov,
-    correlation_function,
-    correlation_function_windowed,
-    correlation_function_multitau,
-    write_augmented,
-    write_correlation_functions,
-    write_correlation_functions_key,
-    write_correlation_general_csv,
-    build_correlation_context,
-    correlation_observable,
-    correlation_observable_label,
-    correlate_observables,
-    posterior_state_probabilities,
-    posterior_burst_probability,
-    auc_binary_score,
-    burst_prediction_auc,
-    simulate_burst_observability_auc,
-    simulate_fit_burst_identifiability_auc,
-    write_joint_residence_prob_onoff_key,
-    write_correlation_functions_file,
-    write_correlation_functions_empirical,
-    correlation_functions_uncertainty_mc,
-    correlation_functions_uncertainty_delta,
-    compute_correlation_functions,
-    write_dataframes,
-    write_dataframes_only,
-    write_dataframes_only_key,
-    write_histograms,
-    write_ONOFFhistograms,
-    write_ONOFFhistograms_key,
-    write_residency_G_folder,
-    write_RNAhistogram,
-    write_traces,
-    write_traces_coupling,
-    write_traces_coupling_spawn,
-    write_winners,
-    create_combined_file,
-    create_combined_file_mult,
-    read_rates_table,
-    write_rates_table,
-    merge_coupled_two_unit_rates,
-    merge_coupled_stacked_units,
-    combined_rates_key,
-    read_combined_file_specs_csv,
-    create_combined_files_driver,
-    create_combined_files,
-    create_combined_files_h3_latent,
-    write_run_spec_preset,
-    write_fitscript_tracejoint_key,
-    default_model_key,
-    zero_median
+# Dependencies intentionally re-exported for legacy scripts.
+export CSV, DataFrame, Tsit5, lsoda, mean, norm, sparse
+
+# Fit and inference entry points.
+export fit, fit_default_spec, fit_coupled_default_spec, run_inference, load_options
+export metropolis_hastings, run_mh, run_nuts_fit, logposterior
+export GenePosteriorLogDensity, NUTSOptions, ADVIOptions
+export INFERENCE_ADVI, INFERENCE_CHOICES, INFERENCE_MH, INFERENCE_NUTS
+export maxtime_seconds
+
+# Data and model types.
+export RNAData, RNADwellTimeData, RNAOnOffData, TraceData, TraceRNAData
+export AbstractCombinedData, CombinedData, MultiDatasetData
+export AbstractGMmodel, AbstractGRSMmodel, AbstractGeneTransitionModel, GMmodel, GRSMmodel
+export DatasetSpec, HierarchyNode, HierarchySpec, HierarchyAssignment
+export SharedParameterCachePlan, SharedParameterTrait
+export RecursiveHierarchyCachePlan, RecursiveHierarchyTrait
+export PriorContextCoupled, PriorContextTraceSingleUnit, PriorContextGenericSingle
+export AbstractPriorContext
+export TComponents, TransientMasterProblem
+
+# Data loading, model setup, and likelihood bridges.
+export load_data, load_model, loglikelihood, loglikelihood_ad
+export get_param, get_rates, get_rates_ad, fixed_rates_ad
+export prepare_rates, prepare_rates_ad, num_rates, num_all_parameters
+export set_indices, set_elements_TCoupledUnit, source_states, on_states
+export prior_context, set_priormean_empty, prior_ratemean_trace, trace_prior_variables
+export normalize_trace_specs_legacy_t_end!, mean_elongationtime, n_observed_trace_units
+export combined_modalities, reconstruct_tracerna
+export HMM_STACK_MH, HMM_STACK_AD, set_hmm_zygote_checkpoint_steps!, hmm_zygote_checkpoint_steps
+
+# Shared and recursive hierarchy helpers.
+export hierarchy_assignments, hierarchy_node_names, hierarchy_parameter_groups
+export hierarchy_path, hierarchy_parameter_levels, n_emission_groups, n_transition_rate_groups
+export compile_shared_parameter_trait, shared_parameter_cache_plan
+export shared_assignment_rates, shared_transition_group_rates, shared_emission_group_rates
+export compile_recursive_hierarchy_trait, recursive_hierarchy_cache_plan
+export recursive_assignment_rates, recursive_transition_group_rates, recursive_emission_group_rates
+
+# Probability, simulation, and transient solvers.
+export prob_Gaussian, prob_Gaussian_grid, predictedarray, predictedfn
+export simulate_trace, simulate_trace_data, simulate_trace_vector, simulate_trials
+export get_3unit_model_params, simulator, simulator_dwell_specs
+export transient_master_problem, transient_master_initial, transient_master_strang
+export transient_master_marginal, transient_A_flow!, transient_B_flow!
+export normalize_histogram, datapdf
+
+# Correlation and burst-prediction analysis.
+export CorrelationAlgorithm, CorrelationTrait, StandardCorrelation, WindowedCorrelation
+export MultiTauCorrelation, IDLCorrelation, DEFAULT_CORRELATION_ALGORITHM, hastrait
+export unbiased_crosscov, correlation_function, correlation_function_windowed
+export correlation_function_multitau, build_correlation_context, correlation_observable
+export correlation_observable_label, correlate_observables, compute_correlation_functions
+export posterior_state_probabilities, posterior_burst_probability, auc_binary_score
+export burst_prediction_auc, simulate_burst_observability_auc
+export simulate_fit_burst_identifiability_auc
+
+# Analysis output writers and dataframe assembly.
+export assemble_all, assemble_all_key, assemble_measures_key, assemble_measures_model
+export assemble_rates_key, assemble_stats_key
+export make_array, make_dataframes, make_dataframes_key, make_mat, make_traces
+export make_traces_dataframe, plot_empirical_vs_theory, score_models_from_traces
+export summarize_model_scores, joint_residence_prob_onoff
+export write_augmented, write_correlation_functions, write_correlation_functions_key
+export write_correlation_general_csv, write_correlation_functions_file
+export write_correlation_functions_empirical, correlation_functions_uncertainty_mc
+export correlation_functions_uncertainty_delta, write_joint_residence_prob_onoff
+export write_joint_residence_prob_onoff_key, write_shared_group_measures_from_samples
+export write_dataframes, write_dataframes_only, write_dataframes_only_key
+export write_histograms, write_ONOFFhistograms, write_ONOFFhistograms_key
+export write_residency_G_folder, write_RNAhistogram, write_traces, write_traces_coupling
+export write_traces_coupling_spawn, write_winners
+
+# File IO, run specs, and staged batch generation.
+export create_label, folder_path, folder_setup, fix, fix_filenames, readfile, readrates
+export read_run_spec, read_run_spec_for_rates_file, info_jld2_path
+export info_toml_path_for_rates_file, read_rates_folder, rate_distribution_summary
+export rna_setup, make_fitscript, write_fitfile_full, build_julia_script_command
+export write_julia_command_file, make_commandfile, make_commandfile_from_csv
+export make_swarmfile_from_csv, make_fitscripts_from_csv
+export make_fitscripts_and_commandfile_from_csv, make_fitscripts_and_swarm_from_csv
+export stage_label_to_key, label_to_key, staging_key_segment, stage_write_run_specs
+export write_run_spec_preset, write_fitscript_tracejoint_key, default_model_key
+
+# Biowulf and CSV-driven coupled helpers.
+export makeswarm, makeswarm_models, makeswarm_coupled, makeswarm_genes
+export makeswarmfiles_driver, makeswarmfiles, makeswarmfiles_coupled, makeswarmfiles_h3_latent
+export write_fitfile_coupled, csv_row_to_connections_simple
+export build_coupled_fit_spec_from_csv_cells, parse_coupling_sign_csv
+export replace_csv_cell_legacy_r, csv_row_has_legacy_r
+export stage_combine_rates, stage_combine_rates_specs_from_csv, stage_combine_rates_from_csv
+
+# Coupled-model staging and rate-table utilities.
+export COUPLING_MODE_RECIPROCAL_DEFAULT, coupling_ranges, coupling_parameter_labels
+export default_coupling_prior_mean, default_coupling_prior_means, default_trace_specs_for_coupled
+export make_coupling_hidden_latent, parse_h3_transition_key
+export create_combined_file, create_combined_file_mult, create_combined_files_driver
+export create_combined_files, create_combined_files_h3_latent
+export read_rates_table, write_rates_table, merge_coupled_two_unit_rates
+export merge_coupled_stacked_units, combined_rates_key, read_combined_file_specs_csv
+
+# Miscellaneous helpers retained for compatibility.
+export digit_vector, find_best_models, large_deviance, large_rhat
+export longest_trace_timesteps, check_ad_gradient_feasibility, T_dimension, zero_median
+
+# Test and benchmark helpers exported for compatibility with existing scripts.
+export test_compare, test_compare_3unit, test_compare_coupling, test_num_reporters_consistency
+export diagnose_sim_vs_cme, test_fit_rna, test_fit_rnadwelltime
+export test_load_model_keyword_compatibility, test_fit_rnaonoff, test_fit_simrna
+export test_compare_mh_nuts_posterior, test_fit_simrna_mh_nuts, test_simulate_trials
+export test_fit_trace, test_fit_trace_hierarchical, test_fit_tracejoint
+export test_fit_tracejoint_hierarchical, test_ad_gradient_smoke, test_get_rates_ad_consistency
+export test_run_nuts_fit_smoke, test_run_advi_fit_smoke, test_run_advi_trace_smoke
+export test_nuts_vs_advi_consistency, test_normalized_nullspace_augmented_pullback_fd
+export test_trace_specs_utilities, test_trace_subset_benchmark_keyword_bundle
+export test_benchmark_trace_joint_fit_stacks
+export benchmark_inference_simrna_small, benchmark_inference_trace_gr2r2
+export benchmark_inference_trace_coupled_3x3, benchmark_scenario_coupled_3x3_10traces_220frames
+export benchmark_inference_trace_coupled_3x3_g3r0, benchmark_inference_ensure_workers
+export benchmark_inference_setup_parallel_workers, benchmark_inference_run_mh
+export benchmark_combined_likelihood_stack, benchmark_inference_run_nuts_parallel
+export benchmark_trace_zygote_gradient, benchmark_trace_forwarddiff_gradient
+export benchmark_trace_finitediff_gradient, benchmark_trace_compare_forwarddiff_vs_finitediff
+export benchmark_trace_zygote_subset_gradient, compare_trace_subset_gradient_benchmarks
+export benchmark_inference_run_advi, benchmark_inference_compare_mh_nuts_advi
+export benchmark_inference_print_summary
 
     
 
