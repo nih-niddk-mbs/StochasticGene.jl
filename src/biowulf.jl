@@ -228,6 +228,14 @@ The script calls `fit(...)` with `ARGS[1]` as the gene.
 - `filter_metadata=false`: for folder-scanned RNA runs, scan filenames only. Set `true` to use
   [`checkgenes`](@ref) and filter by available halflife and allele metadata.
 - `thresholdlow=0.0`, `thresholdhigh=1e8`: halflife bounds passed to [`checkgenes`](@ref)
+- `rerun_nonconverged=false`: after the normal gene scan/checkgenes step, read an assembled
+  `measures_*.csv` file and keep only genes that fail QC, plus missing genes when
+  `include_missing=true`.
+- `measures_file=nothing`: assembled measures CSV used by `rerun_nonconverged=true`; if omitted,
+  inferred as `results/<resultfolder>/measures_<label>_<cond>_<model>.csv`.
+- QC defaults are deliberately broad for whole-genome reruns: `Rhat > 1.2`, `ESS < 200`,
+  `Acceptance < 0.01`, non-finite `WAIC`, or non-unit `Temperature`. `Geweke` and `MCSE`
+  are skipped by default; set `geweke_thresh` or `mcse_max` to enable them.
 - `filedir="."`: directory to write swarm and script files
 - Plus the same fit/model kwargs (datatype, `datapath`, cell, `datacond`, optional legacy `dttype` / `traceinfo`,
   `trace_specs`, `dwell_specs`, transitions, G, R, S, insertstep, etc.) and swarm options (nchains, nthreads, swarmfile, juliafile, project, src).
@@ -263,13 +271,96 @@ function _genes_from_rna_datafolder(datapath::String, datacond; root::String="."
     return genes
 end
 
-function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", filter_metadata::Bool=false, thresholdlow::Float64=0.0, thresholdhigh::Float64=1e8, kwargs...)
+function _default_measures_summary_file(;
+    root=".",
+    resultfolder::String="HCT116_test",
+    label::String="",
+    datatype::String="rna",
+    datacond="MOCK",
+    cell::String="HCT116",
+    G::Int=2,
+    R::Int=0,
+    S::Int=0,
+    insertstep::Int=1,
+    TransitionType="",
+)
+    datacond isa AbstractString || throw(ArgumentError("qc measures file cannot be inferred for vector datacond; pass measures_file explicitly"))
+    modelstring = create_modelstring(G, R, S, insertstep)
+    labelstring = create_label(label, datatype_label(datatype), datacond, cell; transition_type=TransitionType)
+    rdir = folder_path(resultfolder, String(root), "results")
+    return joinpath(rdir, "measures_" * labelstring * "_" * String(datacond) * "_" * modelstring * ".csv")
+end
+
+function _select_qc_rerun_genes(
+    candidate_genes::Vector{String},
+    measures_file::String;
+    include_missing::Bool=true,
+    rhat_thresh::Union{Nothing,Real}=1.2,
+    ess_min::Union{Nothing,Real}=200,
+    geweke_thresh::Union{Nothing,Real}=nothing,
+    mcse_max::Union{Nothing,Real}=nothing,
+    accept_min::Union{Nothing,Real}=0.01,
+    temp_val::Union{Nothing,Real}=1.0,
+    verbose=true,
+)
+    isfile(measures_file) || throw(ArgumentError("measures summary file not found: $(repr(measures_file)); run write_dataframes first or pass measures_file"))
+    bad = find_highly_nonconverged_genes(
+        measures_file;
+        rhat_thresh=rhat_thresh,
+        ess_min=ess_min,
+        geweke_thresh=geweke_thresh,
+        mcse_max=mcse_max,
+        accept_min=accept_min,
+        temp_val=temp_val,
+        verbose=verbose,
+    )
+    bad = intersect(candidate_genes, bad)
+    completed = _completed_genes_from_measures(measures_file)
+    missing = include_missing ? setdiff(candidate_genes, completed) : String[]
+    genes = sort!(unique!(vcat(bad, missing)))
+    verbose && println("QC rerun genes: ", length(genes), " (nonconverged=", length(bad), ", missing=", length(missing), ")")
+    return genes
+end
+
+function makeswarm_genes(; datapath::String="", datacond="MOCK", root=".", cell::String="HCT116", filter_metadata::Bool=false, thresholdlow::Float64=0.0, thresholdhigh::Float64=1e8,
+    rerun_nonconverged::Bool=false, measures_file::Union{Nothing,AbstractString}=nothing, include_missing::Bool=true,
+    rhat_thresh::Union{Nothing,Real}=1.2, ess_min::Union{Nothing,Real}=200, geweke_thresh::Union{Nothing,Real}=nothing, mcse_max::Union{Nothing,Real}=nothing, accept_min::Union{Nothing,Real}=0.01, temp_val::Union{Nothing,Real}=1.0, verbose=true,
+    kwargs...)
     genes = if filter_metadata
         checkgenes(String(root), datacond isa AbstractVector ? String.(datacond) : String(datacond), datapath, cell, thresholdlow, thresholdhigh)
     else
         _genes_from_rna_datafolder(datapath, datacond; root=String(root))
     end
     isempty(genes) && throw(ArgumentError("no genes found in datapath=$(repr(datapath)) matching datacond=$(repr(datacond))"))
+    if rerun_nonconverged
+        kw = Dict{Symbol,Any}(pairs(kwargs))
+        mfile = measures_file === nothing ? _default_measures_summary_file(;
+            root=root,
+            resultfolder=String(get(kw, :resultfolder, "HCT116_test")),
+            label=String(get(kw, :label, "")),
+            datatype=String(get(kw, :datatype, "rna")),
+            datacond=datacond,
+            cell=cell,
+            G=Int(get(kw, :G, 2)),
+            R=Int(get(kw, :R, 0)),
+            S=Int(get(kw, :S, 0)),
+            insertstep=Int(get(kw, :insertstep, 1)),
+            TransitionType=get(kw, :TransitionType, ""),
+        ) : String(measures_file)
+        genes = _select_qc_rerun_genes(
+            genes,
+            mfile;
+            include_missing=include_missing,
+            rhat_thresh=rhat_thresh,
+            ess_min=ess_min,
+            geweke_thresh=geweke_thresh,
+            mcse_max=mcse_max,
+            accept_min=accept_min,
+            temp_val=temp_val,
+            verbose=verbose,
+        )
+        isempty(genes) && return (genes=genes, fitfile=nothing, commandfiles=String[])
+    end
     makeswarm_genes(genes; datapath=datapath, datacond=datacond, root=root, cell=cell, kwargs...)
 end
 
@@ -1225,59 +1316,76 @@ end
 
 """
     find_highly_nonconverged_genes(measures_file::String; 
-        rhat_thresh=1.2, ess_min=500, geweke_thresh=3.0, mcse_max=0.5, 
-        accept_min=0.05, temp_val=1.0, verbose=true)
+        rhat_thresh=1.2, ess_min=200, geweke_thresh=nothing, mcse_max=nothing, 
+        accept_min=0.01, temp_val=1.0, verbose=true)
 
 Scan an assembled measures file and return a vector of gene names that are highly nonconverged by relaxed criteria.
 """
 function find_highly_nonconverged_genes(measures_file::String;
-    rhat_thresh=1.2, ess_min=500, geweke_thresh=3.0, mcse_max=0.5,
-    accept_min=0.05, temp_val=1.0, verbose=true)
+    rhat_thresh::Union{Nothing,Real}=1.2,
+    ess_min::Union{Nothing,Real}=200,
+    geweke_thresh::Union{Nothing,Real}=nothing,
+    mcse_max::Union{Nothing,Real}=nothing,
+    accept_min::Union{Nothing,Real}=0.01,
+    temp_val::Union{Nothing,Real}=1.0,
+    verbose=true)
 
     df = CSV.read(measures_file, DataFrame)
     bad_genes = String[]
+    dfcols = Set(Symbol.(names(df)))
+    hascol(name::Symbol) = name in dfcols
+    rowval(row, name::Symbol) = getproperty(row, name)
+    bad_numeric(row, name, predicate) = begin
+        hascol(name) || return false
+        value = rowval(row, name)
+        (ismissing(value) || (value isa Number && isnan(value))) && return true
+        return predicate(value)
+    end
     for row in eachrow(df)
         gene = row.Gene
-        waic = row.WAIC
-        rhat = row.Rhat
-        ess = row.ESS
-        geweke = row.Geweke
-        mcse = row.MCSE
-        accept = row.Acceptance
-        temp = row.Temperature
 
         is_bad = false
-        if ismissing(rhat) || isnan(rhat) || rhat > rhat_thresh
+        if rhat_thresh !== nothing && bad_numeric(row, :Rhat, x -> x > rhat_thresh)
             is_bad = true
-            verbose && println("$gene: Rhat = $rhat")
+            verbose && println("$gene: Rhat = $(rowval(row, :Rhat))")
         end
-        if ismissing(ess) || isnan(ess) || ess < ess_min
+        if ess_min !== nothing && bad_numeric(row, :ESS, x -> x < ess_min)
             is_bad = true
-            verbose && println("$gene: ESS = $ess")
+            verbose && println("$gene: ESS = $(rowval(row, :ESS))")
         end
-        if ismissing(geweke) || isnan(geweke) || abs(geweke) > geweke_thresh
+        if geweke_thresh !== nothing && bad_numeric(row, :Geweke, x -> abs(x) > geweke_thresh)
             is_bad = true
-            verbose && println("$gene: Geweke = $geweke")
+            verbose && println("$gene: Geweke = $(rowval(row, :Geweke))")
         end
-        if ismissing(mcse) || isnan(mcse) || mcse > mcse_max
+        if mcse_max !== nothing && bad_numeric(row, :MCSE, x -> x > mcse_max)
             is_bad = true
-            verbose && println("$gene: MCSE = $mcse")
+            verbose && println("$gene: MCSE = $(rowval(row, :MCSE))")
         end
-        if ismissing(waic) || isnan(waic)
-            is_bad = true
-            verbose && println("$gene: WAIC is NaN")
+        if hascol(:WAIC)
+            waic = rowval(row, :WAIC)
+            if ismissing(waic) || (waic isa Number && isnan(waic))
+                is_bad = true
+                verbose && println("$gene: WAIC is NaN")
+            end
         end
-        if ismissing(accept) || isnan(accept) || accept < accept_min
+        if accept_min !== nothing && bad_numeric(row, :Acceptance, x -> x < accept_min)
             is_bad = true
-            verbose && println("$gene: Acceptance = $accept")
+            verbose && println("$gene: Acceptance = $(rowval(row, :Acceptance))")
         end
-        if ismissing(temp) || isnan(temp) || temp != temp_val
+        if temp_val !== nothing && bad_numeric(row, :Temperature, x -> x != temp_val)
             is_bad = true
-            verbose && println("$gene: Temperature = $temp")
+            verbose && println("$gene: Temperature = $(rowval(row, :Temperature))")
         end
         if is_bad
-            push!(bad_genes, gene)
+            push!(bad_genes, string(gene))
         end
     end
-    return bad_genes
+    return sort!(unique!(bad_genes))
+end
+
+function _completed_genes_from_measures(measures_file::String)
+    isfile(measures_file) || return String[]
+    df = CSV.read(measures_file, DataFrame)
+    "Gene" in names(df) || return String[]
+    return sort!(unique!(String.(skipmissing(df.Gene))))
 end
