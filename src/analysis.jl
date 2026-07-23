@@ -2698,13 +2698,22 @@ function _make_traces_dataframe_operational_h(rin, data::AbstractTraceData, tran
     traces = data.trace[1]
     noiseindividual = _operational_trace_noise_chunks(rin, nrates, nnoise, length(traces))
     if noiseindividual === nothing
+        nallparams = nrates + nnoise
+        # Full legacy hierarchical rate files are stacked as complete model-rate
+        # blocks: hyper block(s) followed by one block per trace. Those are not
+        # compact operational/shared outputs, so let the normal hierarchical
+        # prediction path handle them below.
+        if nallparams > 0 && length(rin) % nallparams == 0
+            nsets = length(rin) ÷ nallparams
+            nsets >= length(traces) && return nothing
+        end
         extra = length(rin) - nrates
         if nnoise > 0 && extra > 0 && extra % nnoise == 0
             nblocks = extra ÷ nnoise
             throw(ArgumentError(
-                "shared trace prediction mismatch: rate vector has $nblocks trace-level noise blocks " *
+                "compact hierarchical trace prediction mismatch: rate vector has $nblocks trace-level noise blocks " *
                 "but loaded $(length(traces)) traces from the selected dataset. " *
-                "Check shared_rate_outputs/dataset metadata in info_<key>.jld2 and the dataset datapath/datacond."
+                "Check rate-file layout, info_<key>.jld2, and the dataset datapath/datacond."
             ))
         end
         return nothing
@@ -2719,17 +2728,17 @@ function _make_traces_dataframe_operational_h(rin, data::AbstractTraceData, tran
     make_traces_dataframe(states, observations, traces, G, R, S, insertstep, state, tuple())
 end
 
-function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false; compact_hierarchical::Bool=false)
     # data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])), Int[])
-    if hierarchical && isempty(coupling) && G isa Int
+    h = hierarchical isa Bool ? (hierarchical ? (2, [8], ()) : ()) : hierarchical
+    is_hierarchical = !isempty(h)
+    if compact_hierarchical && is_hierarchical && isempty(coupling) && G isa Int
         df = _make_traces_dataframe_operational_h(rin, data, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, grid, zeromedian)
         df === nothing || return df
     end
-    if hierarchical
-        h = (2, [8], ())
+    if is_hierarchical
         method = (Tsit5(), true)
     else
-        h = ()
         method = Tsit5()
     end
     if !isempty(coupling) && G isa Tuple
@@ -2761,10 +2770,10 @@ function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, 
     end
 end
 
-function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false, datacol=3)
+function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false, datacol=3, compact_hierarchical::Bool=false)
     traceinfo = (interval, start, stop, 1.0, 0.0)
     data = load_data_trace(datapath, "", "", datacond, traceinfo, :trace, datacol, zeromedian)
-    df = make_traces_dataframe(data, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+    df = make_traces_dataframe(data, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian; compact_hierarchical=compact_hierarchical)
     CSV.write(outfile, df)
 end
 
@@ -2888,15 +2897,18 @@ function write_traces_key(folder::String;
             noisepriors isa Tuple ? (isempty(noisepriors) ? Float64[] : first(noisepriors)) : noisepriors
         end
         grid_eff = isnothing(grid) ? get(info, :grid, nothing) : grid
+        hierarchical_spec = get(info, :hierarchical, ())
+        hierarchical_arg = !isempty(hierarchical_spec) ? hierarchical_spec : (!isempty(job.group) && _analysis_group_rate_is_hierarchical(r, info))
         write_trace_dataframe(
             outfile, dp, dc, dt, r, info[:transitions], G, info[:R], info[:S],
             info[:insertstep], start, stop, probfn_eff, noise_eff, sp;
             state=state,
-            hierarchical=!isempty(get(info, :hierarchical, ())) || (!isempty(job.group) && _analysis_group_rate_is_hierarchical(r, info)),
+            hierarchical=hierarchical_arg,
             coupling=coupling,
             grid=grid_eff,
             zeromedian=zm,
             datacol=col,
+            compact_hierarchical=!isempty(job.group),
         )
     end
 end
