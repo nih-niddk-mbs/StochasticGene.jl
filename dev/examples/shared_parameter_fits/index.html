@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Shared Parameter Trace Fits · StochasticGene.jl</title><meta name="title" content="Shared Parameter Trace Fits · StochasticGene.jl"/><meta property="og:title" content="Shared Parameter Trace Fits · StochasticGene.jl"/><meta property="twitter:title" content="Shared Parameter Trace Fits · StochasticGene.jl"/><meta name="description" content="Documentation for StochasticGene.jl."/><meta property="og:description" content="Documentation for StochasticGene.jl."/><meta property="twitter:description" content="Documentation for StochasticGene.jl."/><meta property="og:url" content="https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/examples/shared_parameter_fits/"/><meta property="twitter:url" content="https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/examples/shared_parameter_fits/"/><link rel="canonical" href="https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/examples/shared_parameter_fits/"/><script async src="https://www.googletagmanager.com/gtag/js?id=UA-XXXXXXXXX-X"></script><script>  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'UA-XXXXXXXXX-X', {'page_path': location.pathname + location.search + location.hash});
+</script><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">StochasticGene.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../installation/">Installation</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><a class="tocitem" href="../../package_overview/">Package overview</a></li><li><a class="tocitem" href="../../documentation_audit/">Documentation audit</a></li><li><a class="tocitem" href="../../cluster_batch_workflows/">Cluster and batch workflows</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../">Overview</a></li><li><input class="collapse-toggle" id="menuitem-7-2" type="checkbox"/><label class="tocitem" for="menuitem-7-2"><span class="docs-label">Basic Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../basic_telegraph/">Basic Telegraph Model</a></li><li><a class="tocitem" href="../multi_state_rna/">Multi-State Model</a></li><li><a class="tocitem" href="../rna_histogram/">RNA Histogram Analysis</a></li><li><a class="tocitem" href="../ms2_analysis/">MS2 Reporter Analysis</a></li><li><a class="tocitem" href="../dual_reporter/">Dual Reporter System</a></li><li><a class="tocitem" href="../trace_analysis/">Trace Analysis</a></li><li><a class="tocitem" href="../dwell_time_analysis/">Basic Dwell Times</a></li><li><a class="tocitem" href="../rna_dwell_time/">RNA Dwell Time Analysis</a></li><li><a class="tocitem" href="../rna_onoff/">RNA On-Off Analysis</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-7-3" type="checkbox" checked/><label class="tocitem" for="menuitem-7-3"><span class="docs-label">Advanced Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../parallel_processing/">Parallel Processing</a></li><li><a class="tocitem" href="../hierarchical_trace/">Hierarchical Trace Analysis</a></li><li class="is-active"><a class="tocitem" href>Shared Parameter Trace Fits</a><ul class="internal"><li><a class="tocitem" href="#Minimal-Example"><span>Minimal Example</span></a></li><li><a class="tocitem" href="#Individual-Noise-Level"><span>Individual Noise Level</span></a></li><li><a class="tocitem" href="#Multiple-Levels"><span>Multiple Levels</span></a></li><li><a class="tocitem" href="#Rate-Handling-Design"><span>Rate-Handling Design</span></a></li><li><a class="tocitem" href="#Proposal-CVs"><span>Proposal CVs</span></a></li><li><a class="tocitem" href="#Cache-Behavior"><span>Cache Behavior</span></a></li><li><a class="tocitem" href="#Script-Generator-Convention"><span>Script Generator Convention</span></a></li><li><a class="tocitem" href="#What-This-Is-Not"><span>What This Is Not</span></a></li></ul></li><li><a class="tocitem" href="../joint_trace/">Joint Trace Analysis</a></li><li><a class="tocitem" href="../coupled_models/">Coupled Model Analysis</a></li></ul></li></ul></li><li><span class="tocitem">API</span><ul><li><a class="tocitem" href="../../api/">API Reference</a></li><li><input class="collapse-toggle" id="menuitem-8-2" type="checkbox"/><label class="tocitem" for="menuitem-8-2"><span class="docs-label">Core Functions</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../api/fit/">Model Fitting</a></li><li><a class="tocitem" href="../../api/combined_data/">v1.11 Beta CombinedData API</a></li><li><a class="tocitem" href="../../api/simulator/">Model Simulation</a></li><li><a class="tocitem" href="../../api/load_data/">Data Loading</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-8-3" type="checkbox"/><label class="tocitem" for="menuitem-8-3"><span class="docs-label">Function Libraries</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../api/utilities/">Utility Functions</a></li><li><a class="tocitem" href="../../api/analysis/">Analysis Functions</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-8-4" type="checkbox"/><label class="tocitem" for="menuitem-8-4"><span class="docs-label">Output Functions</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../api/write_traces/">Write Traces</a></li><li><a class="tocitem" href="../../api/write_ONOFFhistograms/">Write ON/OFF Histograms</a></li><li><a class="tocitem" href="../../api/write_residency_G_folder/">Write G State Residency</a></li></ul></li></ul></li><li><a class="tocitem" href="../../contributing/">Contributing</a></li></ul><div class="docs-version-selector field has-addons visible"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"><option value="#" selected="selected">1.11.0</option></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li><a class="is-disabled">Advanced Examples</a></li><li class="is-active"><a href>Shared Parameter Trace Fits</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Shared Parameter Trace Fits</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/nih-niddk-mbs/StochasticGene.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/nih-niddk-mbs/StochasticGene.jl/blob/main/docs/src/examples/shared_parameter_fits.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Shared-Parameter-Trace-Fits"><a class="docs-heading-anchor" href="#Shared-Parameter-Trace-Fits">Shared Parameter Trace Fits</a><a id="Shared-Parameter-Trace-Fits-1"></a><a class="docs-heading-anchor-permalink" href="#Shared-Parameter-Trace-Fits" title="Permalink"></a></h1><p>Shared parameter fitting lets one fit combine trace datasets that live in different folders while sharing some parameter families exactly and splitting others. This is useful when the same biological model is fit to several related samples, for example 3Prime and 5Prime traces, CRISPR perturbations, or replicate groups.</p><p>This is not a recursive hierarchical Bayesian shrinkage model: no learned cross-dataset hyperparameters are introduced. Dataset-specific or trace-specific copies are independent fitted parameters under the ordinary prior template. The fit keyword is still named <code>hierarchical</code> for compatibility with the existing <code>fit</code> API, but the object passed there is a shared-parameter specification.</p><p>The shared interface is keyed: each dataset row carries metadata, the grouping tree reads those metadata keys, and <code>parameter_scope</code> decides which level owns each family of parameters.</p><h2 id="Minimal-Example"><a class="docs-heading-anchor" href="#Minimal-Example">Minimal Example</a><a id="Minimal-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Minimal-Example" title="Permalink"></a></h2><p>For a simple two-sample fit with shared <code>G</code> transitions and initiation, but group-specific <code>R</code> transitions and group-specific noise:</p><pre><code class="language-text hljs">top
+  group</code></pre><pre><code class="language-julia hljs">using StochasticGene
+
+grouping = HierarchySpec(
+    HierarchyNode(:top, children=[
+        HierarchyNode(:group, key=:sample, levels=[Symbol(&quot;3Prime&quot;), Symbol(&quot;5Prime&quot;)])
+    ]);
+    parameter_scope=Dict(
+        :G =&gt; :top,
+        :initiation =&gt; :top,
+        :R =&gt; :group,
+        :decay =&gt; :top,
+        :noise =&gt; :group,
+    ),
+)</code></pre><p>Each dataset declares its group through <code>metadata.sample</code>:</p><pre><code class="language-julia hljs">datasets = DatasetSpec[
+    DatasetSpec(
+        Symbol(&quot;3Prime_gene&quot;),
+        &quot;trace&quot;,
+        &quot;data/3Prime_gene_enhancer/including_background/short&quot;,
+        &quot;gene&quot;;
+        metadata=(sample=Symbol(&quot;3Prime&quot;),),
+        trace_specs=[(unit=1, interval=5/3, start=1.0, t_end=-1.0, zeromedian=true)],
+    ),
+    DatasetSpec(
+        Symbol(&quot;5Prime_gene&quot;),
+        &quot;trace&quot;,
+        &quot;data/5Prime_gene_enhancer/including_background/short&quot;,
+        &quot;gene&quot;;
+        metadata=(sample=Symbol(&quot;5Prime&quot;),),
+        trace_specs=[(unit=1, interval=5/3, start=1.0, t_end=-1.0, zeromedian=true)],
+    ),
+]</code></pre><p>The rate-family map tells the compiler which base rate positions belong to each family:</p><pre><code class="language-julia hljs">rate_families = Dict(
+    :G =&gt; collect(1:4),
+    :initiation =&gt; [5],
+    :R =&gt; collect(6:8),
+    :decay =&gt; [9],
+    :noise =&gt; collect(10:13),
+)</code></pre><p>The shared-parameter object passed to <code>fit</code> is a named tuple:</p><pre><code class="language-julia hljs">noise_priors_by_group = Dict(
+    Symbol(&quot;3Prime&quot;) =&gt; [-0.018007, 0.214861, 1.256466, 0.405046],
+    Symbol(&quot;5Prime&quot;) =&gt; [-0.004966, 0.118037, 0.607264, 0.223634],
+)
+
+sharing = (
+    kind=:shared,
+    levels=grouping,
+    datasets=datasets,
+    transition_families=[:G, :initiation, :R, :decay],
+    emission_families=[:noise],
+    rate_families=rate_families,
+    initial_values=Dict(:noise =&gt; noise_priors_by_group),
+)</code></pre><p>Then call <code>fit</code> as usual. The keyword is still <code>hierarchical</code> because that is the existing <code>fit</code> entry point for structured parameter layouts:</p><pre><code class="language-julia hljs">fit(;
+    key=&quot;shared-3Prime-5Prime-3301-gene&quot;,
+    nchains=2,
+    datatype=&quot;trace&quot;,
+    datapath=&quot;&quot;,
+    root=&quot;/path/to/project&quot;,
+    resultfolder=&quot;/path/to/results&quot;,
+    gene=&quot;MYC&quot;,
+    cell=&quot;HBEC&quot;,
+    datacond=&quot;gene&quot;,
+    label=&quot;shared-3Prime-5Prime-3301-gene&quot;,
+    G=3,
+    R=3,
+    S=0,
+    insertstep=1,
+    transitions=([1, 2], [2, 1], [2, 3], [3, 2]),
+    fittedparam=[collect(1:8); collect(10:13)],
+    fixedeffects=tuple(),
+    coupling=tuple(),
+    grid=nothing,
+    priormean=Float64[],
+    priorcv=Float64[],
+    noisepriors=noise_priors_by_group[Symbol(&quot;3Prime&quot;)],
+    decayrate=-1.0,
+    probfn=prob_Gaussian,
+    hierarchical=sharing,
+    ratetype=&quot;ml&quot;,
+    propcv_rate=0.05,
+    propcv_noise=0.001,
+    propcv_levels=Dict(:top =&gt; 0.05, :group =&gt; 0.02, :noise =&gt; 0.001),
+    maxtime=100.0,
+)</code></pre><p>With two groups in this layout, the expanded base parameter count is:</p><pre><code class="language-text hljs">top:   G(4) + initiation(1) + decay(1) = 6
+group: R(3) + noise(4) = 7 per group
+total: 6 + 2*7 = 20</code></pre><h2 id="Individual-Noise-Level"><a class="docs-heading-anchor" href="#Individual-Noise-Level">Individual Noise Level</a><a id="Individual-Noise-Level-1"></a><a class="docs-heading-anchor-permalink" href="#Individual-Noise-Level" title="Permalink"></a></h2><p>To fit noise separately for each trace, add an individual level and move <code>:noise</code> to it. This still does not add hyperparameters; it only changes how many noise copies are fit.</p><pre><code class="language-julia hljs">grouping_h = HierarchySpec(
+    HierarchyNode(:top, children=[
+        HierarchyNode(:group, key=:sample, levels=[Symbol(&quot;3Prime&quot;), Symbol(&quot;5Prime&quot;)], children=[
+            HierarchyNode(:individual, key=:trace_id)
+        ])
+    ]);
+    parameter_scope=Dict(
+        :G =&gt; :top,
+        :initiation =&gt; :top,
+        :R =&gt; :group,
+        :decay =&gt; :top,
+        :noise =&gt; :individual,
+    ),
+)</code></pre><p>The loader creates <code>trace_id</code> metadata when it expands folder-level <code>DatasetSpec</code> rows into per-trace assignments. In batch script names, use <code>-h</code> for this mode. No <code>-h</code> means no individual noise level.</p><h2 id="Multiple-Levels"><a class="docs-heading-anchor" href="#Multiple-Levels">Multiple Levels</a><a id="Multiple-Levels-1"></a><a class="docs-heading-anchor-permalink" href="#Multiple-Levels" title="Permalink"></a></h2><p>The grouping tree can have any number of nested levels. For example, one can share <code>G</code> globally, fit <code>R</code> by sample within perturbation, and fit noise by replicate:</p><pre><code class="language-text hljs">top
+  perturbation
+    sample
+      replicate</code></pre><pre><code class="language-julia hljs">grouping = HierarchySpec(
+    HierarchyNode(:top, children=[
+        HierarchyNode(:perturbation, key=:perturbation, levels=[:UNT, :KRAB, :VPR], children=[
+            HierarchyNode(:sample, key=:sample, levels=[Symbol(&quot;3Prime&quot;), Symbol(&quot;5Prime&quot;)], children=[
+                HierarchyNode(:replicate, key=:replicate)
+            ])
+        ])
+    ]);
+    parameter_scope=Dict(
+        :G =&gt; :top,
+        :initiation =&gt; :top,
+        :R =&gt; :sample,
+        :decay =&gt; :top,
+        :noise =&gt; :replicate,
+    ),
+)</code></pre><p>Rows must include metadata for every keyed level:</p><pre><code class="language-julia hljs">DatasetSpec(
+    :UNT_3Prime_rep1_gene,
+    &quot;trace&quot;,
+    &quot;CRISPR/5Prime/UNT/rep1/short&quot;,
+    &quot;gene&quot;;
+    metadata=(
+        perturbation=:UNT,
+        sample=Symbol(&quot;3Prime&quot;),
+        replicate=:rep1,
+    ),
+)</code></pre><p>The ownership key for a parameter is the path prefix down to that level. If <code>:R =&gt; :sample</code>, then the key includes both the parent perturbation and the sample:</p><pre><code class="language-julia hljs">(top=:top, perturbation=:UNT, sample=Symbol(&quot;3Prime&quot;))</code></pre><p>This prevents <code>Symbol(&quot;3Prime&quot;)</code> under <code>:UNT</code> from being accidentally merged with <code>Symbol(&quot;3Prime&quot;)</code> under <code>:KRAB</code>.</p><h2 id="Rate-Handling-Design"><a class="docs-heading-anchor" href="#Rate-Handling-Design">Rate-Handling Design</a><a id="Rate-Handling-Design-1"></a><a class="docs-heading-anchor-permalink" href="#Rate-Handling-Design" title="Permalink"></a></h2><p>Shared parameter fitting keeps the same basic convention as other fits: a rate file is an operational object, not a compact storage format. The difference is that shared-fit groups are not dynamically connected, so their operational rate files are written separately.</p><ul><li>The sampler may use a compact vector containing only the fitted degrees of freedom.</li><li>Before likelihood evaluation, the shared layer assembles the full operational rate vector needed by each shared group or trace assignment.</li><li>Existing HMM likelihood code receives ordinary rate vectors; it should not need to understand the sharing tree.</li><li>Informational files such as <code>info_*.toml</code>, <code>param-stats_*.txt</code>, <code>measures_*.txt</code>, and <code>summary-rates_*.txt</code> are written once for the combined run.</li><li>Operational rate files are written once per transition-rate group, e.g. <code>rates_&lt;key&gt;-3Prime.txt</code> and <code>rates_&lt;key&gt;-5Prime.txt</code>.</li><li>Trace-level noise in <code>-h</code> mode does not create one rate file per trace; the group file contains the group transition block plus all trace-level noise blocks for that group.</li><li>Group rate files keep pristine transition labels such as <code>Rate_12</code> and <code>Rshift_1</code>; in <code>-h</code> mode, repeated noise blocks are suffixed by their trace/noise owner so columns stay unique.</li><li>Combined parameter outputs append the shared group label to compact fitted-parameter labels, e.g. <code>Rshift_1_3Prime</code>.</li><li><code>summary-rates_*.txt</code> is a convenience summary of the compact transition-rate-style parameters, not the canonical restart/input representation.</li></ul><h2 id="Proposal-CVs"><a class="docs-heading-anchor" href="#Proposal-CVs">Proposal CVs</a><a id="Proposal-CVs-1"></a><a class="docs-heading-anchor-permalink" href="#Proposal-CVs" title="Permalink"></a></h2><p>Shared MH fits can use a proposal-CV map so different hierarchy levels move at different scales:</p><pre><code class="language-julia hljs">propcv_levels = Dict(
+    :top =&gt; 0.05,
+    :group =&gt; 0.02,
+    :noise =&gt; 0.001,
+)</code></pre><p>The map is additive to the older scalar settings. <code>propcv</code> remains the fallback, <code>propcv_rate</code> and <code>propcv_noise</code> still work, and <code>propcv_levels</code> overrides them for shared-fit parameters that match a key. <code>fit.jl</code> assembles these settings into one proposal CV vector before constructing the sampler proposal.</p><p>Lookup is ordered from most specific to broad:</p><ul><li><code>(family=:R, owner=(top=:top, group=Symbol(&quot;3Prime&quot;)))</code>, <code>(family, owner)</code>, or the full owner path.</li><li>Group-specific keys such as <code>(family=:R, level=:group, value=Symbol(&quot;3Prime&quot;))</code>, <code>(:R, :group, Symbol(&quot;3Prime&quot;))</code>, <code>(:group, Symbol(&quot;3Prime&quot;))</code>, or <code>Symbol(&quot;3Prime&quot;)</code>.</li><li>Family/level keys such as <code>(family=:R, level=:group)</code>, <code>(:R, :group)</code>, <code>:R</code>, or <code>:group</code>.</li></ul><p>For the common 3Prime/5Prime setup, <code>:top</code> controls shared <code>G</code>, initiation, and decay parameters; <code>:group</code> controls group-owned <code>R</code> parameters; and <code>:noise</code> controls the noise parameters whether they are group-owned or individual-owned.</p><p>This intentionally keeps downstream prediction tools simple. A downstream analysis should be able to read one group rate file as &quot;the rates this group needs to run&quot; without reconstructing the shared-parameter graph. The combined <code>info_*.toml</code>/<code>.jld2</code> records which group rate files belong to the joint run.</p><h2 id="Cache-Behavior"><a class="docs-heading-anchor" href="#Cache-Behavior">Cache Behavior</a><a id="Cache-Behavior-1"></a><a class="docs-heading-anchor-permalink" href="#Cache-Behavior" title="Permalink"></a></h2><p>The shared-fit likelihood still avoids redundant expensive work when possible:</p><ul><li><code>transition_families</code> determines how many transition matrices <code>a</code> are cached.</li><li><code>emission_families</code> determines how many emission parameter groups are cached.</li><li>Each trace is assigned to one transition group and one emission group.</li></ul><p>Operationally, the likelihood loops over traces using assembled full rates. The special shared-fit behavior is limited to caching reusable <code>(a, p0)</code> transition objects and emission/noise objects.</p><p>For the no-<code>h</code> 3Prime/5Prime example, there are two transition groups and two emission groups. For the <code>-h</code> individual-noise case, there are still two transition groups, but emission groups are trace-specific.</p><h2 id="Script-Generator-Convention"><a class="docs-heading-anchor" href="#Script-Generator-Convention">Script Generator Convention</a><a id="Script-Generator-Convention-1"></a><a class="docs-heading-anchor-permalink" href="#Script-Generator-Convention" title="Permalink"></a></h2><p>Project script generators can expose this through a simple switch:</p><pre><code class="language-julia hljs">individual_noise=false  # no -h, noise is group-level
+individual_noise=true   # -h, noise is individual trace-level</code></pre><p>The generated fit script should print the chosen mode before fitting, for example:</p><pre><code class="language-text hljs">individual noise level: false</code></pre><p>If the printed mode or filename does not match the intended setting, regenerate the script from a fresh Julia session before running the fit.</p><h2 id="What-This-Is-Not"><a class="docs-heading-anchor" href="#What-This-Is-Not">What This Is Not</a><a id="What-This-Is-Not-1"></a><a class="docs-heading-anchor-permalink" href="#What-This-Is-Not" title="Permalink"></a></h2><p>This interface does not currently create learned hyperparameters. For example, if <code>:R =&gt; :group</code>, then each group has its own fitted <code>R</code> copy:</p><pre><code class="language-text hljs">R_3Prime ~ prior
+R_5Prime  ~ prior</code></pre><p>It does not fit:</p><pre><code class="language-text hljs">R_hyper_mean, R_hyper_cv
+R_3Prime ~ distribution(R_hyper_mean, R_hyper_cv)
+R_5Prime  ~ distribution(R_hyper_mean, R_hyper_cv)</code></pre><p>That distinction matters. This is a Bayesian grouped-parameter model with exact sharing where requested, not a hierarchical shrinkage model.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../hierarchical_trace/">« Hierarchical Trace Analysis</a><a class="docs-footer-nextpage" href="../joint_trace/">Joint Trace Analysis »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 23 July 2026 21:24">Thursday 23 July 2026</span>. Using Julia version 1.11.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
