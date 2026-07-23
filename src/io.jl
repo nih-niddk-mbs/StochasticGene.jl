@@ -394,6 +394,17 @@ function write_dataframes(resultfolder::String, datapath::String; measure::Symbo
     write_winners(resultfolder, measure)
 end
 
+function write_dataframes(;
+    resultfolder::String,
+    datapath::String,
+    measure::Symbol=:AIC,
+    assemble::Bool=true,
+    multicond::Bool=false,
+    datatype::String="rna",
+)
+    write_dataframes(resultfolder, datapath; measure=measure, assemble=assemble, multicond=multicond, datatype=datatype)
+end
+
 """
     write_dataframes_only(resultfolder::String, datapath::String; kwargs...)
 
