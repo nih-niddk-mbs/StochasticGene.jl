@@ -760,11 +760,12 @@ Return the decay rate, using the provided value or looking it up if negative.
 - Used for setting mRNA degradation rates in models
 """
 function set_decayrate(decayrate::Float64, gene, cell, root)
-    if decayrate < 0
-        return get_decay(gene, cell, root)
-    else
-        return decayrate
+    resolved = decayrate < 0 ? get_decay(gene, cell, root) : decayrate
+    if resolved < 0
+        println(gene, " has unresolved negative decay rate, set to 1.0")
+        return 1.0
     end
+    return resolved
 end
 
 """
@@ -5387,19 +5388,28 @@ end
 function get_decay(gene::String, path::String, col::Int)
     a = nothing
     in = readdlm(path, ',')
-    ind = findfirst(in[:, 1] .== gene)
+    genes = strip.(string.(in[:, 1]))
+    gene_key = strip(gene)
+    ind = findfirst(genes .== gene_key)
+    if isnothing(ind)
+        ind = findfirst(uppercase.(genes) .== uppercase(gene_key))
+    end
     if !isnothing(ind)
         a = in[ind, col]
     end
     get_decay(a, gene)
 end
 function get_decay(a, gene::String)
-    if typeof(a) <: Number && float(a) > 0
-        return get_decay(float(a))
+    if typeof(a) <: Number
+        av = float(a)
     else
-        println(gene, " has no positive decay time, set to 1.0")
-        return 1.0
+        av = tryparse(Float64, strip(string(a)))
     end
+    if av !== nothing && av > 0
+        return get_decay(av)
+    end
+    println(gene, " has no positive decay time, set to 1.0")
+    return 1.0
 end
 function get_decay(a::Float64)
     a > 0 || return 1.0
