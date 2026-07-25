@@ -390,12 +390,15 @@ Returns `nothing`, but writes summary CSVs and winner files based on selected
 
 # Notes
 - Calls [`write_dataframes_only`](@ref), then [`write_winners`](@ref).
+- When `optimize=true` was used for the fits, optimized fitted rates, objective,
+  and convergence are included in each `Summary_*.csv`; the standalone
+  `optimized_*.csv` is retained.
 - `datatype="rna"` and `datatype="rnacount"` add observed RNA moments when
   possible.
 - Keyword form is available for scripts that prefer named arguments.
 """
-function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
-    write_dataframes_only(resultfolder, datapath, assemble=assemble, multicond=multicond, datatype=datatype)
+function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, multicond::Bool=false, datatype::String="rna", rna_truncation=:legacy)
+    write_dataframes_only(resultfolder, datapath, assemble=assemble, multicond=multicond, datatype=datatype, rna_truncation=rna_truncation)
     write_winners(resultfolder, measure)
 end
 
@@ -406,8 +409,9 @@ function write_dataframes(;
     assemble::Bool=true,
     multicond::Bool=false,
     datatype::String="rna",
+    rna_truncation=:legacy,
 )
-    write_dataframes(resultfolder, datapath; measure=measure, assemble=assemble, multicond=multicond, datatype=datatype)
+    write_dataframes(resultfolder, datapath; measure=measure, assemble=assemble, multicond=multicond, datatype=datatype, rna_truncation=rna_truncation)
 end
 
 """
@@ -430,9 +434,10 @@ Returns `nothing`, but writes each `(filename, DataFrame)` returned by
 
 # Notes
 - Unlike [`write_dataframes`](@ref), this does not call [`write_winners`](@ref).
+- Existing optimization outputs are automatically included in the summary.
 """
-function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
-    dfs = make_dataframes(resultfolder, datapath, assemble, multicond, datatype)
+function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, datatype::String="rna", rna_truncation=:legacy)
+    dfs = make_dataframes(resultfolder, datapath, assemble, multicond, datatype; rna_truncation=rna_truncation)
     for dff in dfs
         for dfff in dff
             csvfile = joinpath(resultfolder, dfff[1])
@@ -1591,16 +1596,37 @@ function assemble_stats_key(folder::String; outfile::String=joinpath(folder, "st
 end
 
 """
+    assemble_optimized_key(folder::String; outfile=joinpath(folder, "optimized_key.csv"))
+
+Assemble key-based `optimized_<key>.txt` files into one CSV. Optimized parameter
+labels are read from the matching `param-stats_<key>.txt` schema because the
+optimizer stores only fitted parameters, not the complete model-rate vector.
+"""
+function assemble_optimized_key(folder::String; outfile::String=joinpath(folder, "optimized_key.csv"))
+    optfiles = key_resultfiles(folder, "optimized")
+    isempty(optfiles) && return nothing
+    firstkey = get_key(optfiles[1])
+    statfile = joinpath(folder, "param-stats_" * firstkey * ".txt")
+    isfile(statfile) || throw(ArgumentError(
+        "cannot label optimized parameters without matching file $(repr(statfile))",
+    ))
+    labels = vec(readdlm(statfile, ',', header=true)[2])
+    header = reshape(vcat("Model", string.(labels), "OptimizedObjective", "OptimizerConverged"), 1, :)
+    assemble_files_key(folder, optfiles, outfile, header, read_optimized)
+end
+
+"""
     assemble_all_key(folder::String)
 
-Assemble key-based rates, measures, and parameter-stat files in `folder`.
-Writes `rates_key.csv`, `measures_key.csv`, and `stats_key.csv` when matching inputs exist.
+Assemble key-based rates, measures, parameter-stat, and optimization files in
+`folder`. Writes the corresponding `*_key.csv` file when matching inputs exist.
 """
 function assemble_all_key(folder::String)
     (
         rates=assemble_rates_key(folder),
         measures=assemble_measures_key(folder),
         stats=assemble_stats_key(folder),
+        optimized=assemble_optimized_key(folder),
     )
 end
 
@@ -1785,7 +1811,17 @@ Assemble optimized parameter results into a single CSV file.
 """
 function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
     outfile = joinpath(folder, "optimized_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, labels, read_optimized)
+    optfiles = get_files(files, "optimized", label, cond, model)
+    isempty(optfiles) && return nothing
+    statfiles = get_files(files, "param-stats", label, cond, model)
+    fittedlabels = if isempty(statfiles)
+        noptimized = length(read_optimized(joinpath(folder, optfiles[1]))) - 2
+        vec(labels)[1:noptimized]
+    else
+        vec(readdlm(joinpath(folder, statfiles[1]), ',', header=true)[2])
+    end
+    header = reshape(vcat("Gene", string.(fittedlabels), "OptimizedObjective", "OptimizerConverged"), 1, :)
+    assemble_files(folder, optfiles, outfile, header, read_optimized)
 end
 
 """
@@ -3888,7 +3924,7 @@ function occursin_file(a, b, file::String)
 end
 
 """
-    read_rna(gene, cond, datapath)
+    read_rna(gene, cond, datapath; rna_truncation=:legacy)
 
 Read RNA histogram data from a file.
 
@@ -3896,6 +3932,8 @@ Read RNA histogram data from a file.
 - `gene`: Gene name
 - `cond`: Condition identifier
 - `datapath`: Path to data directory
+- `rna_truncation`: Histogram support policy. `:legacy` reproduces the v0.7.8
+  99%-of-counts/1000-bin rule; `:none` retains the full histogram.
 
 # Returns
 - `Tuple{Int, Vector{Float64}}`: (histogram length, histogram data)
@@ -3903,20 +3941,28 @@ Read RNA histogram data from a file.
 # Notes
 - Constructs filename as "{gene}_{cond}.txt"
 - Reads first column of data file
-- Truncates histogram if longer than 300 elements (keeps 99th percentile, max 1000)
-- Pads with zeros if histogram has fewer than 4 elements
+- With `rna_truncation=:legacy`, truncates every histogram using the v0.7.8
+  rule (retains 99% of counts, with at most 1000 bins)
+- With `rna_truncation=:none`, retains every input bin
+- Pads with zeros if the truncated histogram has fewer than 4 elements
 - Prints total histogram count for debugging
 - Used for reading RNA count histogram data
 """
-function read_rna(gene, cond, datapath)
+function normalize_rna_truncation(mode)
+    normalized = mode isa Symbol ? mode : Symbol(lowercase(strip(String(mode))))
+    normalized in (:legacy, :legacy99) && return :legacy
+    normalized in (:none, :full, :untruncated) && return :none
+    throw(ArgumentError(
+        "rna_truncation must be :legacy or :none, got $(repr(mode))",
+    ))
+end
+
+function read_rna(gene, cond, datapath; rna_truncation=:legacy)
     t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
     h = readfile(t)[:, 1]
-    # h = readfile(gene, cond, datapath)[:, 1]
-    # Only truncate if histogram has more than 400 elements
-    if length(h) > 300
-        h = truncate_histogram(h, 0.99, 1000)
-    end
-    # Ensure h has at least 10 elements by padding with zeros if needed
+    mode = normalize_rna_truncation(rna_truncation)
+    mode === :legacy && (h = truncate_histogram(h, 0.99, 1000))
+    # Ensure h has at least four elements by padding with zeros if needed.
     if length(h) < 4
         h = vcat(h, zeros(4 - length(h)))
     end

@@ -31,6 +31,15 @@ datapath = "data/HCT116_testdata"
 Paths are resolved the same way as `fit`: if needed, a relative `datapath` is
 looked up under `root/data`.
 
+Choose the histogram support policy explicitly when comparing analyses:
+
+- `rna_truncation=:legacy` (default) reproduces v0.7.8 by retaining 99% of
+  counts, capped at 1000 bins.
+- `rna_truncation=:none` retains the complete histogram.
+
+The setting applies to direct RNA fits, RNA legs of combined data, and
+`makeswarm_genes` scripts.
+
 ## Single-Gene Fit
 
 ```julia
@@ -52,6 +61,7 @@ fits, stats, measures, data, model, options = fit(
     maxtime = 60.0,
     samplesteps = 1_000_000,
     propcv = 0.01,
+    rna_truncation = :legacy,
 )
 ```
 
@@ -83,6 +93,7 @@ out = makeswarm_genes(
     maxtime = 3600.0,
     samplesteps = 1_000_000,
     propcv = 0.01,
+    rna_truncation = :legacy,
     project = "/home/carsonc/github/StochasticGene.jl/",
 )
 ```

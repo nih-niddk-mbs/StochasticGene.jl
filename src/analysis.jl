@@ -39,7 +39,7 @@ dfs = make_dataframes("results/", "data/", assemble=true, multicond=true)
 dfs = make_dataframes("results/", "data/", datatype="rnacount")
 ```
 """
-function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
+function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna"; rna_truncation=:legacy)
     if assemble
         assemble_all(resultfolder, multicond)
     end
@@ -58,7 +58,7 @@ function make_dataframes(resultfolder::String, datapath::String, assemble=true, 
                 mfiles = lfiles[model.==get_model.(lfiles)]
                 dfm = Vector{DataFrame}(undef, 0)
                 for i in eachindex(mfiles)
-                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datapath, multicond, datatype))
+                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datapath, multicond, datatype; rna_truncation=rna_truncation))
                 end
                 push!(dfl, ("Summary_$(label)_$(model).csv", stack_dataframe(dfm)))
             end
@@ -74,8 +74,9 @@ function make_dataframes(;
     assemble::Bool=true,
     multicond::Bool=false,
     datatype::String="rna",
+    rna_truncation=:legacy,
 )
-    make_dataframes(resultfolder, datapath, assemble, multicond, datatype)
+    make_dataframes(resultfolder, datapath, assemble, multicond, datatype; rna_truncation=rna_truncation)
 end
 
 function _key_run_spec(resultfolder::String, key)
@@ -122,11 +123,16 @@ function _annotate_key_dataframe!(df::DataFrame, resultfolder::String, datapath)
     models = [get(specs[i], :G, missing) for i in eachindex(keys)]
     nalleles = [get(specs[i], :nalleles, missing) for i in eachindex(keys)]
     datapaths = [_resolve_key_datapath(datapath, specs[i]) for i in eachindex(keys)]
+    rna_truncations = [
+        normalize_rna_truncation(get(specs[i], :rna_truncation, :legacy))
+        for i in eachindex(keys)
+    ]
     insertcols!(df, 1, :Gene => genes)
     insertcols!(df, :Condition => conds)
     insertcols!(df, :Model => models)
     insertcols!(df, :Nalleles => nalleles)
     insertcols!(df, :DataPath => datapaths)
+    insertcols!(df, :RNATruncation => rna_truncations)
     return df
 end
 
@@ -142,7 +148,13 @@ function _add_moments_key!(df::DataFrame, datatype::String)
         end
         try
             if datatype == "rna"
-                _, h = read_rna(df[i, :Gene], df[i, :Condition], df[i, :DataPath])
+                mode = :RNATruncation in propertynames(df) ? df[i, :RNATruncation] : :legacy
+                _, h = read_rna(
+                    df[i, :Gene],
+                    df[i, :Condition],
+                    df[i, :DataPath];
+                    rna_truncation=mode,
+                )
                 m[i] = mean_histogram(h)
                 v[i] = var_histogram(h)
                 t[i] = moment_histogram(h, 3)
@@ -181,9 +193,38 @@ function make_dataframes_key(resultfolder::String; datapath=nothing, assemble::B
         rename!(dfstats, :Model => :Key)
         df = leftjoin(df, dfstats, on=:Key, makeunique=true)
     end
+    optimizedfile = joinpath(resultfolder, "optimized_key.csv")
+    if isfile(optimizedfile)
+        dfoptimized = read_dataframe(optimizedfile)
+        rename!(dfoptimized, :Model => :Key)
+        _rename_optimized_columns!(dfoptimized, :Key)
+        df = leftjoin(df, dfoptimized, on=:Key, makeunique=true)
+    end
     _annotate_key_dataframe!(df, resultfolder, datapath)
     _add_moments_key!(df, datatype)
     return [("Summary_key.csv", df)]
+end
+
+function _rename_optimized_columns!(df::DataFrame, joincol::Symbol)
+    renames = Dict{Symbol,Symbol}()
+    for name in propertynames(df)
+        name == joincol && continue
+        if name == :OptimizedObjective || name == :OptimizerConverged
+            continue
+        end
+        renames[name] = Symbol(string(name), "_Optimized")
+    end
+    isempty(renames) || rename!(df, renames)
+    return df
+end
+
+function _add_optimized_results(df::DataFrame, ratefile::String)
+    optimizedfile = replace(ratefile, r"(^|/)rates_" => s"\1optimized_")
+    isfile(optimizedfile) || return df
+    optimized = read_dataframe(optimizedfile)
+    :Gene in propertynames(optimized) || return df
+    _rename_optimized_columns!(optimized, :Gene)
+    return leftjoin(df, optimized, on=:Gene, makeunique=true)
 end
 
 """
@@ -249,10 +290,11 @@ df = make_dataframe("rates_gene_condition_3401_2.txt", "data/", false, "rna")
 df = make_dataframe("rates_gene_condition_3401_2.txt", "data/", true, "rnacount")
 ```
 """
-function make_dataframe(ratefile::String, datapath::String, multicond::Bool, datatype::String)
+function make_dataframe(ratefile::String, datapath::String, multicond::Bool, datatype::String; rna_truncation=:legacy)
     df = read_dataframe(ratefile)
     df2 = read_dataframe(statfile_from_ratefile(ratefile))
     df = leftjoin(df, df2, on=:Gene, makeunique=true)
+    df = _add_optimized_results(df, ratefile)
     filename = splitpath(ratefile)[end]
     parts = fields(filename)
     model = parse_model(parts.model)
@@ -262,7 +304,7 @@ function make_dataframe(ratefile::String, datapath::String, multicond::Bool, dat
         G = parse(Int, parts.model)
         insertcols!(df, :Model => fill(G, size(df, 1)))
         df = stack_dataframe(df, G, parts.cond, multicond)
-        add_moments!(df, datapath, datatype)
+        add_moments!(df, datapath, datatype; rna_truncation=rna_truncation)
     end
 end
 
@@ -537,14 +579,19 @@ add_moments!(df, "data/", "rnacount")
 # - :ThirdMoment (third moment)
 ```
 """
-function add_moments!(df::DataFrame, datapath, datatype::String)
+function add_moments!(df::DataFrame, datapath, datatype::String; rna_truncation=:legacy)
     m = Vector{Float64}(undef, length(df.Gene))
     v = similar(m)
     t = similar(m)
     i = 1
     if datatype == "rna"
         for gene in df.Gene
-            _, h = read_rna(gene, df[i, :Condition], datapath)
+            _, h = read_rna(
+                gene,
+                df[i, :Condition],
+                datapath;
+                rna_truncation=rna_truncation,
+            )
             m[i] = mean_histogram(h)
             v[i] = var_histogram(h)
             t[i] = moment_histogram(h, 3)

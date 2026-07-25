@@ -598,6 +598,7 @@ function _nuts_samples_to_fit(
         ll[s], logpred = _loglikelihood_predictions(param[:, s], data, model, steady_state_solver, ad_likelihood, options)
         lppd, pwaic = update_waic(lppd, pwaic, logpred)
     end
+    waic_mean = pwaic[2]
     pwaic = n > 1 ? pwaic[3] / (n - 1) : pwaic[3]
     lppd = lppd .- log(n)
     imax = argmax(ll)
@@ -606,7 +607,8 @@ function _nuts_samples_to_fit(
     prior = logprior(param[:, end], model)
     accept = n
     total = n_adapts + n
-    return Fit(param, ll, parml, llml, lppd, pwaic, prior, accept, total)
+    return Fit(param, ll, parml, llml, lppd, pwaic, waic_mean, n,
+        prior, accept, total)
 end
 
 """

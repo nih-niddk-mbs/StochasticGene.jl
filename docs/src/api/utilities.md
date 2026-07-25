@@ -385,14 +385,17 @@ datapdf(rna_data, "data_summary.pdf")
 ### make_dataframes
 
 ```julia
-make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
-make_dataframes(; resultfolder, datapath, assemble=true, multicond=false, datatype="rna")
+make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna"; rna_truncation=:legacy)
+make_dataframes(; resultfolder, datapath, assemble=true, multicond=false, datatype="rna", rna_truncation=:legacy)
 ```
 
 Create summary DataFrames from fit results written under a result folder.
 When `assemble=true`, raw `rates_*.txt`, `measures_*.txt`, and `param-stats_*.txt`
 files are first assembled into summary CSVs. The returned value is a nested vector of
 `(filename, DataFrame)` pairs; use `write_dataframes_only` to write those summaries.
+If the fits used `optimize=true`, fitted-parameter columns with an `_Optimized`
+suffix plus `OptimizedObjective` and `OptimizerConverged` are included. The
+standalone assembled `optimized_*.csv` is also retained.
 
 **Arguments:**
 - `resultfolder`: Folder containing fit output files, for example `"results/HCT116_test"`
@@ -400,6 +403,8 @@ files are first assembled into summary CSVs. The returned value is a nested vect
 - `assemble`: Whether to assemble raw output files into summary CSVs first
 - `multicond`: Whether condition names encode multiple conditions
 - `datatype`: `"rna"` or `"rnacount"` for observed moment calculation
+- `rna_truncation`: RNA histogram policy used for observed moments; use the
+  same `:legacy` or `:none` value as the fit
 
 **Returns:**
 - Nested vector of `(filename, DataFrame)` pairs
@@ -434,7 +439,7 @@ dfs = make_dataframes_key("results/HCT116_test"; datatype = "rna")
 ### write_dataframes_only
 
 ```julia
-write_dataframes_only(resultfolder::String, datapath::String; assemble=true, multicond=false, datatype="rna")
+write_dataframes_only(resultfolder::String, datapath::String; assemble=true, multicond=false, datatype="rna", rna_truncation=:legacy)
 ```
 
 Write the dataframes returned by `make_dataframes` to CSV files in `resultfolder`.

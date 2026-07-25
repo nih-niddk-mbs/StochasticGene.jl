@@ -66,6 +66,11 @@ data/HCT116_testdata/
 
 Each file's first column is the histogram over RNA copy number bins.
 
+RNA histogram support is explicit. `rna_truncation=:legacy` (the default)
+reproduces the v0.7.8 rule that retains 99% of counts with at most 1000 bins.
+Use `rna_truncation=:none` to fit the complete histogram. The selected mode is
+recorded in generated fitscripts and run information.
+
 ```julia
 using StochasticGene
 
@@ -81,6 +86,7 @@ fits, stats, measures, data, model, options = fit(
     cell = "HCT116",
     datacond = "MOCK",
     resultfolder = "HCT116_test",
+    rna_truncation = :legacy,
 )
 ```
 

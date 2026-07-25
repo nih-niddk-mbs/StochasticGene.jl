@@ -79,6 +79,17 @@ function datahistogram(data::CombinedData)
     return reduce(vcat, (datahistogram(getfield(data.legs, modality)) for modality in combined_modalities(data)))
 end
 
+# Pointwise likelihoods are returned once per histogram bin or observed datum.
+# Histogram counts are multiplicities, not part of the pointwise log probability.
+waic_weights(data::AbstractHistogramData) = Float64.(datahistogram(data))
+waic_weights(data::RNACountData) = ones(Float64, length(data.countsRNA))
+waic_weights(data::AbstractTraceData) = ones(Float64, length(data.trace[1]))
+waic_weights(data::AbstractTraceHistogramData) =
+    vcat(Float64.(datahistogram(data)), ones(Float64, length(data.trace[1])))
+function waic_weights(data::CombinedData)
+    return reduce(vcat, (waic_weights(getfield(data.legs, modality)) for modality in combined_modalities(data)))
+end
+
 
 """
     datapdf(data)
@@ -660,7 +671,7 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTr
         return -Inf, fill(-Inf, length(hist))
     end
     logpredictions = log.(max.(predictions, eps()))
-    return sum(hist .* logpredictions), hist .* logpredictions  # Convention: return log-likelihoods
+    return sum(hist .* logpredictions), logpredictions  # Convention: return log-likelihoods
 end
 
 function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
@@ -697,7 +708,7 @@ function loglikelihood_ad(param, data::AbstractHistogramData, model::AbstractGen
         return -Inf, fill(-Inf, length(hist))
     end
     logpredictions = log.(max.(predictions, eps()))
-    return sum(hist .* logpredictions), hist .* logpredictions
+    return sum(hist .* logpredictions), logpredictions
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default, hmm_stack::Symbol=HMM_STACK_MH)
@@ -745,7 +756,7 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel; stea
     
     logpredictions = log.(max.(predictions, eps()))
     hist = datahistogram(data)
-    return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)  # Convention: all log-likelihoods
+    return sum(hist .* logpredictions) + llg, vcat(logpredictions, llgp)  # Convention: all log-likelihoods
 end
 
 function loglikelihood_ad(
@@ -774,7 +785,7 @@ function loglikelihood_ad(
     end
     logpredictions = log.(max.(predictions, eps()))
     hist = datahistogram(data)
-    return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)
+    return sum(hist .* logpredictions) + llg, vcat(logpredictions, llgp)
 end
 
 function _combined_likelihood(
@@ -878,7 +889,7 @@ function _combined_likelihood_leg(
     predictions = _combined_rna_predictions(param, data, model, mode; steady_state_solver=steady_state_solver)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions, eps()))
-    return LikelihoodParts(sum(hist .* logpredictions), hist .* logpredictions)
+    return LikelihoodParts(sum(hist .* logpredictions), logpredictions)
 end
 
 function _combined_likelihood_leg(

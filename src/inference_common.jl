@@ -42,22 +42,10 @@ function _run_mh_inference(data, model, options::MHOptions, rng, nchains::Int)
     end
 end
 
-function _merge_waic_chain(fitsv::Vector{Fit}, data)
-    n = length(fitsv)
-    n >= 1 || throw(ArgumentError("need at least one chain to merge"))
-    chain = Vector{Tuple{Fit,Tuple{Float64,Float64}}}(undef, n)
-    for i in 1:n
-        f = fitsv[i]
-        chain[i] = (f, compute_waic(f.lppd, f.pwaic, data))
-    end
-    return chain
-end
-
 function _merge_nuts_chains(data, model, chain_rows::AbstractVector)
     fitsv = Fit[cr[1] for cr in chain_rows]
-    chain = _merge_waic_chain(fitsv, data)
-    waic = pooled_waic(chain)
     fits = merge_fit(fitsv)
+    waic = compute_waic(fits.lppd, fits.pwaic, data)
     stats = compute_stats(fits.param, model)
     rhat = vec(compute_rhat(fitsv))
     ess, geweke, mcse = compute_measures(fitsv)

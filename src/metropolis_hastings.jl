@@ -16,7 +16,9 @@ Results of a Metropolis-Hastings MCMC run.
 - `llml::Float64`: Maximum log-likelihood.
 - `lppd::Array`: Log pointwise predictive density for WAIC.
 - `pwaic::Array`: Pointwise WAIC penalty terms.
-- `prior::Float64`: Sum of log prior probabilities for all samples.
+- `waic_mean::Array`: Running mean of pointwise log likelihoods.
+- `waic_n::Int`: Number of posterior draws represented by the WAIC statistics.
+- `prior::Float64`: Log prior probability at the final sampled parameter vector.
 - `accept::Int`: Number of accepted proposals.
 - `total::Int`: Total number of proposals.
 """
@@ -27,10 +29,17 @@ struct Fit <: Results
     llml::Float64
     lppd::Array
     pwaic::Array
+    waic_mean::Array
+    waic_n::Int
     prior::Float64
     accept::Int
     total::Int
 end
+
+# Backward-compatible constructor for callers that do not need to merge WAIC
+# sufficient statistics across independently sampled chains.
+Fit(param, ll, parml, llml, lppd, pwaic, prior, accept, total) =
+    Fit(param, ll, parml, llml, lppd, pwaic, zeros(size(pwaic)), size(param, 2), prior, accept, total)
 
 @inline function _mh_loglikelihood(param, data, model, stack::Symbol)
     if data isa AbstractTraceData && model isa AbstractGRSMmodel
@@ -158,8 +167,8 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionMod
             Distributed.ENV["JULIA_WORKER_TIMEOUT"] = "60"  # 60 second timeout
             sd = run_chains(data, model, options, nchains)
             chain = extract_chain(sd)
-            waic = pooled_waic(chain)
             fits = merge_fit(chain, options.merge_max_memory)
+            waic = compute_waic(fits.lppd, fits.pwaic, data)
             stats = compute_stats(fits.param, model)
             rhat = vec(compute_rhat(chain))
             ess, geweke, mcse = compute_measures(chain)
@@ -243,8 +252,8 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
         end
 
         # Process results
-        waic = pooled_waic(chain_results)
         fits = merge_fit(chain_results)
+        waic = compute_waic(fits.lppd, fits.pwaic, data)
         stats = compute_stats(fits.param, model)
         rhat = compute_rhat(chain_results)
         ess, geweke, mcse = compute_measures(chain_results)
@@ -391,7 +400,10 @@ function effective_initial_proposalcv(proposalcv, model, options::MHOptions)
         @warn "proposal_cv_rates/proposal_cv_noise ignored because proposal covariance is matrix-based"
         return proposalcv
     end
-    fallback_cv = proposalcv isa AbstractVector ? one(Float64) : Float64(proposalcv)
+    # Vector proposals have already been assembled by `fit`, including any
+    # shared/group/individual overrides. Reassembling here would erase them.
+    proposalcv isa AbstractVector && return proposalcv
+    fallback_cv = Float64(proposalcv)
     cv = _proposal_cv_vector(proposalcv, fallback_cv, model, options)
     @info "Using split proposal CV" proposal_cv_rates=options.proposal_cv_rates proposal_cv_noise=options.proposal_cv_noise nparams=length(cv)
     return cv
@@ -520,14 +532,13 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
         
         # Compute covariance for proposal adaptation
         # Minimum accepts = 2*n so cov is not rank-deficient; isposdef + cond() reject degenerate cov.
-        keep_user_cov = (proposalcv isa Tuple) || (proposalcv isa AbstractMatrix)
-        acceptance_rate = accepttotal / step
+        keep_user_cov = proposalcv isa Tuple ||
+                        proposalcv isa AbstractMatrix ||
+                        proposalcv isa AbstractVector
         
         # Periodic re-adaptation: every adapt_interval steps after initial 1000 steps
         if !keep_user_cov && step >= 1000 && accepttotal >= min_accepts && (step - last_adapt_step) >= adapt_interval
             last_adapt_step = step
-            accepttotal_pre_adapt = accepttotal
-            steps_pre_adapt = step
             
             cov_samples, d_cov = adaptation_covariance_samples(parout, step, model)
             covparam = cov(cov_samples')
@@ -540,17 +551,11 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
             # Compute base scaling
             scaling = (2.38^2) / d_cov
             
-            # Adaptive scaling: adjust by (target / current)^2 to converge toward target
+            # Adaptive scaling moves proposal size toward the target acceptance.
             # If current_rate > target: increase scaling to reduce acceptance
             # If current_rate < target: decrease scaling to increase acceptance
             rate_ratio = current_rate / acceptance_target
-            if rate_ratio > 1.0
-                # Acceptance too high: increase scaling (take bigger steps)
-                scaling *= rate_ratio^1.5  # Responsive scaling based on overage
-            else
-                # Acceptance too low: decrease scaling (take smaller steps)
-                scaling *= rate_ratio^1.5  # Also responsive for underage
-            end
+            scaling *= rate_ratio^1.5
             
             if isposdef(covparam)
                 # Stricter conditioning check (1e6 instead of 1e10)
@@ -621,11 +626,12 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
         # One-time diagnostic when acceptance is near zero after first 5000 proposal steps.
         if !diag_done && total_step >= 5000 && accepttotal <= max(1, total_step ÷ 50000)
             diag_done = true
-            paramt_d, _ = proposal(param, d, proposalcv, model)
+            paramt_d, dt_d = proposal(param, d, proposalcv, model)
             if !instant_reject(paramt_d, model)
                 priort_d = logprior(paramt_d, model)
                 llt_d, _ = _mh_loglikelihood(paramt_d, data, model, _mh_likelihood_options(mh_options, hmm_stack))
-                log_ratio_d = (llt_d + priort_d - ll - prior) / temp
+                log_ratio_d = mh_log_acceptance_ratio(
+                    ll, llt_d, prior, priort_d, param, paramt_d, d, dt_d, temp)
                 Δ = isempty(param) ? 0.0 : maximum(abs.(paramt_d .- param))
                 @warn "Low acceptance diagnostic (step=$total_step, accept=$accepttotal): current ll=$ll, prior=$prior; proposed ll=$llt_d, prior=$priort_d; log_accept_ratio=$log_ratio_d; max|Δparam|=$Δ. If log_ratio is very negative or -Inf, proposals are far from posterior support (try smaller propcv or check prior/likelihood)."
             end
@@ -649,9 +655,13 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
             lppd, pwaic = update_waic(lppd, pwaic, logpredictions)
         end
     end
+    stored > 0 || throw(ArgumentError(
+        "MH sampling stored no posterior samples; increase maxtime or reduce sample_stride"))
+    waic_mean = pwaic[2]
     pwaic = stored > 1 ? pwaic[3] / (stored - 1) : pwaic[3]
     lppd .-= log(stored)
-    Fit(parout[:, 1:stored], llout[1:stored], parml, llml, lppd, pwaic, prior, accepttotal, total_step)
+    Fit(parout[:, 1:stored], llout[1:stored], parml, llml, lppd, pwaic,
+        waic_mean, stored, prior, accepttotal, total_step)
 end
 
 
@@ -732,6 +742,11 @@ function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, te
     try
         llt, logpredictionst = _mh_loglikelihood(paramt, data, model, _mh_likelihood_options(mh_options, hmm_stack))
     catch err
+        if err isa InterruptException ||
+           err isa OutOfMemoryError ||
+           err isa Distributed.ProcessExitedException
+            rethrow()
+        end
         @debug "Rejecting proposal after likelihood evaluation failed" exception=(err, catch_backtrace())
         return 0, logpredictions, param, ll, prior, d
     end
@@ -765,13 +780,11 @@ Metropolis-Hastings acceptance/rejection step for a proposed parameter update.
 - Tuple: (accept, logpredictions, param, ll, prior, d) if rejected, or updated values if accepted
 """
 function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
-    # mhfactor not needed for symmetric proposal distribution
-    log_ratio = (llt + priort - ll - prior) / temp
-    # Guard against NaN/Inf (e.g. from -Inf prior or likelihood)
-    if !isfinite(log_ratio)
+    log_ratio = mh_log_acceptance_ratio(ll, llt, prior, priort, param, paramt, d, dt, temp)
+    if isnan(log_ratio) || log_ratio == -Inf
         return 0, logpredictions, param, ll, prior, d
     end
-    if log(rand()) < log_ratio
+    if log_ratio == Inf || log(rand()) < log_ratio
         return 1, logpredictionst, paramt, llt, priort, dt
     else
         return 0, logpredictions, param, ll, prior, d
@@ -779,9 +792,10 @@ function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, 
 end
 
 """
-    instant_reject(paramt, model; minval=1e-12, maxval=1e8)
+    instant_reject(paramt, model; minval=-Inf, maxval=Inf)
 
-Return `true` if any parameter in `paramt` is outside [minval, maxval], or if any parameter changes by more than `reltol` (default 0.5 = 50%) relative to `param` (for |param| > abstol). For parameters near zero, only the absolute bound applies.
+Expand `paramt` into model rates and return `true` if any rate is non-finite
+or outside `[minval, maxval]`.
 """
 function instant_reject(paramt, model; minval=-Inf, maxval=Inf)
     n_rates = num_rates(model)
@@ -826,8 +840,8 @@ This is a unified implementation that works for all data types.
 
 # Notes
 - For histogram data: 
-  - lppd and pwaic are weighted by histogram counts
-  - Each bin's contribution is scaled by its count
+  - lppd and pwaic contain one unweighted value per bin
+  - `compute_waic` applies each bin count as an observation multiplicity
 - For RNA count data: 
   - lppd and pwaic are raw log-likelihoods
   - Each count is an observation
@@ -837,13 +851,20 @@ This is a unified implementation that works for all data types.
 - The standard error returned is for the **total WAIC** (not per observation), and is scaled by the square root of the number of observations (n_obs).
 """
 function compute_waic(lppd::Array{T}, pwaic::Array{T}, data) where {T}
+    weights = waic_weights(data)
+    length(weights) == length(lppd) || throw(DimensionMismatch(
+        "WAIC has $(length(lppd)) pointwise likelihoods but $(length(weights)) observation weights"))
     # Pointwise WAIC contributions: waic_i = -2 * (lppd_i - pwaic_i)
     waic_i = -2 .* (lppd .- pwaic)
     # Total WAIC
-    waic = sum(waic_i)
-    # Standard error following Gelman et al.: sqrt(n_obs * Var_i(waic_i))
-    n_obs = length(waic_i)
-    v = n_obs > 1 ? var(waic_i) : zero(eltype(waic_i))
+    waic = sum(weights .* waic_i)
+    # Standard error over the implied observations, without materializing
+    # repeated histogram bins.
+    n_obs = sum(weights)
+    μ = n_obs > 0 ? waic / n_obs : zero(eltype(waic_i))
+    v = n_obs > 1 ?
+        sum(weights .* (waic_i .- μ) .^ 2) / (n_obs - 1) :
+        zero(eltype(waic_i))
     se = sqrt(n_obs * max(v, zero(v)))
     return waic, se
 end
@@ -989,7 +1010,32 @@ end
 Compute the Metropolis-Hastings correction factor for asymmetric proposal distributions.
 Returns the log ratio of proposal densities.
 """
-mhfactor(param, d, paramt, dt) = logpdf(dt, param) - logpdf(d, paramt)
+proposal_logpdf(d::Distribution, x) = logpdf(d, x)
+
+function proposal_logpdf(d::AbstractVector{<:Distribution}, x::AbstractVector)
+    offset = firstindex(x)
+    value = zero(eltype(x))
+    for dist in d
+        if dist isa UnivariateDistribution
+            value += logpdf(dist, x[offset])
+            offset += 1
+        else
+            n = length(dist)
+            value += logpdf(dist, view(x, offset:offset+n-1))
+            offset += n
+        end
+    end
+    offset == lastindex(x) + 1 ||
+        throw(DimensionMismatch("Proposal blocks cover $(offset - firstindex(x)) parameters, but the parameter vector has length $(length(x))"))
+    return value
+end
+
+mhfactor(param, d, paramt, dt) =
+    proposal_logpdf(dt, param) - proposal_logpdf(d, paramt)
+
+function mh_log_acceptance_ratio(ll, llt, prior, priort, param, paramt, d, dt, temp)
+    (llt + priort - ll - prior) / temp + mhfactor(param, d, paramt, dt)
+end
 
 
 # Functions for parallel computing on multiple chains
@@ -1021,32 +1067,17 @@ function collate_fit(chain)
     return fits
 end
 """
-collate_waic(chain)
+    pooled_waic(chain, data)
 
-return 2D array of collated waic from multiple chains
-
+Return WAIC from the posterior draws pooled across all chains.
 """
-function collate_waic(chain)
-    waic = Array{Float64,2}(undef, length(chain), 3)
-    for i in eachindex(chain)
-        waic[i, 1] = chain[i][2][1]
-        waic[i, 2] = chain[i][2][2]
-        waic[i, 3] = chain[i][1].total
-    end
-    return waic
-    # mean(waic,dims=1),median(waic,dims=1), mad(waic[:,1],normalize=false),waic
+function pooled_waic(chain, data)
+    fits = merge_fit(chain)
+    return compute_waic(fits.lppd, fits.pwaic, data)
 end
 
-
-"""
-    pooled_waic(chain)
-
-returns pooled waic and se from multiple chains
-"""
-function pooled_waic(chain)
-    waic = collate_waic(chain)
-    return pooled_mean(waic[:, 1], waic[:, 3]), pooled_std(waic[:, 2], waic[:, 3])
-end
+pooled_waic(chain) = throw(ArgumentError(
+    "pooled_waic now requires the data object so histogram multiplicities can be handled correctly"))
 
 """
     merge_param(fits::Vector)
@@ -1126,12 +1157,38 @@ returns Fit structure merged from multiple runs
 merge_fit(chain::Array{Tuple,1}) = merge_fit(collate_fit(chain))
 merge_fit(chain::Array{Tuple,1}, max_memory::Int) = merge_fit(collate_fit(chain), max_memory)
 
+function _merge_waic_statistics(fits::AbstractVector{Fit})
+    isempty(fits) && throw(ArgumentError("cannot merge WAIC statistics from no fits"))
+    n = fits[1].waic_n
+    n > 0 || throw(ArgumentError("a fit contains no posterior draws for WAIC"))
+    lppd_sum = fits[1].lppd .+ log(n)
+    mean_logp = copy(fits[1].waic_mean)
+    m2 = n > 1 ? fits[1].pwaic .* (n - 1) : zeros(size(fits[1].pwaic))
+
+    for fit in fits[2:end]
+        ni = fit.waic_n
+        ni > 0 || throw(ArgumentError("a fit contains no posterior draws for WAIC"))
+        length(fit.lppd) == length(lppd_sum) || throw(DimensionMismatch(
+            "cannot merge WAIC statistics with different pointwise lengths"))
+        lppd_sum = logsumexp(lppd_sum, fit.lppd .+ log(ni))
+        m2i = ni > 1 ? fit.pwaic .* (ni - 1) : zeros(size(fit.pwaic))
+        newn = n + ni
+        delta = fit.waic_mean .- mean_logp
+        mean_logp .+= delta .* (ni / newn)
+        m2 .+= m2i .+ delta .^ 2 .* (n * ni / newn)
+        n = newn
+    end
+
+    lppd = lppd_sum .- log(n)
+    pwaic = n > 1 ? m2 ./ (n - 1) : m2
+    return lppd, pwaic, mean_logp, n
+end
+
 function merge_fit_old(fits::Array{Fit,1})
     param = merge_param(fits)
     ll = merge_ll(fits)
     parml, llml = find_ml(fits)
-    lppd = fits[1].lppd
-    pwaic = fits[1].pwaic
+    lppd, pwaic, waic_mean, waic_n = _merge_waic_statistics(fits)
     prior = fits[1].prior
     accept = fits[1].accept
     total = fits[1].total
@@ -1139,10 +1196,9 @@ function merge_fit_old(fits::Array{Fit,1})
         accept += fits[i].accept
         total += fits[i].total
         prior += fits[i].prior
-        lppd = logsumexp(lppd, fits[i].lppd)
-        pwaic += fits[i].pwaic
     end
-    Fit(param, ll, parml, llml, lppd .- log(length(fits)), pwaic / length(fits), prior / length(fits), accept, total)
+    Fit(param, ll, parml, llml, lppd, pwaic, waic_mean, waic_n,
+        prior / length(fits), accept, total)
 end
 
 """
@@ -1280,12 +1336,23 @@ function compute_measures(fits::Vector{Fit})
     geweke_mat = reduce(hcat, geweke_list)
     mcse_mat = reduce(hcat, mcse_list)
 
-    # Pooled/summarized diagnostics
-    pooled_ess = sum(ess_mat, dims=2)[:, 1]           # sum across chains for each parameter
-    mean_geweke = mean(geweke_mat, dims=2)[:, 1]      # mean across chains for each parameter
-    mean_mcse = mean(mcse_mat, dims=2)[:, 1]          # mean across chains for each parameter
+    # Independent-chain ESS values add. Geweke is a per-chain stationarity
+    # check, so retain the chain with the largest absolute z-score. Combine
+    # chain-mean MCSEs using their sample-count weights.
+    pooled_ess = vec(sum(ess_mat, dims=2))
+    worst_geweke = Vector{Float64}(undef, size(geweke_mat, 1))
+    for i in axes(geweke_mat, 1)
+        finite = findall(isfinite, view(geweke_mat, i, :))
+        worst_geweke[i] = isempty(finite) ? NaN :
+            geweke_mat[i, finite[argmax(abs.(geweke_mat[i, finite]))]]
+    end
+    ns = Float64[size(f.param, 2) for f in fits]
+    ntotal = sum(ns)
+    pooled_mcse = ntotal > 0 ?
+        sqrt.(vec(sum((mcse_mat .* reshape(ns, 1, :)) .^ 2, dims=2))) ./ ntotal :
+        fill(NaN, size(mcse_mat, 1))
 
-    return pooled_ess, mean_geweke, mean_mcse
+    return pooled_ess, worst_geweke, pooled_mcse
 end
 
 function compute_measures(fits::Fit)
@@ -1424,8 +1491,17 @@ Used in Geweke diagnostic.
 """
 function spectrum0(x)
     n = length(x)
-    spec = abs.(fft(x .- mean(x))) .^ 2 / n
-    return sum(spec[2:Int(floor(n / 2))]) * 2 / n
+    n < 2 && return NaN
+    xc = Float64.(x) .- mean(x)
+    γ0 = dot(xc, xc) / n
+    iszero(γ0) && return 0.0
+    maxlag = min(n - 1, max(1, floor(Int, sqrt(n))))
+    estimate = γ0
+    for lag in 1:maxlag
+        γ = dot(view(xc, 1:n-lag), view(xc, 1+lag:n)) / n
+        estimate += 2 * (1 - lag / (maxlag + 1)) * γ
+    end
+    return max(estimate, 0.0)
 end
 
 """
@@ -1459,6 +1535,30 @@ Returns a vector of MCSE values.
 
 
 
+function _integrated_autocorrelation_time(x)
+    n = length(x)
+    n < 2 && return NaN
+    iszero(var(x)) && return 1.0
+    acf = autocor(x, 0:min(1000, n - 1))
+    length(acf) < 2 && return 1.0
+
+    # Geyer's initial-positive, monotone sequence of paired
+    # autocorrelations Γ_k = ρ_{2k} + ρ_{2k+1}.
+    pair_sums = Float64[]
+    previous = Inf
+    i = 1
+    while i < length(acf)
+        pair = acf[i] + acf[i + 1]
+        (!isfinite(pair) || pair <= 0) && break
+        pair = min(pair, previous)
+        push!(pair_sums, pair)
+        previous = pair
+        i += 2
+    end
+    isempty(pair_sums) && return 1.0
+    return max(-1 + 2 * sum(pair_sums), eps(Float64))
+end
+
 function compute_ess(params)
     n_params = size(params, 1)
     n_samples = size(params, 2)
@@ -1471,11 +1571,8 @@ function compute_ess(params)
     end
 
     for i in 1:n_params
-        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
-        cutoff = findfirst(x -> abs(x) < 0.05, acf)
-        cutoff = isnothing(cutoff) ? length(acf) : cutoff
-        tau = 1 + 2 * sum(acf[2:cutoff])
-        ess[i] = n_samples / tau
+        tau = _integrated_autocorrelation_time(view(params, i, :))
+        ess[i] = min(n_samples, n_samples / tau)
     end
     return ess
 end
@@ -1492,12 +1589,11 @@ function compute_mcse(params)
     end
 
     for i in 1:n_params
-        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
-        cutoff = findfirst(x -> abs(x) < 0.05, acf)
-        cutoff = isnothing(cutoff) ? length(acf) : cutoff
-        tau = 1 + 2 * sum(acf[2:cutoff])
-        val = tau * var(params[i, :]) / n_samples
-        mcse[i] = sqrt(max(val, 0.0))
+        values = view(params, i, :)
+        tau = _integrated_autocorrelation_time(values)
+        ess = min(n_samples, n_samples / tau)
+        mcse[i] = isfinite(ess) && ess > 0 ?
+            sqrt(max(var(values) / ess, 0.0)) : NaN
     end
     return mcse
 end
@@ -1625,9 +1721,10 @@ Thins the columns of `mat` so that the number of columns does not exceed `maxcol
 Returns the thinned matrix.
 """
 function thin_columns(mat; maxcols=5000)
+    maxcols > 0 || throw(ArgumentError("maxcols must be positive"))
     ncols = size(mat, 2)
     if ncols > maxcols
-        thin_factor = div(ncols, maxcols)
+        thin_factor = cld(ncols, maxcols)
         return mat[:, 1:thin_factor:end]
     else
         return mat
@@ -1648,18 +1745,36 @@ function estimate_memory_usage(fits::Vector{Fit})
     return total_bytes
 end
 
-function memory_aware_thin(fits::Vector{Fit}, max_memory::Int=48 * 1024^3)
-    # First estimate total memory usage
-    total_bytes = estimate_memory_usage(fits)
+function estimate_peak_merge_memory(fits::Vector{Fit})
+    isempty(fits) && return 0
+    sample_bytes = estimate_memory_usage(fits)
+    nparams = size(fits[1].param, 1)
+    waic_bytes = sum(
+        (length(f.lppd) + length(f.pwaic) + length(f.waic_mean)) *
+        sizeof(Float64) for f in fits
+    )
+    # Existing chains, merged samples, physical-rate conversion used by
+    # compute_stats, merged WAIC statistics, and covariance/correlation arrays.
+    return 3 * sample_bytes + 2 * waic_bytes + 2 * nparams^2 * sizeof(Float64)
+end
 
-    # Merging allocates a second set of arrays while the original chains are still live.
-    if 2 * total_bytes <= max_memory
+function memory_aware_thin(fits::Vector{Fit}, max_memory::Int=48 * 1024^3)
+    total_bytes = estimate_memory_usage(fits)
+    peak_bytes = estimate_peak_merge_memory(fits)
+
+    if peak_bytes <= max_memory
         return fits
     end
-    @warn "Thinning chains before merge to fit within memory limit." total_mib=round(total_bytes / 1024^2; digits=2) max_mib=round(max_memory / 1024^2; digits=2)
+    @warn "Thinning chains before merge to fit within memory limit." total_mib=round(total_bytes / 1024^2; digits=2) estimated_peak_mib=round(peak_bytes / 1024^2; digits=2) max_mib=round(max_memory / 1024^2; digits=2)
 
-    # Leave room for the merged arrays in addition to the per-chain arrays.
-    required_thinning = max(1, ceil(Int, 2 * total_bytes / max_memory))
+    waic_bytes = sum(
+        (length(f.lppd) + length(f.pwaic) + length(f.waic_mean)) *
+        sizeof(Float64) for f in fits
+    )
+    fixed_bytes = 2 * waic_bytes +
+                  2 * size(fits[1].param, 1)^2 * sizeof(Float64)
+    sample_budget = max(max_memory - fixed_bytes, 1)
+    required_thinning = max(1, ceil(Int, 3 * total_bytes / sample_budget))
 
     # Apply thinning to each chain
     thinned_fits = similar(fits)
@@ -1669,7 +1784,8 @@ function memory_aware_thin(fits::Vector{Fit}, max_memory::Int=48 * 1024^3)
         keep = n == 0 ? Int[] : unique!([collect(1:required_thinning:n); n])
         param = f.param[:, keep]
         ll = f.ll[keep]
-        thinned_fits[i] = Fit(param, ll, f.parml, f.llml, f.lppd, f.pwaic, f.prior, f.accept, f.total)
+        thinned_fits[i] = Fit(param, ll, f.parml, f.llml, f.lppd, f.pwaic,
+            f.waic_mean, f.waic_n, f.prior, f.accept, f.total)
     end
 
     return thinned_fits
@@ -1683,8 +1799,7 @@ function merge_fit(fits::Array{Fit,1}, max_memory::Int=48*1024^3)
     param = merge_param(thinned_fits)
     ll = merge_ll(thinned_fits)
     parml, llml = find_ml(thinned_fits)
-    lppd = thinned_fits[1].lppd
-    pwaic = thinned_fits[1].pwaic
+    lppd, pwaic, waic_mean, waic_n = _merge_waic_statistics(thinned_fits)
     prior = thinned_fits[1].prior
     accept = thinned_fits[1].accept
     total = thinned_fits[1].total
@@ -1693,11 +1808,8 @@ function merge_fit(fits::Array{Fit,1}, max_memory::Int=48*1024^3)
         accept += thinned_fits[i].accept
         total += thinned_fits[i].total
         prior += thinned_fits[i].prior
-        lppd = logsumexp(lppd, thinned_fits[i].lppd)
-        pwaic += thinned_fits[i].pwaic
     end
 
-    return Fit(param, ll, parml, llml, lppd .- log(length(thinned_fits)),
-        pwaic / length(thinned_fits), prior / length(thinned_fits),
-        accept, total)
+    return Fit(param, ll, parml, llml, lppd, pwaic, waic_mean, waic_n,
+        prior / length(thinned_fits), accept, total)
 end

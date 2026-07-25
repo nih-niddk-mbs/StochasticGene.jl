@@ -209,6 +209,7 @@ const _FIT_DEFAULTS = (
     datacol=3,
     ejectnumber=1,
     yieldfactor=1.0,
+    rna_truncation=:legacy,
     trace_specs=[],
     dwell_specs=[],
     inference_method=:mh,
@@ -383,6 +384,7 @@ function fit(; key=nothing, kwargs...)
     datacol = merged[:datacol]
     ejectnumber = merged[:ejectnumber]
     yieldfactor = merged[:yieldfactor]
+    rna_truncation = merged[:rna_truncation]
     trace_specs = merged[:trace_specs]
     dwell_specs = merged[:dwell_specs]
     if use_key
@@ -422,9 +424,9 @@ function fit(; key=nothing, kwargs...)
     _current_name_override[] = name_override
     try
         if rinit === nothing
-                fit(nchains, datatype, datapath, gene, cell, datacond, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; legacy_traceinfo=leg_ti, legacy_dttype=leg_dt)
+                fit(nchains, datatype, datapath, gene, cell, datacond, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; legacy_traceinfo=leg_ti, legacy_dttype=leg_dt, rna_truncation=rna_truncation)
         else
-            fit(rinit, nchains, datatype, datapath, gene, cell, datacond, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; legacy_traceinfo=leg_ti, legacy_dttype=leg_dt)
+            fit(rinit, nchains, datatype, datapath, gene, cell, datacond, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; legacy_traceinfo=leg_ti, legacy_dttype=leg_dt, rna_truncation=rna_truncation)
         end
     finally
         _current_run_spec[] = nothing
@@ -1003,6 +1005,7 @@ const _MAKE_STRUCTURES_OPTION_KW = (
     :init_jitter, :init_jitter_individual, :init_jitter_noise,
     :propcv_rate, :propcv_noise, :proposal_cv_rates, :proposal_cv_noise,
     :propcv_levels, :proposal_cv_levels, :shared_parameters, :recursive_hierarchy,
+    :rna_truncation,
 )
 
 function _make_structures_option_kwargs(; kwargs...)
@@ -1156,6 +1159,9 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     run_spec = _current_run_spec[] === nothing ? Dict{Symbol,Any}() : Dict{Symbol,Any}(_current_run_spec[])
     shared_parameters = pop!(kw, :shared_parameters, get(run_spec, :shared_parameters, nothing))
     recursive_hierarchy = pop!(kw, :recursive_hierarchy, get(run_spec, :recursive_hierarchy, nothing))
+    rna_truncation = normalize_rna_truncation(
+        pop!(kw, :rna_truncation, get(run_spec, :rna_truncation, :legacy)),
+    )
     recursive_hierarchy === nothing && (recursive_hierarchy = shared_parameters)
     recursive_from_hierarchical = _recursive_hierarchy_from_hierarchical(hierarchical)
     if recursive_hierarchy === nothing && recursive_from_hierarchical !== nothing
@@ -1195,7 +1201,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
         root,
     )
     if recursive_loaded === nothing
-        data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs_work, dwell_specs)
+        data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs_work, dwell_specs; rna_truncation=rna_truncation)
     else
         data, expanded_recursive_specs = recursive_loaded
         recursive_hierarchy = _complete_recursive_hierarchy_spec(recursive_hierarchy, expanded_recursive_specs)
@@ -1248,6 +1254,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
             :warmupsteps => warmupsteps,
             :maxtime => maxtime,
             :temp => temp,
+            :rna_truncation => rna_truncation,
         ),
     )
     merge!(run, Dict{Symbol,Any}(kw))
@@ -1992,7 +1999,7 @@ function _combined_datapath(datapath, modality::Symbol, modalities)
     throw(ArgumentError("datapath for combined datatype $(repr(modalities)) must be a NamedTuple keyed by modality, or a supported legacy layout"))
 end
 
-function load_combined_data(modalities::Tuple, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function load_combined_data(modalities::Tuple, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; rna_truncation=:legacy)
     legs = map(modalities) do modality
         leg_datatype = modality === :trace ? :trace : modality
         leg_path = _combined_datapath(datapath, modality, modalities)
@@ -2001,7 +2008,7 @@ function load_combined_data(modalities::Tuple, dttype, datapath, label, gene, da
         leg_datacond = _combined_arg(datacond, modality, modalities, :datacond)
         leg_trace_specs = modality in (:trace, :tracejoint, :tracegrid) ? trace_specs : []
         leg_dwell_specs = modality === :dwelltime ? dwell_specs : []
-        leg = load_data(leg_datatype, dttype, leg_path, leg_label, leg_gene, leg_datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, leg_trace_specs, leg_dwell_specs)
+        leg = load_data(leg_datatype, dttype, leg_path, leg_label, leg_gene, leg_datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, leg_trace_specs, leg_dwell_specs; rna_truncation=rna_truncation)
         modality => leg
     end
     return CombinedData(legs...)
@@ -2036,16 +2043,16 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 # Throws
 - `ArgumentError` if `datatype` is unsupported
 """
-function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; rna_truncation=:legacy)
     dt = normalize_datatype(datatype)
     if dt isa Tuple
-        return load_combined_data(dt, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs)
+        return load_combined_data(dt, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs; rna_truncation=rna_truncation)
     end
     # Units for non-trace data types come from dwell_specs; for trace types they come from trace_specs.
     units = get_units(dwell_specs, trace_specs)
 
     if dt == :rna
-        len, h = read_rna(gene, datacond, datapath)
+        len, h = read_rna(gene, datacond, datapath; rna_truncation=rna_truncation)
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor, max_nRNA=500)) : yieldfactor
         return RNAData{typeof(len),typeof(h)}(label, gene, len, h, yield, units)
 
@@ -2056,14 +2063,14 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         return RNACountData(label, gene, nRNA_computed, countsRNA, yield_vec, units)
 
     elseif dt == :rnaonoff
-        len, h = read_rna(gene, datacond, datapath[1])
+        len, h = read_rna(gene, datacond, datapath[1]; rna_truncation=rna_truncation)
         h = div.(h, temprna)
         LC = readfile(gene, datacond, datapath[2])
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor, max_nRNA=500)) : yieldfactor
         return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3], yield, units)
 
     elseif dt == :rnadwelltime
-        len, h = read_rna(gene, datacond, datapath[1])
+        len, h = read_rna(gene, datacond, datapath[1]; rna_truncation=rna_truncation)
         h = div.(h, temprna)
         bins, DT = read_dwelltimes(datapath[2:end])
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor, max_nRNA=500)) : yieldfactor

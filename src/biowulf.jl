@@ -245,6 +245,8 @@ calls `fit(...)` with `ARGS[1]` as the gene.
   `Acceptance < 0.01`, non-finite `WAIC`, or non-unit `Temperature`. `Geweke` and `MCSE`
   are skipped by default; set `geweke_thresh` or `mcse_max` to enable them.
 - `filedir="."`: directory to write swarm and script files
+- `rna_truncation=:legacy`: reproduce the v0.7.8 99%-of-counts histogram
+  truncation. Set `rna_truncation=:none` to retain the complete histogram.
 - Plus the same fit/model kwargs (datatype, `datapath`, cell, `datacond`, optional legacy `dttype` / `traceinfo`,
   `trace_specs`, `dwell_specs`, transitions, G, R, S, insertstep, etc.) and swarm options (nchains, nthreads, swarmfile, juliafile, project, src).
 - `scheduler=:swarm`: output style. `:swarm` writes the command file only; `:slurm`
@@ -374,7 +376,7 @@ end
 
 function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=nothing, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=nothing, resultfolder::String="HCT116_test", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", scheduler=:swarm, scheduler_jobs::Int=16, slurm_mem::String="4G", slurm_time::String="02:00:00", slurm_jobname::String="sg-fit",
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, rna_truncation=:legacy, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", scheduler=:swarm, scheduler_jobs::Int=16, slurm_mem::String="4G", slurm_time::String="02:00:00", slurm_jobname::String="sg-fit",
     inference_method=nothing, sample_stride=nothing, parallel=nothing, device=nothing, merge_max_memory=nothing, merge_max_gb=nothing, likelihood_executor=nothing, gradient_checkpoint_length=nothing, proposal_cv_rates=nothing, proposal_cv_noise=nothing, init_jitter=nothing, init_jitter_individual=nothing, init_jitter_noise=nothing)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
@@ -415,7 +417,7 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
     write_fitfile_genes(joinpath(filedir, juliafile_full), nchains, datatype, datapath, cell, datacond, resultfolder, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; src=src, dttype=dttype, traceinfo=traceinfo,
-        inference_method=inference_method, sample_stride=sample_stride, parallel=parallel, device=device, merge_max_memory=merge_max_memory, merge_max_gb=merge_max_gb, likelihood_executor=likelihood_executor, gradient_checkpoint_length=gradient_checkpoint_length, proposal_cv_rates=proposal_cv_rates, proposal_cv_noise=proposal_cv_noise, init_jitter=init_jitter, init_jitter_individual=init_jitter_individual, init_jitter_noise=init_jitter_noise)
+        inference_method=inference_method, sample_stride=sample_stride, parallel=parallel, device=device, merge_max_memory=merge_max_memory, merge_max_gb=merge_max_gb, likelihood_executor=likelihood_executor, gradient_checkpoint_length=gradient_checkpoint_length, proposal_cv_rates=proposal_cv_rates, proposal_cv_noise=proposal_cv_noise, init_jitter=init_jitter, init_jitter_individual=init_jitter_individual, init_jitter_noise=init_jitter_noise, rna_truncation=rna_truncation)
     return (genes=genes, fitfile=joinpath(filedir, juliafile_full), commandfiles=commandfiles)
 end
 
@@ -522,7 +524,7 @@ const _FITFILE_FULL_KEY_ORDER = Symbol[
     :propcv_rate, :propcv_noise, :propcv_levels,
     :proposal_cv_rates, :proposal_cv_noise, :proposal_cv_levels,
     :burst, :optimize, :prefer_legacy_ratefile, :init_ratefile,
-    :rinit, :yieldfactor, :merge_max_memory, :merge_max_gb,
+    :rinit, :yieldfactor, :rna_truncation, :merge_max_memory, :merge_max_gb,
 ]
 
 function _fitfile_full_key_order(spec::AbstractDict)
@@ -636,7 +638,7 @@ optionally appending `; dttype=…` / `; traceinfo=…` for legacy loaders when 
 function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacond, resultfolder, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs;
-    src="", dttype=nothing, traceinfo=nothing, inference_method=nothing, sample_stride=nothing, parallel=nothing, device=nothing, merge_max_memory=nothing, merge_max_gb=nothing, likelihood_executor=nothing, gradient_checkpoint_length=nothing, proposal_cv_rates=nothing, proposal_cv_noise=nothing, init_jitter=nothing, init_jitter_individual=nothing, init_jitter_noise=nothing)
+    src="", dttype=nothing, traceinfo=nothing, inference_method=nothing, sample_stride=nothing, parallel=nothing, device=nothing, merge_max_memory=nothing, merge_max_gb=nothing, likelihood_executor=nothing, gradient_checkpoint_length=nothing, proposal_cv_rates=nothing, proposal_cv_noise=nothing, init_jitter=nothing, init_jitter_individual=nothing, init_jitter_noise=nothing, rna_truncation=nothing)
     s = '"'
     transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
     f = open(fitfile, "w")
@@ -670,6 +672,7 @@ function write_fitfile_genes(fitfile, nchains, datatype, datapath, cell, datacon
         (:init_jitter, init_jitter),
         (:init_jitter_individual, init_jitter_individual),
         (:init_jitter_noise, init_jitter_noise),
+        (:rna_truncation, rna_truncation),
     )
         value === nothing && continue
         push!(extra, string(name) * "=" * repr(value))

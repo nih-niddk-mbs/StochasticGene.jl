@@ -1266,7 +1266,13 @@ function MHOptions(
     likelihood_executor::Symbol=HMM_STACK_MH,
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
 )
+    samplesteps > 0 || throw(ArgumentError("samplesteps must be positive, got $(repr(samplesteps))"))
+    warmupsteps >= 0 || throw(ArgumentError("warmupsteps must be nonnegative, got $(repr(warmupsteps))"))
+    maxtime > 0 || throw(ArgumentError("maxtime must be positive, got $(repr(maxtime))"))
+    temp > 0 || throw(ArgumentError("temp must be positive, got $(repr(temp))"))
     gck = gradient_checkpoint_length === nothing ? nothing : Int(gradient_checkpoint_length)
+    gck === nothing || gck > 0 || throw(ArgumentError(
+        "gradient_checkpoint_length must be positive or nothing, got $(repr(gradient_checkpoint_length))"))
     stride = Int64(sample_stride)
     stride > 0 || throw(ArgumentError("sample_stride must be positive, got $(repr(sample_stride))"))
     merge_mem = Int64(merge_max_memory)

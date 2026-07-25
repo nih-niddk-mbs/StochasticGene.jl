@@ -323,7 +323,7 @@ function truncate_histogram(x::Array, yield::Float64, nhistmax::Int)
             nhist = 1
             ratio = 0.0
             # Only keep yield of all data to limit support of histogram
-            while ratio <= yield && nhist <= nhistmax
+            while ratio < yield && nhist <= nhistmax
                 ratio = sum(x[1:nhist]) / counts
                 nhist += 1
             end
@@ -1952,19 +1952,19 @@ Calculates the log of the sum of exponentials for an array.
 # Returns
 - `Array` or `Float64`: The log of the sum of exponentials of the inputs.
 """
-function logsumexp(u::Array, v::Array)
-    w = max(u, v)
-    if w == -Inf
-        return -Inf
-    else
-        return w .+ log.(exp.(u - w) + exp.(v - w))
+function logsumexp(u::AbstractArray, v::AbstractArray)
+    axes(u) == axes(v) || throw(DimensionMismatch(
+        "logsumexp arrays must have matching axes"))
+    return map(u, v) do ui, vi
+        w = max(ui, vi)
+        isinf(w) ? w : w + log(exp(ui - w) + exp(vi - w))
     end
 end
 
 function logsumexp(u::Float64, v::Float64)
     w = max(u, v)
-    if w == -Inf
-        return -Inf
+    if isinf(w)
+        return w
     else
         return w + log(exp(u - w) + exp(v - w))
     end
@@ -1972,8 +1972,8 @@ end
 
 function logsumexp(v::Array)
     w = maximum(v)
-    if w == -Inf
-        return -Inf
+    if isinf(w)
+        return w
     else
         return w .+ log(sum(exp.(v .- w)))
     end

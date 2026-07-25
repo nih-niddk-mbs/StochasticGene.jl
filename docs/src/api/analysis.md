@@ -44,7 +44,9 @@ write_dataframes(
 
 These helpers assemble `rates_*.txt`, `param-stats_*.txt`, and
 `measures_*.txt` files when `assemble=true`, then add observed RNA moments for
-`datatype="rna"` or `datatype="rnacount"`.
+`datatype="rna"` or `datatype="rnacount"`. Fits run with `optimize=true` also
+contribute `_Optimized` rate columns, `OptimizedObjective`, and
+`OptimizerConverged`; the separate `optimized_*.csv` remains available.
 
 ### Key-based result folders
 

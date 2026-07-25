@@ -15,6 +15,7 @@
 
 using Random
 using DelimitedFiles
+using Statistics
 using StochasticGene
 using Test
 
@@ -47,6 +48,14 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test length(cv) == length(fittedparam)
         @test cv[1:5] == fill(0.05, 5)
         @test all(==(0.001), cv[6:end])
+
+        opts = StochasticGene.MHOptions(
+            10, 0, 1.0, 1.0;
+            proposal_cv_rates=0.05,
+            proposal_cv_noise=0.001,
+        )
+        level_aware = [0.005, 0.05, 0.001]
+        @test StochasticGene.effective_initial_proposalcv(level_aware, nothing, opts) === level_aware
     end
 
     @testset "shared parameter vocabulary is passive and composable" begin
@@ -324,11 +333,88 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test opts.sample_stride == 10
         @test opts.merge_max_memory == 2 * 1024^3
         @test_throws ArgumentError StochasticGene.MHOptions(1, 0, 1.0, 1.0; sample_stride=0)
+        @test_throws ArgumentError StochasticGene.MHOptions(0, 0, 1.0, 1.0)
+        @test_throws ArgumentError StochasticGene.MHOptions(1, -1, 1.0, 1.0)
+        @test_throws ArgumentError StochasticGene.MHOptions(1, 0, 0.0, 1.0)
+        @test_throws ArgumentError StochasticGene.MHOptions(1, 0, 1.0, 0.0)
 
         fit = StochasticGene.Fit(reshape(collect(1.0:20.0), 2, 10), collect(1.0:10.0), [1.0, 2.0], 10.0, zeros(1), zeros(1), 0.0, 5, 10)
         thinned = StochasticGene.memory_aware_thin([fit], 200)
-        @test thinned[1].param == fit.param[:, [1, 4, 7, 10]]
-        @test thinned[1].ll == fit.ll[[1, 4, 7, 10]]
+        @test thinned[1].param == fit.param[:, [1, 10]]
+        @test thinned[1].ll == fit.ll[[1, 10]]
+        @test size(StochasticGene.thin_columns(zeros(1, 10); maxcols=4), 2) <= 4
+    end
+
+    @testset "MH acceptance includes asymmetric proposal correction" begin
+        param = [2.0]
+        paramt = [1.0]
+        d = StochasticGene.product_distribution([StochasticGene.Normal(param[1], 0.2)])
+        dt = StochasticGene.product_distribution([StochasticGene.Normal(paramt[1], 0.1)])
+        expected = StochasticGene.logpdf(dt, param) - StochasticGene.logpdf(d, paramt)
+        @test StochasticGene.mhfactor(param, d, paramt, dt) ≈ expected
+        @test StochasticGene.mh_log_acceptance_ratio(
+            0.0, 0.0, 0.0, 0.0, param, paramt, d, dt, 1.0,
+        ) ≈ expected
+
+        mixed_d = StochasticGene.Distribution[
+            StochasticGene.MvNormal([0.0, 0.0], [1.0 0.0; 0.0 1.0]),
+            StochasticGene.Normal(0.0, 2.0),
+        ]
+        mixed_dt = StochasticGene.Distribution[
+            StochasticGene.MvNormal([0.5, -0.5], [1.0 0.0; 0.0 1.0]),
+            StochasticGene.Normal(1.0, 0.5),
+        ]
+        x = [0.0, 0.0, 0.0]
+        xt = [0.5, -0.5, 1.0]
+        expected_mixed =
+            StochasticGene.logpdf(mixed_dt[1], x[1:2]) +
+            StochasticGene.logpdf(mixed_dt[2], x[3]) -
+            StochasticGene.logpdf(mixed_d[1], xt[1:2]) -
+            StochasticGene.logpdf(mixed_d[2], xt[3])
+        @test StochasticGene.mhfactor(x, mixed_d, xt, mixed_dt) ≈ expected_mixed
+    end
+
+    @testset "WAIC uses pointwise probabilities and exact chain pooling" begin
+        u = log.([0.2, 0.8])
+        v = log.([0.8, 0.2])
+        @test StochasticGene.logsumexp(u, v) ≈ log.([1.0, 1.0]) atol=1e-14
+        @test StochasticGene.logsumexp([-Inf, Inf], [-Inf, 0.0]) == [-Inf, Inf]
+
+        f1 = StochasticGene.Fit(
+            reshape([1.0], 1, 1), [0.0], [1.0], 0.0,
+            copy(u), zeros(2), copy(u), 1, 0.0, 1, 1,
+        )
+        f2 = StochasticGene.Fit(
+            reshape([2.0], 1, 1), [0.0], [2.0], 0.0,
+            copy(v), zeros(2), copy(v), 1, 0.0, 1, 1,
+        )
+        merged = StochasticGene.merge_fit([f1, f2])
+        expected_lppd = fill(log(0.5), 2)
+        expected_var = [var([u[i], v[i]]) for i in eachindex(u)]
+        @test merged.lppd ≈ expected_lppd
+        @test merged.pwaic ≈ expected_var
+        @test merged.waic_n == 2
+
+        data = StochasticGene.RNAData("rna", "gene", 2, [2.0, 1.0], 1.0)
+        waic, se = StochasticGene.compute_waic(merged.lppd, merged.pwaic, data)
+        contributions = -2 .* (expected_lppd .- expected_var)
+        @test waic ≈ 2 * contributions[1] + contributions[2]
+        expanded = [contributions[1], contributions[1], contributions[2]]
+        @test se ≈ sqrt(length(expanded) * var(expanded))
+    end
+
+    @testset "MCMC diagnostics remain finite for anticorrelation" begin
+        samples = reshape(repeat([0.0, 1.0], 100), 1, :)
+        ess = StochasticGene.compute_ess(samples)
+        mcse = StochasticGene.compute_mcse(samples)
+        @test 0 < ess[1] <= size(samples, 2)
+        @test isfinite(mcse[1])
+        @test mcse[1] > 0
+
+        trend = reshape(collect(1.0:200.0) .+ 0.1 .* sin.(1:200), 1, :)
+        geweke = StochasticGene.compute_geweke(trend)
+        @test isfinite(geweke[1])
+        @test abs(geweke[1]) > 1
     end
 
     @testset "trace diagnostics are grouped by parameter role" begin
@@ -459,6 +545,37 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
 
     @testset "run_nuts_fit smoke" begin
         @test StochasticGene.test_run_nuts_fit_smoke()
+    end
+
+    @testset "v0.7.8 RNA histogram truncation" begin
+        m6pr_hist = [53, 188, 337, 459, 531, 510, 468, 369, 245,
+                     171, 112, 66, 36, 14, 9, 6, 4, 1]
+        truncated = StochasticGene.truncate_histogram(m6pr_hist, 0.99, 1000)
+        @test length(truncated) == 14
+        @test sum(truncated) == 3559
+        @test StochasticGene.fit_default_spec()[:rna_truncation] == :legacy
+
+        mktempdir() do dir
+            writedlm(joinpath(dir, "M6PR_NIr1.txt"), m6pr_hist)
+            nlegacy, legacy = StochasticGene.read_rna(
+                "M6PR", "NIr1", dir; rna_truncation=:legacy,
+            )
+            nlegacy_alias, legacy_alias = StochasticGene.read_rna(
+                "M6PR", "NIr1", dir; rna_truncation=:legacy99,
+            )
+            nfull, full = StochasticGene.read_rna(
+                "M6PR", "NIr1", dir; rna_truncation=:none,
+            )
+            @test nlegacy == 14
+            @test legacy == truncated
+            @test nlegacy_alias == nlegacy
+            @test legacy_alias == legacy
+            @test nfull == length(m6pr_hist)
+            @test full == m6pr_hist
+            @test_throws ArgumentError StochasticGene.read_rna(
+                "M6PR", "NIr1", dir; rna_truncation=:unknown,
+            )
+        end
     end
 
     if FULL_TESTS
@@ -739,6 +856,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                 "1.5,2.5",
             ]
             write(joinpath(dir, "param-stats_alpha.txt"), join(stat_rows, "\n") * "\n")
+            write(joinpath(dir, "optimized_alpha.txt"), "1.25,2.5\n123.0\ntrue\n")
 
             measure_rows = String[]
             for i in 1:12
@@ -769,6 +887,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             @test basename(out.rates) == "rates_key.csv"
             @test basename(out.measures) == "measures_key.csv"
             @test basename(out.stats) == "stats_key.csv"
+            @test basename(out.optimized) == "optimized_key.csv"
 
             rates = DataFrame(CSV.File(joinpath(dir, "rates_key.csv")))
             @test names(rates)[1] == "Model"
@@ -784,6 +903,36 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             @test stats.Model == ["alpha"]
             @test stats.k1_Mean == [1.0]
             @test stats[!, "k2_CI97.5"] == [2.5]
+
+            optimized = DataFrame(CSV.File(joinpath(dir, "optimized_key.csv")))
+            @test optimized.Model == ["alpha"]
+            @test optimized.k1 == [1.25]
+            @test optimized.k2 == [2.5]
+            @test optimized.OptimizedObjective == [123.0]
+            @test optimized.OptimizerConverged == [true]
+
+            summary = only(make_dataframes_key(
+                dir; assemble=false, datatype="other",
+            ))[2]
+            alpha = only(findall(==("alpha"), summary.Key))
+            @test summary[alpha, :k1_Optimized] == 1.25
+            @test summary[alpha, :OptimizedObjective] == 123.0
+            @test summary[alpha, :OptimizerConverged] == true
+        end
+    end
+
+    @testset "makeswarm_genes records RNA truncation mode" begin
+        mktempdir() do dir
+            out = makeswarm_genes(
+                ["M6PR"];
+                filedir=dir,
+                datapath="data",
+                datacond="NIr1",
+                cell="U3A",
+                rna_truncation=:none,
+            )
+            script = read(out.fitfile, String)
+            @test occursin("rna_truncation=:none", script)
         end
     end
 
