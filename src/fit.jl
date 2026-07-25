@@ -1202,7 +1202,6 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     end
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype_context; priorcv=priorcv)
-    priormean = synchronize_decay_prior_placeholders(priormean, decayrate, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype_context, transitions, R, S, insertstep, noisepriors, coupling, grid)
     rinit = synchronize_fixed_decay_rates(rinit, decayrate, fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
@@ -4133,6 +4132,7 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
     priormean_was_empty = isempty(priormean)
     ctx = ctx === nothing ? prior_context(datatype, coupling, R, grid, hierarchical, transitions) : ctx
     if !priormean_was_empty
+        priormean = synchronize_decay_prior_placeholders(priormean, decayrate, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
         return adjust_priorcv ? (priormean, priorcv) : priormean
     end
     priormean = set_priormean_empty(ctx, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
@@ -4142,6 +4142,7 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
     if !isempty(hierarchical)
         priormean = prior_ratemean_hierarchical(priormean, prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, grid), hierarchical[1])
     end
+    priormean = synchronize_decay_prior_placeholders(priormean, decayrate, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
     if adjust_priorcv && !(priorcv isa AbstractVector) && ctx isa PriorContextTraceSingleUnit
         priorcv = priorcv_trace_grsm(transitions, R, S, insertstep, noisepriors)
     end
@@ -5393,14 +5394,17 @@ function get_decay(gene::String, path::String, col::Int)
     get_decay(a, gene)
 end
 function get_decay(a, gene::String)
-    if typeof(a) <: Number
+    if typeof(a) <: Number && float(a) > 0
         return get_decay(float(a))
     else
-        println(gene, " has no decay time")
+        println(gene, " has no positive decay time, set to 1.0")
         return 1.0
     end
 end
-get_decay(a::Float64) = log(2) / a / 60.0
+function get_decay(a::Float64)
+    a > 0 || return 1.0
+    log(2) / a / 60.0
+end
 
 """
     alleles(gene::String,cell::String,root::String,col::Int=3)
