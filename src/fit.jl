@@ -1202,8 +1202,10 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     end
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype_context; priorcv=priorcv)
+    priormean = synchronize_decay_prior_placeholders(priormean, decayrate, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype_context, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    rinit = synchronize_fixed_decay_rates(rinit, decayrate, fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
     proposal_key = _current_name_override[] === nothing ? nothing : _current_name_override[]
     proposal_fittedparam = fittedparam
     proposal_cv_rates = get(kw, :proposal_cv_rates, get(kw, :propcv_rate, get(run_spec, :proposal_cv_rates, get(run_spec, :propcv_rate, 0.0))))
@@ -4362,6 +4364,102 @@ function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
     end
     println("initial: ", r)
     Vector{Float64}(r)
+end
+
+function _decay_indices(transitions, R::Int, S, insertstep)
+    [num_rates(transitions, R, S, insertstep)]
+end
+
+function _decay_indices(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
+    inds = Int[]
+    offset = 0
+    for i in eachindex(R)
+        nr = num_rates(transitions[i], R[i], S[i], insertstep[i])
+        push!(inds, offset + nr)
+        offset += nr
+    end
+    inds
+end
+
+_decay_values(decayrate::Tuple) = collect(Float64.(decayrate))
+_decay_values(decayrate) = [Float64(decayrate)]
+
+function _base_parameter_count(transitions, R, S, insertstep, noisepriors, coupling, grid)
+    num_all_parameters(transitions, R, S, insertstep, noisepriors, coupling, grid)
+end
+
+function _synchronize_fixed_decay_block!(r::Vector{Float64}, offset::Int, decay_indices::Vector{Int}, decay_values::Vector{Float64}, fittedparam)
+    for (i, idx) in enumerate(decay_indices)
+        global_idx = offset + idx
+        global_idx in fittedparam && continue
+        global_idx <= length(r) || continue
+        r[global_idx] = decay_values[min(i, length(decay_values))]
+    end
+    return r
+end
+
+function _replace_decay_prior_placeholders_block!(r::Vector{Float64}, offset::Int, decay_indices::Vector{Int}, decay_values::Vector{Float64})
+    for (i, idx) in enumerate(decay_indices)
+        global_idx = offset + idx
+        global_idx <= length(r) || continue
+        if r[global_idx] < 0
+            r[global_idx] = decay_values[min(i, length(decay_values))]
+        end
+    end
+    return r
+end
+
+"""
+    synchronize_decay_prior_placeholders(priormean, decayrate, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
+
+Replace negative decay sentinels in a prior-mean vector with the resolved decay
+rate. `set_decayrate` has already converted `decayrate=-1` to the gene-specific
+halflife value, or to `1.0` when no halflife is available.
+"""
+function synchronize_decay_prior_placeholders(priormean, decayrate, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
+    isempty(priormean) && return priormean
+    r = Vector{Float64}(priormean)
+    decay_indices = _decay_indices(transitions, R, S, insertstep)
+    decay_values = _decay_values(decayrate)
+    if isempty(hierarchical)
+        return _replace_decay_prior_placeholders_block!(r, 0, decay_indices, decay_values)
+    end
+    nbase = _base_parameter_count(transitions, R, S, insertstep, noisepriors, coupling, grid)
+    nbase <= 0 && return r
+    nblocks = fld(length(r), nbase)
+    for b in 0:nblocks-1
+        _replace_decay_prior_placeholders_block!(r, b * nbase, decay_indices, decay_values)
+    end
+    return r
+end
+
+"""
+    synchronize_fixed_decay_rates(r, decayrate, fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
+
+Ensure the complete model-rate vector carries resolved fixed decay rates.
+
+`priormean` may be user-supplied and may contain placeholders such as `-1.0` in
+fixed structural slots. Those placeholders must not become `model.rates`, because
+`rates_*.txt` files are complete model-rate files and are reused for continuation
+and downstream analysis. This function keeps fitted decay entries untouched, but
+for non-fitted decay entries it writes the resolved `decayrate` into each base
+rate block before `load_model` constructs the model.
+"""
+function synchronize_fixed_decay_rates(r, decayrate, fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
+    isempty(r) && return r
+    r = Vector{Float64}(r)
+    decay_indices = _decay_indices(transitions, R, S, insertstep)
+    decay_values = _decay_values(decayrate)
+    if isempty(hierarchical)
+        return _synchronize_fixed_decay_block!(r, 0, decay_indices, decay_values, fittedparam)
+    end
+    nbase = _base_parameter_count(transitions, R, S, insertstep, noisepriors, coupling, grid)
+    nbase <= 0 && return r
+    nblocks = fld(length(r), nbase)
+    for b in 0:nblocks-1
+        _synchronize_fixed_decay_block!(r, b * nbase, decay_indices, decay_values, fittedparam)
+    end
+    return r
 end
 
 """
