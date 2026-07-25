@@ -1206,6 +1206,7 @@ function make_structures(rinit, datatype, datapath, gene, cell, datacond, result
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype_context, transitions, R, S, insertstep, noisepriors, coupling, grid)
     rinit = synchronize_fixed_decay_rates(rinit, decayrate, fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
+    assert_fixed_decay_rates_resolved(rinit, fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
     proposal_key = _current_name_override[] === nothing ? nothing : _current_name_override[]
     proposal_fittedparam = fittedparam
     proposal_cv_rates = get(kw, :proposal_cv_rates, get(kw, :propcv_rate, get(run_spec, :proposal_cv_rates, get(run_spec, :propcv_rate, 0.0))))
@@ -4366,17 +4367,17 @@ function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
     Vector{Float64}(r)
 end
 
-function _decay_indices(transitions, R::Int, S, insertstep)
+function _decay_indices(transitions, R::Int, S, insertstep, noisepriors)
     [num_rates(transitions, R, S, insertstep)]
 end
 
-function _decay_indices(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
+function _decay_indices(transitions, R::Tuple, S::Tuple, insertstep::Tuple, noisepriors)
     inds = Int[]
     offset = 0
     for i in eachindex(R)
         nr = num_rates(transitions[i], R[i], S[i], insertstep[i])
         push!(inds, offset + nr)
-        offset += nr
+        offset += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], noisepriors[i])
     end
     inds
 end
@@ -4419,7 +4420,7 @@ halflife value, or to `1.0` when no halflife is available.
 function synchronize_decay_prior_placeholders(priormean, decayrate, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
     isempty(priormean) && return priormean
     r = Vector{Float64}(priormean)
-    decay_indices = _decay_indices(transitions, R, S, insertstep)
+    decay_indices = _decay_indices(transitions, R, S, insertstep, noisepriors)
     decay_values = _decay_values(decayrate)
     if isempty(hierarchical)
         return _replace_decay_prior_placeholders_block!(r, 0, decay_indices, decay_values)
@@ -4448,7 +4449,7 @@ rate block before `load_model` constructs the model.
 function synchronize_fixed_decay_rates(r, decayrate, fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
     isempty(r) && return r
     r = Vector{Float64}(r)
-    decay_indices = _decay_indices(transitions, R, S, insertstep)
+    decay_indices = _decay_indices(transitions, R, S, insertstep, noisepriors)
     decay_values = _decay_values(decayrate)
     if isempty(hierarchical)
         return _synchronize_fixed_decay_block!(r, 0, decay_indices, decay_values, fittedparam)
@@ -4460,6 +4461,30 @@ function synchronize_fixed_decay_rates(r, decayrate, fittedparam, transitions, R
         _synchronize_fixed_decay_block!(r, b * nbase, decay_indices, decay_values, fittedparam)
     end
     return r
+end
+
+function assert_fixed_decay_rates_resolved(r, fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid, hierarchical)
+    isempty(r) && return nothing
+    decay_indices = _decay_indices(transitions, R, S, insertstep, noisepriors)
+    nbase = isempty(hierarchical) ? length(r) : _base_parameter_count(transitions, R, S, insertstep, noisepriors, coupling, grid)
+    nbase <= 0 && return nothing
+    nblocks = isempty(hierarchical) ? 1 : fld(length(r), nbase)
+    for b in 0:nblocks-1
+        offset = b * nbase
+        for idx in decay_indices
+            global_idx = offset + idx
+            global_idx <= length(r) || continue
+            global_idx in fittedparam && continue
+            if r[global_idx] < 0
+                throw(ArgumentError(
+                    "fixed decay rate at complete-rate index $global_idx is unresolved ($(r[global_idx])). " *
+                    "Use decayrate=-1 only as an input sentinel; after halflife lookup it must be replaced by " *
+                    "the gene-specific decay rate or by the fallback value 1.0 before fitting."
+                ))
+            end
+        end
+    end
+    return nothing
 end
 
 """
