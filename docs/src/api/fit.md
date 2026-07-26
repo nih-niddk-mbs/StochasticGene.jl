@@ -69,6 +69,25 @@ For **ADVI**, `gradient = :finite` and `gradient = :ForwardDiff` both differenti
 - **`priormean`**, **`priorcv`**, **`noisepriors`**, **`fittedparam`**, **`fixedeffects`**, **`onstates`**, **`decayrate`**, …
 - **`resultfolder`**, **`label`**, **`writesamples`**, **`burst`**, **`optimize`**, …
 
+For RNA histograms, **`rna_truncation=:legacy`** reproduces the v0.7.8
+histogram support rule; use **`:none`** for all bins. Keep this setting fixed
+when comparing runs. A negative **`decayrate`** or negative decay placeholder
+in **`priormean`** is resolved from gene/cell halflife metadata and converted to
+inverse minutes before initialization, with `1.0` as the unavailable-metadata
+fallback.
+
+`burst=true` computes a posterior burst-size distribution during finalization.
+`optimize=true` runs a separate LBFGS optimization initialized at the best
+sampled point. Neither analysis is recreated later by dataframe assembly.
+
+Do not confuse these summaries:
+
+- row 1 of `rates_*.txt` is the largest-likelihood point encountered during
+  sampling;
+- posterior mean and median are rows 2 and 3;
+- `optimized_*.txt` contains the separate numerical optimizer result;
+- `burst_*.txt` summarizes burst size evaluated over posterior samples.
+
 ### v1.11 beta API changes
 
 - **`CombinedData`**: Multimodal fits use `datatype = (:rna, :trace)` or `datatype = (:rna, :dwelltime)`. The order is canonicalized, likelihoods are evaluated per modality, scalar likelihoods are summed, and WAIC pointwise predictions are concatenated in canonical modality order.

@@ -48,6 +48,29 @@ These helpers assemble `rates_*.txt`, `param-stats_*.txt`, and
 contribute `_Optimized` rate columns, `OptimizedObjective`, and
 `OptimizerConverged`; the separate `optimized_*.csv` remains available.
 
+Use the same `rna_truncation` setting used for the fit:
+
+```julia
+write_dataframes(
+    resultfolder = "results/HCT116_test",
+    datapath = "data/HCT116_testdata",
+    datatype = "rna",
+    rna_truncation = :legacy,
+)
+```
+
+The four rate rows are sampled maximum likelihood, posterior mean, posterior
+median, and last stored sample. The sampled maximum-likelihood row is not the
+numerical optimizer result. If `burst=true` was used during fitting,
+`burst_*.txt` files are assembled into `burst_*.csv`; if `optimize=true` was
+used, `optimized_*.txt` files are assembled into `optimized_*.csv`.
+`make_dataframes` does not rerun either calculation.
+
+For G=2 RNA models, burst size is evaluated as `Eject / Rate21` within each
+posterior sample before mean, SD, median, and MAD are calculated. This preserves
+posterior correlation and means that `BurstMedian` need not equal the ratio of
+the two marginal posterior medians.
+
 ### Key-based result folders
 
 Use the key-specific helpers when files are named like `rates_<key>.txt` and

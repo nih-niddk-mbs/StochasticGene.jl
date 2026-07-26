@@ -5,7 +5,12 @@
 # Data analysis and result processing functions for StochasticGene.jl
 
 """
-    make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
+    make_dataframes(resultfolder::String, datapath::String,
+                    assemble=true, multicond=false, datatype="rna";
+                    rna_truncation=:legacy)
+    make_dataframes(; resultfolder, datapath, assemble=true,
+                    multicond=false, datatype="rna",
+                    rna_truncation=:legacy)
 
 Create and assemble dataframes from model fitting results.
 
@@ -15,6 +20,8 @@ Create and assemble dataframes from model fitting results.
 - `assemble::Bool=true`: Whether to assemble results into summary files
 - `multicond::Bool=false`: Whether to handle multiple conditions
 - `datatype::String="rna"`: Type of data ("rna", "rnacount", etc.)
+- `rna_truncation=:legacy`: RNA histogram support used when loading observed
+  moments; match the setting used by the fit
 
 # Returns
 - `Vector{Vector}`: Nested vector of tuples containing (filename, DataFrame) pairs
@@ -26,6 +33,11 @@ Create and assemble dataframes from model fitting results.
 - Creates summary files for each label-model combination
 - Handles both single and multiple condition datasets
 - Supports different data types (RNA, RNA count, etc.)
+- A `rates_*.txt` file contains, in order, the sampled maximum-likelihood row,
+  posterior mean, posterior median, and last stored sample.
+- Existing `burst_*.txt` and `optimized_*.txt` files are assembled when
+  present. These are fit-time products: `make_dataframes` does not reconstruct
+  a posterior burst distribution or rerun optimization.
 
 # Examples
 ```julia
@@ -37,6 +49,14 @@ dfs = make_dataframes("results/", "data/", assemble=true, multicond=true)
 
 # For RNA count data
 dfs = make_dataframes("results/", "data/", datatype="rnacount")
+
+# Keyword form
+dfs = make_dataframes(
+    resultfolder="results/",
+    datapath="data/",
+    datatype="rna",
+    rna_truncation=:legacy,
+)
 ```
 """
 function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna"; rna_truncation=:legacy)

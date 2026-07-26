@@ -62,12 +62,56 @@ fits, stats, measures, data, model, options = fit(
     samplesteps = 1_000_000,
     propcv = 0.01,
     rna_truncation = :legacy,
+    burst = true,
+    optimize = true,
 )
 ```
 
 If `decayrate=-1.0` (the default), `fit` tries to look up gene-specific decay
-information from `data/halflives` under `root`. If allele metadata exist under
-`data/alleles`, `fit` can also use those to set `nalleles`.
+information from `data/halflives` under `root`, converts the halflife to a
+decay rate in inverse minutes, and uses `1.0` if no value can be resolved.
+Negative decay placeholders in an explicit `priormean` are replaced before
+the starting vector is constructed, even when another run supplies starting
+rates. If allele metadata exist under `data/alleles`, `fit` can also use those
+to set `nalleles`.
+
+`burst=true` and `optimize=true` request additional fit-time analyses:
+
+- `burst=true` computes burst size over posterior samples and writes
+  `burst_*.txt`.
+- `optimize=true` starts LBFGS from the best sampled point and writes
+  `optimized_*.txt`.
+
+These files cannot be reconstructed by `make_dataframes` if they were not
+created during fitting.
+
+## Interpreting Rate, Burst, And Optimizer Outputs
+
+Each `rates_*.txt` contains a header followed by four complete model-rate rows:
+
+1. sampled ML: the largest likelihood encountered during inference,
+2. posterior mean,
+3. posterior median,
+4. last stored posterior sample.
+
+The sampled-ML row is not the output of `optimize=true`. Numerical optimization
+has its own file and assembled columns. `OptimizerConverged=true` means the
+optimizer's stopping test passed; it does not prove a unique solution. Models
+with flat likelihood ridges can have nearly identical optimized objectives but
+very different individual optimized rates.
+
+For a G=2 RNA model, posterior burst size is evaluated sample by sample as:
+
+```math
+\mathrm{burst\ size} = \frac{\mathrm{Eject}}{\mathrm{Rate21}}.
+```
+
+The output reports `BurstMean`, `BurstSD`, `BurstMedian`, and `BurstMAD`
+(the raw file also stores quantiles). Because the ratio is evaluated within
+each posterior sample, `BurstMedian` is not generally
+`median(Eject) / median(Rate21)`. Derived burst size can also be much more
+stable than either rate separately when the posterior follows a correlated
+likelihood ridge.
 
 ## Genome-Scale scRNA Sweeps
 
@@ -94,6 +138,8 @@ out = makeswarm_genes(
     samplesteps = 1_000_000,
     propcv = 0.01,
     rna_truncation = :legacy,
+    burst = true,
+    optimize = true,
     project = "/home/carsonc/github/StochasticGene.jl/",
 )
 ```
@@ -175,11 +221,15 @@ write_dataframes_only(
     "results/HCT116_test",
     "data/HCT116_testdata";
     datatype = "rna",
+    rna_truncation = :legacy,
 )
 ```
 
 This calls `make_dataframes`, assembles raw `rates_*.txt`, `measures_*.txt`,
 and `param-stats_*.txt` files when needed, and writes summary CSV files.
+Existing fit-time `burst_*.txt` and `optimized_*.txt` files are assembled into
+`burst_*.csv` and `optimized_*.csv` and joined into the summaries. Use the same
+`rna_truncation` setting as the fit when observed RNA moments are recomputed.
 
 For key-based folders containing `rates_<key>.txt`, `param-stats_<key>.txt`,
 and `info_<key>.jld2`, use:

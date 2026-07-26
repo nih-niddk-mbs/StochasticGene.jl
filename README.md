@@ -87,10 +87,40 @@ fits, stats, measures, data, model, options = fit(
     datacond = "MOCK",
     resultfolder = "HCT116_test",
     rna_truncation = :legacy,
+    burst = true,
+    optimize = true,
 )
 ```
 
 Defaults in `fit()` point at bundled mock data if paths match the package examples.
+
+`burst=true` computes burst size from the posterior samples and writes
+`burst_*.txt`. `optimize=true` separately runs LBFGS from the best sampled
+point and writes `optimized_*.txt`. These are fit-time analyses; dataframe
+assembly does not recreate them if they were not requested.
+
+The four rows of each `rates_*.txt` are:
+
+1. the largest-likelihood point encountered during sampling,
+2. the posterior mean,
+3. the posterior median,
+4. the last stored posterior sample.
+
+The first row is often called the sampled ML row, but it is not the numerical
+optimizer result. Optimized rates and the optimizer objective/convergence flag
+are stored separately. On weakly identified likelihood ridges, posterior
+medians and derived burst size can be reproducible even when sampled-ML or
+optimized individual rates differ substantially.
+
+For G=2 RNA models, burst size is computed for each stored posterior sample as
+`Eject / Rate21`, then summarized by mean, SD, median, MAD, and quantiles.
+Consequently, it is not generally equal to the ratio of two independently
+reported posterior medians.
+
+Rates use inverse minutes. With `decayrate=-1`, gene/cell halflife metadata are
+converted to inverse minutes; unresolved metadata falls back to `1.0`.
+Negative decay placeholders supplied in `priormean` are replaced before the
+starting vector is constructed.
 
 For multimodal data, prefer the `CombinedData` API:
 
@@ -240,8 +270,13 @@ write_dataframes_only(
     "results/HCT116_test",
     "data/HCT116_testdata";
     datatype="rna",
+    rna_truncation=:legacy,
 )
 ```
+
+Use the same `rna_truncation` value used for fitting. When the fit was run with
+`burst=true` or `optimize=true`, the corresponding assembled `burst_*.csv` and
+`optimized_*.csv` tables are included automatically.
 
 For key-based folders containing `rates_<key>.txt`, `param-stats_<key>.txt`,
 and `info_<key>.jld2`, write one key summary with:

@@ -163,6 +163,7 @@ write_dataframes_only(
     "results/HCT116_test",
     "data/HCT116_testdata";
     datatype = "rna",
+    rna_truncation = :legacy,
 )
 ```
 
@@ -170,6 +171,17 @@ This calls `make_dataframes`, assembles raw `rates_*.txt`, `measures_*.txt`,
 and `param-stats_*.txt` files when needed, and writes summary CSVs such as
 `Summary_rna-HCT116_2.csv`. The summary includes fitted rates, parameter
 statistics, model/condition metadata, and observed RNA moments.
+
+Match `rna_truncation` to the fit. If the jobs used `burst=true`, posterior
+burst-size files are assembled into `burst_*.csv`; if they used
+`optimize=true`, numerical optimizer files are assembled into
+`optimized_*.csv`. These are fit-time products and are not generated
+retroactively by `write_dataframes_only`.
+
+Within `rates_*.txt`, row 1 is the largest-likelihood point encountered by the
+sampler, followed by posterior mean, posterior median, and last stored sample.
+The independent numerical optimizer result is stored only in
+`optimized_*.txt`/`optimized_*.csv`.
 
 For key-based result folders, use the key-specific helper:
 

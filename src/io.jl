@@ -383,6 +383,8 @@ label/condition/model. For modern key-based folders (`rates_<key>.txt` plus
 - `assemble::Bool=true`: Whether to assemble results into summary files
 - `multicond::Bool=false`: Whether to handle multiple conditions
 - `datatype::String="rna"`: Type of data ("rna", "trace", etc.)
+- `rna_truncation=:legacy`: RNA histogram support used when observed moments
+  are loaded; use the same mode as the fit (`:legacy` or `:none`)
 
 # Returns
 Returns `nothing`, but writes summary CSVs and winner files based on selected
@@ -393,6 +395,13 @@ Returns `nothing`, but writes summary CSVs and winner files based on selected
 - When `optimize=true` was used for the fits, optimized fitted rates, objective,
   and convergence are included in each `Summary_*.csv`; the standalone
   `optimized_*.csv` is retained.
+- When `burst=true` was used, posterior burst summaries are assembled into
+  `burst_*.csv` and joined into the summary. Neither burst distributions nor
+  numerical optimizer results can be reconstructed after the fit from the
+  four-row `rates_*.txt` file.
+- In `rates_*.txt`, rows are sampled maximum likelihood, posterior mean,
+  posterior median, and last stored sample. The sampled maximum-likelihood row
+  is not the result of `optimize=true`.
 - `datatype="rna"` and `datatype="rnacount"` add observed RNA moments when
   possible.
 - Keyword form is available for scripts that prefer named arguments.
@@ -427,6 +436,8 @@ For key-based result folders, use [`write_dataframes_only_key`](@ref).
 - `assemble::Bool=true`: Whether to assemble results into summary files
 - `multicond::Bool=false`: Whether to handle multiple conditions
 - `datatype::String="rna"`: Type of data ("rna", "trace", etc.)
+- `rna_truncation=:legacy`: RNA histogram support used when loading observed
+  moments; match the fit setting
 
 # Returns
 Returns `nothing`, but writes each `(filename, DataFrame)` returned by
@@ -434,7 +445,9 @@ Returns `nothing`, but writes each `(filename, DataFrame)` returned by
 
 # Notes
 - Unlike [`write_dataframes`](@ref), this does not call [`write_winners`](@ref).
-- Existing optimization outputs are automatically included in the summary.
+- Existing burst and optimization outputs are automatically included in the
+  summary. They must already have been produced by `fit(; burst=true, ...)` and
+  `fit(; optimize=true, ...)`, respectively.
 """
 function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, datatype::String="rna", rna_truncation=:legacy)
     dfs = make_dataframes(resultfolder, datapath, assemble, multicond, datatype; rna_truncation=rna_truncation)
@@ -3238,14 +3251,16 @@ Write rate parameters to a file.
 
 # Returns
 - Nothing, but writes rate file with 4 rows:
-  1. Maximum likelihood parameters
+  1. Parameters at the largest likelihood encountered by inference
   2. Mean posterior parameters
   3. Median posterior parameters
   4. Last accepted sample parameters
 
 # Notes
 - Writes labels as header row
-- Writes maximum likelihood parameters from fits.parml
+- Writes the sampled maximum-likelihood parameters from `fits.parml`; this is
+  distinct from the independent numerical optimization requested with
+  `optimize=true`
 - Writes mean posterior parameters from stats.meanparam
 - Writes median posterior parameters from stats.medparam
 - Writes last sample parameters from fits.param[:, end]
@@ -3785,6 +3800,8 @@ Write optimized parameter results to a file.
 - Writes the minimum objective value from optimization
 - Writes the convergence status (true/false)
 - Used for storing results from optimization algorithms
+- The convergence flag reports `Optim.converged`; it does not imply that the
+  optimum is unique or that individual rates are identifiable
 """
 function write_optimized(file::String, optimized)
     f = open(file, "w")
@@ -3813,6 +3830,8 @@ Write burst size statistics to a file.
 
 # Notes
 - Writes comprehensive burst size statistics
+- Statistics summarize the posterior burst-size values computed during
+  `fit(; burst=true, ...)`; they are not derived later from a single rate row
 - Used for analyzing transcriptional bursting behavior
 - Quantiles provide distribution information beyond mean/median
 """
@@ -4519,7 +4538,7 @@ readrates(file::String,row::Int)
 readrates(file::String)
 
 row
-1       maximum likelihood
+1       largest likelihood encountered during sampling
 2       mean
 3       median
 4       last value of previous run

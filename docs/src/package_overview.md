@@ -70,12 +70,22 @@ The tuple order is canonicalized, so `(:dwelltime, :rna)` is equivalent to `(:rn
 
 Under each **`resultfolder`**, names encode cell, condition, gene, model string (**G**, **R**, **S**, **insertstep**), and alleles. Typical prefixes:
 
-- **`rates_*.txt`** — posterior summaries and ML row (see file header / docs).
+- **`rates_*.txt`** — complete model rates in four rows: best likelihood point
+  encountered during sampling, posterior mean, posterior median, and last
+  stored sample. The first row is sampled ML, not numerical optimization.
 - **`summary-rates_*.txt`** — compact human-facing rate summaries for hierarchical/shared-style fits, omitting long individual/noise blocks.
 - **`measures_*.txt`**, **`param-stats_*.txt`** — diagnostics and parameter summaries.
 - **`proposal-cov_*.jld2`** — proposal covariance matrix and metadata (see MCMC proposal & warmup below).
-- **`burst_*.txt`** — optional burst statistics when requested.
-- **`optimized_*.txt`** — optional optimizer output.
+- **`burst_*.txt`** — optional posterior burst-size statistics when
+  `burst=true`.
+- **`optimized_*.txt`** — optional independent numerical optimizer output when
+  `optimize=true`.
+
+For G=2 RNA models, burst size is evaluated as `Eject / Rate21` for each
+posterior sample and then summarized. This uses the joint posterior, so its
+median is not generally the ratio of marginal rate medians. The optimizer is
+initialized at the sampled-ML point; its convergence flag records optimizer
+termination, not uniqueness or parameter identifiability.
 
 Underscore **`_`** separates fields in filenames; avoid **`_`** inside user labels where the naming convention would become ambiguous.
 

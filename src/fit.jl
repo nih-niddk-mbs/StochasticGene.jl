@@ -23,14 +23,23 @@ Posterior / variational inference is selected by **`inference_method`** (default
 [`make_structures`](@ref) merges the active run dict (defaults, `fit(; key=...)` spec, and explicit keywords) and calls [`load_options`](@ref), which builds the method-specific options. Positional [`fit`](@ref) overloads accept a filtered subset of these keywords (see `_MAKE_STRUCTURES_OPTION_KW` in the source) and forward them into `make_structures`.
 
 # Arguments
-- `burst=false`: if true then compute burst frequency
+- `burst=false`: when `true`, compute the posterior distribution of burst size
+  after fitting and write `burst_*.txt`. For a G=2 RNA model this is the
+  posterior distribution of `Eject / Rate21`, not a single value calculated
+  from the sampled maximum-likelihood row. This must be enabled during `fit`;
+  dataframe assembly cannot reconstruct the posterior burst distribution from
+  `rates_*.txt` alone.
 - `cell::String=""`: cell type for halflives and allele numbers
 - `coupling=tuple()`: if nonempty, a 2- or 3-tuple: `(unit_model, connections::Vector{ConnectionSpec}[, sign_modes])`. Each connection is `(β, s, α, t) = (source unit, source state, target unit, target transition)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. For **three units** with a **hidden latent** third unit (G=3, fully connected G-only dynamics) modulating observed units 1–2 from hidden states **1** and **3**, use `make_coupling_hidden_latent(t1, t2)` or `make_coupling_hidden_latent("H3#t1-t2")` and `transitions_hidden_g3_all_pairs()` for unit 3; see docs *Units and models — hidden latent unit*. Empty `connections` is valid (uncoupled T is still built). Optional third element `sign_modes` constrains the sign of each coupling parameter γ: use a single `Symbol` for all connections, or a vector/tuple of one per connection. Canonical symbols: `:free` (γ ∈ (-1, ∞)), `:activate` (γ ∈ (0, ∞)), `:inhibit` (γ ∈ (-1, 0)). Aliases `:positive` and `:negative` are normalized to `:activate` and `:inhibit`. See `coupling_ranges`.
 - `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype=""`: String or Symbol that describes a single data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid". A tuple/vector such as `(:rna, :trace)` or `(:rna, :dwelltime)` requests a [`CombinedData`](@ref) payload; modality order is ignored and canonicalized.
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
 - `datapath=""`: path to data file or folder or array of files or folders. For [`CombinedData`](@ref), prefer a `NamedTuple` keyed by modality, e.g. `(rna="smFISH", dwelltime=["ON.csv", "OFF.csv"])`.
-- `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `decayrate=1.0`: mRNA decay rate in inverse minutes. A negative value is an
+  input sentinel: `fit` looks up the gene/cell halflife, converts it to inverse
+  minutes, and falls back to `1.0` when unavailable. Negative decay placeholders
+  in `priormean` are replaced with this resolved value before initialization,
+  including when starting rates are read from an earlier run.
 - `ejectnumber=1`: number of mRNAs produced per burst, default is 1, if Int then deterministic, if Tuple = (r, p) then stochastic obeying NegativeBinomial(r, p)
 - `elongationtime=6.0`: average time for elongation, vector of times for coupled model
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7], if empty then all rates (except decay) are fit (applies to shared rates for hierarchical models, fitted hyper parameters are specified by individual fittedparams)
@@ -50,7 +59,12 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `nchains::Int=2`: number of parallel chains passed to [`run_inference`](@ref) for [`fit(nchains, data, model, ...)`](@ref) (MH pooled chains; NUTS/ADVI multi-chain with merging when `nchains > 1`). Align swarm `-p` with this when using cluster helpers.
 - `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
 - `onstates=Int[]`: vector of on or sojourn states, e.g. [2], if multiple onstates are desired, use vector of vectors, e.g. [[2,3],Int[]], use empty vector for R states or vector of empty vectors for R states in coupled models, do not use Int[] for R=0 models. **Coupled dwell with non-empty `dwell_specs`:** put per-unit onstates on each dwell spec row (see `dwell_specs`); [`load_model`](@ref) then builds the full per-unit vector from `dwell_specs` and the top-level `onstates` is not used.
-- `optimize=false`: use optimizer to compute maximum likelihood value
+- `optimize=false`: after inference, start an independent LBFGS likelihood
+  optimization from the sampled maximum-likelihood parameter vector and write
+  `optimized_*.txt`. This is distinct from row 1 of `rates_*.txt`, which is the
+  best likelihood point encountered by sampling. `OptimizerConverged=true`
+  reports the optimizer termination test; it does not establish parameter
+  identifiability or uniqueness along a flat likelihood ridge.
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
@@ -59,6 +73,10 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `propcv_levels::Dict=nothing`: MH only — optional shared-parameter proposal CV overrides, for example `Dict(:shared=>0.005, :group=>0.02, :individual=>0.001)`. `:top` is accepted as an alias for `:shared`. Matching entries override `propcv_rate` / `propcv_noise`.
 - `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `rna_truncation=:legacy`: RNA histogram support policy. `:legacy`
+  reproduces the v0.7.8 support rule (retain 99% of observed counts, capped at
+  1000 bins); `:none` uses every input bin. Use the same setting when comparing
+  fits because changing support changes the likelihood and fitted rates.
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `samplesteps::Int=1000000`: MH — posterior samples to collect; ADVI — maps to `maxiter` unless `maxiter` is set explicitly. Ignored by NUTS; use `n_samples` for NUTS.
 - `sample_stride::Int=1`: MH only — store every `sample_stride`-th posterior sample from the `samplesteps` total MH steps. Aliases: `samplestep`, `thin`, `thin_interval`, `thinning`, `sample_interval`, `sample_every`.
@@ -1128,7 +1146,9 @@ Create and configure data, model, and options structures for fitting.
 - `probfn`: Probability function (default: prob_Gaussian)
 - `noisepriors`: Noise priors (default: empty array)
 - `hierarchical`: Hierarchical structure (default: empty tuple)
-- `ratetype`: Rate type (default: "median")
+- `ratetype`: Row selected when a previous `rates_*.txt` file supplies initial
+  rates: `"ml"` (best sampled likelihood), `"mean"`, `"median"` (default), or
+  `"last"`
 - `propcv`: Proposal coefficient of variation (default: 0.01)
 - `samplesteps`: Number of sampling steps (default: 1000000)
 - `warmupsteps`: Number of warmup steps (default: 0)
@@ -4792,11 +4812,13 @@ Calculate burst size from fitted parameters for gene-only models.
 - `model::AbstractGMmodel`: Gene-only model
 
 # Returns
-- `Float64`: Burst size
+- [`BurstMeasures`](@ref): mean, standard deviation, median, MAD, and quantiles
+  of burst size across stored posterior samples; returns `0` when `G == 1`.
 
 # Notes
-- Calculates burst size as ratio of initiation rate to gene inactivation rate
-- Uses maximum likelihood parameters from fits
+- Calculates burst size as the ratio of the RNA production/ejection rate to
+  the gene inactivation rate
+- Uses every stored posterior parameter sample, not `fits.parml`
 - Used for gene-only model analysis
 """
 function burstsize(fits, model::AbstractGMmodel)
@@ -4821,11 +4843,13 @@ Calculate burst size from fitted parameters for GRS models.
 - `model::AbstractGRSMmodel`: GRS model
 
 # Returns
-- `Float64`: Burst size
+- [`BurstMeasures`](@ref): posterior burst-size summary; returns `0` when
+  `G == 1`.
 
 # Notes
 - Calculates burst size using model-specific burstsize function
-- Uses maximum likelihood parameters from fits
+- Draws an approximately 100-sample subset of the stored posterior for the
+  potentially more expensive GRS calculation
 - Delegates to burstsize(r, transitions, G, R, S, insertstep, splicetype, ejectnumber)
 - Used for GRS model analysis
 """
