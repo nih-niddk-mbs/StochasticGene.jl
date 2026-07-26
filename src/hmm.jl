@@ -1576,11 +1576,10 @@ end
 function _tracewise_logpredictions(f::Function, traces, hmm_stack::Symbol)
     ntr = length(traces)
     ntr == 0 && return 0.0, Float64[]
-    ell1 = _maybe_trace_checkpoint(() -> f(traces[1]), hmm_stack)
-    foldl(Iterators.drop(traces, 1); init=(ell1, [ell1])) do (total, logpredictions), tr
-        ell = _maybe_trace_checkpoint(() -> f(tr), hmm_stack)
-        return total + ell, vcat(logpredictions, [ell])
+    logpredictions = map(traces) do tr
+        _maybe_trace_checkpoint(() -> f(tr), hmm_stack)
     end
+    return sum(logpredictions), logpredictions
 end
 
 _tracewise_logpredictions(traces, hmm_stack::Symbol, f::Function) =
@@ -1589,11 +1588,10 @@ _tracewise_logpredictions(traces, hmm_stack::Symbol, f::Function) =
 function _tracewise_indexed_logpredictions(f::Function, traces, hmm_stack::Symbol)
     ntr = length(traces)
     ntr == 0 && return 0.0, Float64[]
-    ell1 = _maybe_trace_checkpoint(() -> f(1, traces[1]), hmm_stack)
-    foldl(zip(2:ntr, Iterators.drop(traces, 1)); init=(ell1, [ell1])) do (total, logpredictions), (i, tr)
-        ell = _maybe_trace_checkpoint(() -> f(i, tr), hmm_stack)
-        return total + ell, vcat(logpredictions, [ell])
+    logpredictions = map(eachindex(traces)) do i
+        _maybe_trace_checkpoint(() -> f(i, traces[i]), hmm_stack)
     end
+    return sum(logpredictions), logpredictions
 end
 
 _tracewise_indexed_logpredictions(traces, hmm_stack::Symbol, f::Function) =

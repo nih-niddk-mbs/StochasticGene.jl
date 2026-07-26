@@ -1178,6 +1178,25 @@ function prepare_rates_recursive(r::AbstractVector, trait::RecursiveHierarchyTra
     )
 end
 
+"""
+    prepare_rates_recursive_hmm(r, trait)
+
+Prepare only the unique transition and emission rate groups consumed by the
+recursive/shared HMM. Unlike [`prepare_rates_recursive`](@ref), this cache-facing
+bridge does not materialize one complete rate vector per trace.
+"""
+function prepare_rates_recursive_hmm(r::AbstractVector, trait::RecursiveHierarchyTrait)
+    transition_rates = [r[indices] for indices in trait.transition_group_parameter_indices]
+    emission_params = [r[indices] for indices in trait.emission_group_parameter_indices]
+    return (
+        transition_rates=transition_rates,
+        emission_params=emission_params,
+        assignment_transition_group=trait.cache_plan.assignment_transition_group,
+        assignment_emission_group=trait.cache_plan.assignment_emission_group,
+        cache_plan=trait.cache_plan,
+    )
+end
+
 recursive_assignment_rates(param, model::AbstractGeneTransitionModel; inverse::Bool=true) =
     recursive_assignment_rates(get_rates(param, model, inverse), model.trait.recursive_hierarchy)
 
@@ -1213,7 +1232,8 @@ function ll_hmm_trace_recursive(
         throw(ArgumentError("recursive_hierarchy likelihood does not yet support off/background trace weighting; use active_fraction=1.0 for this first path"))
     end
     kf = _hmm_kolmogorov_fn(hmm_stack)
-    prepared = hmm_stack === HMM_STACK_AD ? prepare_rates_ad(param, model) : prepare_rates(param, model)
+    complete_rates = hmm_stack === HMM_STACK_AD ? get_rates_ad(param, model) : get_rates(param, model)
+    prepared = prepare_rates_recursive_hmm(complete_rates, trait)
     ap_cache = [
         make_ap(rt, data.interval, components, model.method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
         for rt in prepared.transition_rates

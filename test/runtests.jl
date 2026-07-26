@@ -197,6 +197,15 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test all(length.(shared_transition_group_rates(compact, model.trait.recursive_hierarchy)) .== 9)
         @test length(shared_emission_group_rates(compact, model.trait.recursive_hierarchy)) == 4
         @test all(length.(shared_emission_group_rates(compact, model.trait.recursive_hierarchy)) .== 4)
+        prepared_hmm = StochasticGene.prepare_rates_recursive_hmm(
+            compact,
+            model.trait.recursive_hierarchy,
+        )
+        @test prepared_hmm.transition_rates ==
+              shared_transition_group_rates(compact, model.trait.recursive_hierarchy)
+        @test prepared_hmm.emission_params ==
+              shared_emission_group_rates(compact, model.trait.recursive_hierarchy)
+        @test !hasproperty(prepared_hmm, :assignment_rates)
         @test size(StochasticGene.rlabels(model), 2) == length(model.rates)
         @test any(contains("ThreePrime"), vec(StochasticGene.rlabels(model)))
         output_groups = StochasticGene._shared_operational_rate_groups(model.trait.recursive_hierarchy)
@@ -576,6 +585,27 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
                 "M6PR", "NIr1", dir; rna_truncation=:unknown,
             )
         end
+    end
+
+    @testset "tracewise likelihood collection is stable" begin
+        traces = [[1.0], [2.0], [3.0]]
+        total, pointwise = StochasticGene._tracewise_logpredictions(
+            traces,
+            StochasticGene.HMM_STACK_MH,
+        ) do trace
+            only(trace)
+        end
+        @test total == 6.0
+        @test pointwise == [1.0, 2.0, 3.0]
+
+        total_i, pointwise_i = StochasticGene._tracewise_indexed_logpredictions(
+            traces,
+            StochasticGene.HMM_STACK_MH,
+        ) do i, trace
+            i * only(trace)
+        end
+        @test total_i == 14.0
+        @test pointwise_i == [1.0, 4.0, 9.0]
     end
 
     if FULL_TESTS
