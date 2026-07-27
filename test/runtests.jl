@@ -412,6 +412,16 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test se ≈ sqrt(length(expanded) * var(expanded))
     end
 
+    @testset "hierarchical priors are excluded from WAIC pointwise terms" begin
+        logpredictions = [-2.0, -3.0]
+        posterior, pointwise = StochasticGene._hierarchical_hmm_result(
+            -5.0, -0.5, [-0.2, -0.3], logpredictions,
+        )
+        @test posterior == -6.0
+        @test pointwise === logpredictions
+        @test length(pointwise) == 2
+    end
+
     @testset "MCMC diagnostics remain finite for anticorrelation" begin
         samples = reshape(repeat([0.0, 1.0], 100), 1, :)
         ess = StochasticGene.compute_ess(samples)
