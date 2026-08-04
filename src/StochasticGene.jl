@@ -247,6 +247,7 @@ export create_combined_file, create_combined_file_mult, create_combined_files_dr
 export create_combined_files, create_combined_files_h3_latent
 export read_rates_table, write_rates_table, merge_coupled_two_unit_rates
 export merge_coupled_stacked_units, combined_rates_key, read_combined_file_specs_csv
+export create_coupled_rate_templates_from_shared
 
 # Miscellaneous helpers retained for compatibility.
 export digit_vector, find_best_models, large_deviance, large_rhat

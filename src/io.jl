@@ -5381,6 +5381,227 @@ function create_combined_files(csv_path::AbstractString, outfolder::AbstractStri
         Nenh=Nenh, Ngene=Ngene, hierarchical=hierarchical, key_col=key_col, ncoupling_col=ncoupling_col, gamma_col=gamma_col, skip_empty=skip_empty, R=R, infer_coupled_ncoupling=infer_coupled_ncoupling)
 end
 
+function _numbered_coupling_cells(row, column_names::Vector{String}, state_prefix::String, sign_prefixes::Tuple)
+    numbered = Tuple{Int,String}[]
+    pattern = Regex("^" * state_prefix * raw"_(\d+)$")
+    for name in column_names
+        m = match(pattern, lowercase(strip(name)))
+        m === nothing || push!(numbered, (parse(Int, m.captures[1]), name))
+    end
+    sort!(numbered; by=first)
+
+    states = String[]
+    signs = String[]
+    lower_to_name = Dict(lowercase(strip(name)) => name for name in column_names)
+    for (index, state_name) in numbered
+        state = _combined_csv_cell(row, state_name)
+        isempty(strip(state)) && continue
+        sign = ""
+        for prefix in sign_prefixes
+            candidate = "$(prefix)_$(index)"
+            if haskey(lower_to_name, candidate)
+                sign = _combined_csv_cell(row, lower_to_name[candidate])
+                break
+            end
+        end
+        push!(states, state)
+        push!(signs, sign)
+    end
+    return join(states, ","), join(signs, ",")
+end
+
+function _coupled_template_csv_rows(csv_path::AbstractString; key_col::String="Model_name", G::Tuple=(3, 3), R::Tuple=(3, 3), tie_rsum::Bool=true)
+    df = DataFrame(CSV.File(csv_path))
+    column_names = String.(names(df))
+    key_name = _combined_csv_colnames(df, (key_col,))
+    key_name === nothing && throw(ArgumentError("missing key column '$key_col' in $csv_path"))
+    rows = NamedTuple[]
+    for row in eachrow(df)
+        key = replace(strip(_combined_csv_cell(row, key_name)), " " => "-")
+        isempty(key) && continue
+        e_states, e_signs = _numbered_coupling_cells(
+            row, column_names, "enhancer_to_gene", ("enhancer_sign", "enhancer_to_gene_sign"),
+        )
+        g_states, g_signs = _numbered_coupling_cells(
+            row, column_names, "gene_to_enhancer", ("gene_to_enhancer_sign", "gene_sign"),
+        )
+        connections, gammas, tie_groups, modes = csv_row_to_connections_simple(
+            e_states, e_signs, "", "", g_states, g_signs, G, R; tie_rsum=tie_rsum,
+        )
+        isempty(connections) && continue
+        push!(rows, (;
+            key,
+            e_states,
+            e_signs,
+            g_states,
+            g_signs,
+            connections,
+            gammas,
+            tie_groups,
+            modes,
+        ))
+    end
+    return rows
+end
+
+function _unit_coupled_labels(header::Vector{String}, unit::Int)
+    ["unit$(unit)_$(label)" for label in header]
+end
+
+function _coupled_block_labels(enhancer_header::Vector{String}, gene_header::Vector{String}, ncoupling::Int)
+    vcat(
+        _unit_coupled_labels(enhancer_header, 1),
+        _unit_coupled_labels(gene_header, 2),
+        ["Coupling_$i" for i in 1:ncoupling],
+    )
+end
+
+function _validate_shared_hierarchical_group(data, header, nmodel::Int, nnoise::Int, description::String)
+    size(data, 2) == length(header) || throw(ArgumentError("$description header/data width mismatch"))
+    size(data, 2) >= nmodel + nnoise || throw(ArgumentError("$description is too short for one complete rate set"))
+    trailing = size(data, 2) - nmodel
+    trailing % nnoise == 0 || throw(ArgumentError(
+        "$description width $(size(data, 2)) is not nmodel=$nmodel plus complete nnoise=$nnoise trace blocks",
+    ))
+    return div(trailing, nnoise)
+end
+
+"""
+    create_coupled_rate_templates_from_shared(csv_path, outfolder; ...)
+
+Create standard and `-h` coupled-model starting rate files from the complete per-group outputs of a
+shared fit. The CSV is parsed with [`csv_row_to_connections_simple`](@ref), the same canonical parser used
+to build coupled fitscripts, so coupling count, order, mode, and sign-specific initial values agree.
+
+Standard output rows contain `enhancer`, `gene`, then coupling parameters. Hierarchical output contains
+two complete hyper blocks followed by one complete block per trace. The first hyper block uses transition
+rates from the shared hierarchical fit and noise centers from the standard fit; the second is copied from
+the hierarchical coupled prior specification. Individual blocks preserve every trace's noise parameters
+from the shared hierarchical group files. Coupling values are repeated in every complete block.
+"""
+function create_coupled_rate_templates_from_shared(
+    csv_path::AbstractString,
+    outfolder::AbstractString;
+    standard_enhancer_file::AbstractString,
+    standard_gene_file::AbstractString,
+    hierarchical_enhancer_file::AbstractString,
+    hierarchical_gene_file::AbstractString,
+    G::Tuple=(3, 3),
+    R::Tuple=(3, 3),
+    S::Tuple=(0, 0),
+    insertstep::Tuple=(1, 1),
+    transitions::Tuple=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+    nnoise::Tuple=(4, 4),
+    noisepriors=([0.0, 0.1, 1.0, 0.1], [0.0, 0.1, 1.0, 0.1]),
+    elongationtime::Tuple=(20.0, 5.0),
+    initprior::Float64=0.2,
+    key_col::String="Model_name",
+    tie_rsum::Bool=true,
+    force::Bool=false,
+)
+    standard_enhancer, standard_enhancer_header = read_rates_table(standard_enhancer_file)
+    standard_gene, standard_gene_header = read_rates_table(standard_gene_file)
+    hierarchical_enhancer, hierarchical_enhancer_header = read_rates_table(hierarchical_enhancer_file)
+    hierarchical_gene, hierarchical_gene_header = read_rates_table(hierarchical_gene_file)
+
+    nrows = size(standard_enhancer, 1)
+    all(size(data, 1) == nrows for data in (standard_gene, hierarchical_enhancer, hierarchical_gene)) ||
+        throw(ArgumentError("all source rate files must have the same number of summary rows"))
+
+    nmodel = ntuple(i -> num_rates(transitions[i], R[i], S[i], insertstep[i]), 2)
+    ncomplete = ntuple(i -> nmodel[i] + nnoise[i], 2)
+    size(standard_enhancer, 2) == ncomplete[1] || throw(ArgumentError(
+        "standard enhancer width $(size(standard_enhancer, 2)) != expected $(ncomplete[1])",
+    ))
+    size(standard_gene, 2) == ncomplete[2] || throw(ArgumentError(
+        "standard gene width $(size(standard_gene, 2)) != expected $(ncomplete[2])",
+    ))
+    ntraces_enhancer = _validate_shared_hierarchical_group(
+        hierarchical_enhancer, hierarchical_enhancer_header, nmodel[1], nnoise[1], "hierarchical enhancer",
+    )
+    ntraces_gene = _validate_shared_hierarchical_group(
+        hierarchical_gene, hierarchical_gene_header, nmodel[2], nnoise[2], "hierarchical gene",
+    )
+    ntraces_enhancer == ntraces_gene || throw(ArgumentError(
+        "hierarchical enhancer/gene trace count mismatch: $ntraces_enhancer != $ntraces_gene",
+    ))
+
+    csv_rows = _coupled_template_csv_rows(csv_path; key_col, G, R, tie_rsum)
+    isempty(csv_rows) && throw(ArgumentError("no coupled models found in $csv_path"))
+    mkpath(outfolder)
+    outputs = NamedTuple[]
+
+    for csv_row in csv_rows
+        nc = length(csv_row.connections)
+        length(csv_row.gammas) == nc || throw(ArgumentError("coupling value count mismatch for $(csv_row.key)"))
+        coupling = ((1, 2), csv_row.connections, csv_row.modes)
+        spec = build_coupled_fit_spec_from_csv_cells(
+            csv_row.e_states, csv_row.e_signs, "", "", csv_row.g_states, csv_row.g_signs, csv_row.key;
+            G, R, S, insertstep, transitions,
+            datapath="", resultfolder=String(outfolder), root=".", noisepriors, elongationtime,
+            initprior, hierarchical=true, tie_rsum,
+        )
+        block_width = ncomplete[1] + ncomplete[2] + nc
+        length(spec[:priormean]) == 2 * block_width || throw(ArgumentError(
+            "hierarchical prior width for $(csv_row.key) does not match two complete coupled blocks",
+        ))
+        second_hyper = Float64.(spec[:priormean][block_width + 1:2 * block_width])
+
+        standard_data = hcat(standard_enhancer, standard_gene, repeat(reshape(csv_row.gammas, 1, :), nrows, 1))
+        block_header = _coupled_block_labels(standard_enhancer_header, standard_gene_header, nc)
+        standard_file = joinpath(outfolder, "rates_$(csv_row.key).txt")
+        hierarchical_file = joinpath(outfolder, "rates_$(csv_row.key)-h.txt")
+        if !force && (isfile(standard_file) || isfile(hierarchical_file))
+            throw(ArgumentError("refusing to overwrite existing templates for key $(csv_row.key); pass force=true"))
+        end
+        write_rates_table(standard_file, standard_data, block_header)
+
+        hierarchical_data = Matrix{Float64}(undef, nrows, (2 + ntraces_enhancer) * block_width)
+        for row_index in 1:nrows
+            enhancer_center = vcat(
+                hierarchical_enhancer[row_index, 1:nmodel[1]],
+                standard_enhancer[row_index, nmodel[1] + 1:ncomplete[1]],
+            )
+            gene_center = vcat(
+                hierarchical_gene[row_index, 1:nmodel[2]],
+                standard_gene[row_index, nmodel[2] + 1:ncomplete[2]],
+            )
+            values = Float64[vcat(enhancer_center, gene_center, csv_row.gammas)...]
+            append!(values, second_hyper)
+            for trace_index in 1:ntraces_enhancer
+                enoise_start = nmodel[1] + (trace_index - 1) * nnoise[1] + 1
+                gnoise_start = nmodel[2] + (trace_index - 1) * nnoise[2] + 1
+                enhancer_trace = vcat(
+                    hierarchical_enhancer[row_index, 1:nmodel[1]],
+                    hierarchical_enhancer[row_index, enoise_start:enoise_start + nnoise[1] - 1],
+                )
+                gene_trace = vcat(
+                    hierarchical_gene[row_index, 1:nmodel[2]],
+                    hierarchical_gene[row_index, gnoise_start:gnoise_start + nnoise[2] - 1],
+                )
+                append!(values, vcat(enhancer_trace, gene_trace, csv_row.gammas))
+            end
+            hierarchical_data[row_index, :] = values
+        end
+        hierarchical_header = vcat(
+            ["hyper_$label" for label in block_header],
+            ["hyper_$label" for label in block_header],
+            reduce(vcat, (block_header for _ in 1:ntraces_enhancer)),
+        )
+        write_rates_table(hierarchical_file, hierarchical_data, hierarchical_header)
+        push!(outputs, (;
+            key=csv_row.key,
+            standard_file,
+            hierarchical_file,
+            ncoupling=nc,
+            ntraces=ntraces_enhancer,
+            standard_width=block_width,
+            hierarchical_width=size(hierarchical_data, 2),
+        ))
+    end
+    return outputs
+end
+
 """
     create_combined_files_h3_latent(outfolder::String; enhancer_file, gene_file, hierarchical=false, transition_range=1:5, Nenh=13, Ngene=13, Nlatent=8, n_noise=0, ncoupling=2, latent_prior=nothing, coupling_prior=nothing)
 
