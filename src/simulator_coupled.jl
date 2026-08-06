@@ -65,6 +65,69 @@ Create dictionary mapping reaction names to their action codes.
 set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3, "initiate!" => 4, "transitionR!" => 5, "eject!" => 6, "splice!" => 7, "decay!" => 8)
 # invert_dict(D) = Dict(D[k] => k for k in keys(D)) put into utilities
 
+function _shift_reaction_times!(tau::AbstractMatrix, offset::Real)
+    tau .-= offset
+end
+
+function _shift_reaction_times!(tau::AbstractVector{<:AbstractMatrix}, offset::Real)
+    for taui in tau
+        taui .-= offset
+    end
+end
+
+
+function _automatic_warmuptime(r, transitions, R, S, insertstep, equilibration_timescales::Real)
+    equilibration_timescales > 0 || throw(ArgumentError("equilibration_timescales must be positive"))
+    model_rates = Float64[]
+    if R isa Tuple
+        for i in eachindex(R)
+            n = num_rates(transitions[i], R[i], S[i], insertstep[i])
+            append!(model_rates, @view r[i][1:n])
+        end
+    else
+        n = num_rates(transitions, R, S, insertstep)
+        append!(model_rates, @view r[1:n])
+    end
+    filter!(x -> isfinite(x) && x > 0, model_rates)
+    isempty(model_rates) && throw(ArgumentError("cannot choose automatic warmup time without a positive finite model rate"))
+    Float64(equilibration_timescales) / minimum(model_rates)
+end
+
+
+function _warmup_simulation!(tau, state, m, r, reactions, transitions, G, R, S, insertstep, coupling;
+    warmupsteps::Integer=0,
+    warmuptime=0.0,
+    equilibration_timescales::Real=10.0,
+    ejectnumber=1,
+)
+    warmupsteps >= 0 || throw(ArgumentError("warmupsteps must be nonnegative"))
+    target_time = isnothing(warmuptime) ?
+                  _automatic_warmuptime(r, transitions, R, S, insertstep, equilibration_timescales) :
+                  Float64(warmuptime)
+    target_time >= 0 || throw(ArgumentError("warmuptime must be nonnegative or nothing"))
+
+    events = 0
+    last_event_time = 0.0
+    while true
+        next_time, index, allele = findmin_tau(tau)
+        need_steps = events < warmupsteps
+        before_cutoff = next_time <= target_time
+        (need_steps || before_cutoff) || break
+        isfinite(next_time) || throw(ArgumentError("warmup requested more events than this model can generate"))
+        initial, final, disabled, enabled, action = set_arguments(reactions, index)
+        m = update!(tau, state, index, next_time, m, r, allele, G, R, S, insertstep,
+                    disabled, enabled, initial, final, action, coupling, ejectnumber)
+        events += 1
+        last_event_time = next_time
+    end
+
+    # A physical-time burn ends at its deterministic cutoff, between events if necessary.
+    # Event-count-only warmup retains its legacy event-epoch endpoint.
+    burn_end = max(target_time, last_event_time)
+    burn_end > 0 && _shift_reaction_times!(tau, burn_end)
+    return m, events, burn_end
+end
+
 """
     simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
@@ -90,6 +153,9 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)
 - `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
 - `totaltime`::Float64=0.0: total time of simulation
+- `warmuptime=0.0`: physical burn-in time. Use `nothing` to choose ten slowest-rate time constants automatically.
+- `warmupsteps::Int=0`: optional legacy minimum number of burn-in reaction events.
+- `equilibration_timescales::Real=10.0`: number of slowest-rate time constants used when `warmuptime=nothing`.
 - `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
 - `verbose::Bool=false`: flag for printing state information
 
@@ -104,7 +170,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
 
 """
-function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1, trace_specs=nothing, observed_units=nothing)
+function simulator(rin, transitions, G, R, S, insertstep; warmupsteps::Integer=0, warmuptime=0.0, equilibration_timescales::Real=10.0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1, trace_specs=nothing, observed_units=nothing)
 
     r = copy(rin)
     if !isempty(coupling)
@@ -150,13 +216,6 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
         onstates = fill(Int64[], length(state))
     end
     
-    # Set up trace logging if tracing is enabled
-    # This happens for ALL units; filtering to observed units happens in make_trace
-    if traceinterval > 0
-        par = set_par(r, noiseparams)
-        tracelog = initialize_tracelog(t, state)
-    end
-
     if verbose
         invactions = invert_dict(set_actions())
     end
@@ -165,30 +224,24 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
         totalsteps = 0
     end
 
-    if warmupsteps > 0
-        for steps in 1:warmupsteps
-            t, index, allele = findmin_tau(tau)
-            initial, final, disabled, enabled, action = set_arguments(reactions, index)
-            m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
-        end # for
-        # After warmup, tau values are absolute times (proposed next event times)
-        # Shift all tau values back by the warmup time t so they remain absolute times
-        # but now relative to the new time 0 (start of main simulation)
-        # Note: tau[e] = -log(rand()) / r[e] + t during update!, so tau[e] > t
-        # Therefore after shifting, tau[e] - t > 0 (proposed next absolute time is positive)
-        # Note: for taui in tau iterates over each Matrix in Vector{Matrix}, and
-        # taui .-= t modifies each matrix in place (taui is a reference, not a copy)
-        if tau isa AbstractMatrix
-            tau .-= t
-        else
-            for taui in tau
-                taui .-= t
-            end
-        end
-        # Reset simulation time to match t0 initialization from initialize_sim
-        t = 0.0
-        t0 = 0.0
-    end # if
+    m, _, _ = _warmup_simulation!(
+        tau, state, m, r, reactions, transitions, G, R, S, insertstep, coupling;
+        warmupsteps=warmupsteps,
+        warmuptime=warmuptime,
+        equilibration_timescales=equilibration_timescales,
+        ejectnumber=ejectnumber,
+    )
+    steps = 0
+    t = 0.0
+    ts = 0.0
+    t0 = 0.0
+
+    # The recorded trace begins from the equilibrated state, not the artificial
+    # all-state-1 initialization used to start the burn-in simulation.
+    if traceinterval > 0
+        par = set_par(r, noiseparams)
+        tracelog = initialize_tracelog(t, state)
+    end
 
     while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
@@ -271,10 +324,10 @@ the onstate (and dttype) for each requested histogram type. We return only the h
 requested—one per (unit, dt type)—selecting ON or OFF per dttype (e.g. ON/ONG → ON histogram,
 OFF/OFFG → OFF histogram).
 """
-function simulator_dwell_specs(rin, transitions, G, R, S, insertstep; dwell_specs, warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1)
+function simulator_dwell_specs(rin, transitions, G, R, S, insertstep; dwell_specs, warmupsteps::Integer=0, warmuptime=0.0, equilibration_timescales::Real=10.0, coupling=tuple(), nalleles=1, nhist=20, traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1)
     isempty(dwell_specs) && throw(ArgumentError("simulator_dwell_specs requires non-empty dwell_specs"))
     onstates, bins = parse_dwell_specs_for_simulator(dwell_specs, coupling)
-    results = simulator(rin, transitions, G, R, S, insertstep; warmupsteps=warmupsteps, coupling=coupling, nalleles=nalleles, nhist=nhist, onstates=onstates, bins=bins, traceinterval=traceinterval, probfn=probfn, noiseparams=noiseparams, totalsteps=totalsteps, totaltime=totaltime, tol=tol, reporterfn=reporterfn, splicetype=splicetype, a_grid=a_grid, verbose=verbose, ejectnumber=ejectnumber)
+    results = simulator(rin, transitions, G, R, S, insertstep; warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales, coupling=coupling, nalleles=nalleles, nhist=nhist, onstates=onstates, bins=bins, traceinterval=traceinterval, probfn=probfn, noiseparams=noiseparams, totalsteps=totalsteps, totaltime=totaltime, tol=tol, reporterfn=reporterfn, splicetype=splicetype, a_grid=a_grid, verbose=verbose, ejectnumber=ejectnumber)
     # Coupled: return only the histograms requested (one per dt type), not both ON and OFF for each onstate.
     if !isempty(coupling)
         n_dwell = length(dwell_specs)
@@ -301,11 +354,13 @@ function simulator_dwell_specs(rin, transitions, G, R, S, insertstep; dwell_spec
 end
 
 """
-    simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
+    simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0,
+                 warmuptime=0.0, equilibration_timescales=10.0, kwargs...)
 
-TBW
+Accumulate state residence times after an optional burn-in. `warmuptime=nothing`
+selects an automatic physical burn-in from the slowest positive model rate.
 """
-function simulator_ss(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
+function simulator_ss(rin, transitions, G, R, S, insertstep; warmupsteps::Integer=0, warmuptime=0.0, equilibration_timescales::Real=10.0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1)
     r = copy(rin)
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
@@ -319,6 +374,17 @@ function simulator_ss(rin, transitions, G, R, S, insertstep; warmupsteps=0, coup
     _, _, _, m, steps, t, _, t0, _, _ = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S, insertstep)
     tau, state = initialize(r, G, R, reactions, nalleles)
+
+    m, _, _ = _warmup_simulation!(
+        tau, state, m, r, reactions, transitions, G, R, S, insertstep, coupling;
+        warmupsteps=warmupsteps,
+        warmuptime=warmuptime,
+        equilibration_timescales=equilibration_timescales,
+        ejectnumber=ejectnumber,
+    )
+    steps = 0
+    t = 0.0
+    t0 = 0.0
 
     if verbose
         invactions = invert_dict(set_actions())
@@ -350,7 +416,7 @@ function simulator_ss(rin, transitions, G, R, S, insertstep; warmupsteps=0, coup
 
         update_sshist!(sshist, state, dth, G, R, S)
 
-        update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, ejectnumber, verbose)
+        m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, ejectnumber, verbose)
 
     end  # while
     # verbose && println(steps)
@@ -631,11 +697,33 @@ Simulate a single intensity trace for a GRSM model.
 - `onstates::Vector{Int}`: Vector of ON states
 - `totaltime::Float64=1000.0`: Total simulation time
 - `reporterfn::Function=sum`: Function to combine reporter signals
+- `warmuptime=nothing`: Burn in for ten slowest-rate time constants before recording.
+- `warmupsteps::Int=0`: Optional minimum event-count burn-in for compatibility.
+- `equilibration_timescales::Real=10.0`: Override the automatic burn-in multiplier.
 
 # Returns
 - `Matrix{Float64}`: Trace matrix with columns [time, intensity, reporters, state]
 """
-simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, warmupsteps=100)[1][1:end-1, :]
+function simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates;
+    totaltime=1000.0,
+    reporterfn=sum,
+    warmupsteps::Integer=0,
+    warmuptime=nothing,
+    equilibration_timescales::Real=10.0,
+)
+    simulator(
+        r, transitions, G, R, S, insertstep;
+        nalleles=1,
+        nhist=0,
+        onstates=onstates,
+        traceinterval=interval,
+        reporterfn=reporterfn,
+        totaltime=totaltime,
+        warmupsteps=warmupsteps,
+        warmuptime=warmuptime,
+        equilibration_timescales=equilibration_timescales,
+    )[1][1:end-1, :]
+end
 
 """
     simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
@@ -656,13 +744,16 @@ Create simulated trace files in the specified data folder.
 - `totaltime::Float64=1000.0`: Total simulation time
 - `reporterfn::Function=sum`: Function to combine reporter signals
 - `a_grid`: Optional grid transition matrix
+- `warmuptime=nothing`: Automatic burn-in for ten slowest-rate time constants.
+- `warmupsteps::Int=0`: Optional additional minimum number of burn-in events.
+- `equilibration_timescales::Real=10.0`: Multiplier used for automatic burn-in.
 
 # Returns
 - Creates `.trk` files in the specified folder containing simulated trace data
 """
-function simulate_trace_data(datafolder::String; a_grid=nothing, ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 40, 20, 200, 10], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum)
+function simulate_trace_data(datafolder::String; a_grid=nothing, ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 40, 20, 200, 10], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum, warmupsteps::Integer=0, warmuptime=nothing, equilibration_timescales::Real=10.0)
     isdir(datafolder) || mkdir(datafolder)
-    trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, onstates=onstates, reporterfn=reporterfn, a_grid=a_grid)
+    trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, onstates=onstates, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales)
     for i in eachindex(trace)
         l = length(trace[i])
         if isnothing(a_grid)
@@ -677,7 +768,7 @@ end
 
 - `hierarchical`: tuple of (background mean index, vector of background means)
 """
-function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), warmupsteps=100, col=2)
+function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), warmupsteps::Integer=0, warmuptime=nothing, equilibration_timescales::Real=10.0, col=2)
     # Scalar `col`: one column per trial → Vector{Float64} (legacy TraceData). Vector `col`: submatrix → Matrix{Float64}.
     trace = col isa AbstractVector ? Vector{Matrix{Float64}}(undef, ntrials) : Vector{Vector{Float64}}(undef, ntrials)
     r = copy(rin)
@@ -686,7 +777,7 @@ function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, inter
             r[hierarchical[1]] = hierarchical[2][i]
         end
         if isnothing(a_grid)
-            raw = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps)[1]
+            raw = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales)[1]
             idxs = col isa AbstractVector ? collect(col) : col
             sl = raw[1:end-1, idxs]
             if col isa AbstractVector
@@ -695,7 +786,7 @@ function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, inter
                 trace[i] = Vector{Float64}(sl)
             end
         else
-            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps)[1]
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales)[1]
         end
     end
     trace
@@ -708,25 +799,23 @@ end
 Coupled multi-unit trace simulation. Keyword `noiseparams` should be a `Vector{Int}` with one count per unit
 (use `0` for hidden units with no reporter noise); a scalar (broadcast by `R[i] > 0`); or `nothing` for the
 default `[R[i] > 0 ? 4 : 0 for i in eachindex(R)]`. Pass `observed_units` to restrict trace output to
-observed units (e.g. exclude a hidden master unit).
+observed units (e.g. exclude a hidden master unit). By default, recording begins after an automatic
+physical-time burn-in of ten slowest-rate time constants; override with `warmuptime` or
+`equilibration_timescales`.
 """
 # function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
-function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Int=100, trace_specs=nothing, noiseparams=nothing, splicetype="", observed_units=nothing)
+function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Integer=0, warmuptime=nothing, equilibration_timescales::Real=10.0, trace_specs=nothing, noiseparams=nothing, splicetype="", observed_units=nothing)
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
     if verbose
         totaltime = 0.0
         totalsteps = 10
     end
-    # Convert warmup_time to warmup steps (events). For coupled models, we want sufficient warmup.
-    # Use conservative estimate: if average event rate is ~1 per time unit, use warmup_time steps.
-    # But ensure minimum of 1000 steps for stability.
-    # warmup_steps = warmup_time > 0.0 ? max(Int(round(warmup_time)), 1000) : 0
     for i in eachindex(trace)
         if !isempty(hierarchical)
             r[hierarchical[1]] = hierarchical[2][i]
         end
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=warmupsteps, verbose=verbose, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, observed_units=observed_units)[1]
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales, verbose=verbose, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, observed_units=observed_units)[1]
         if col isa Vector
             # When col is a vector, extract multiple columns and combine them
             tr = Vector[]

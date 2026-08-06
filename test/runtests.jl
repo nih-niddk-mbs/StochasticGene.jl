@@ -618,6 +618,44 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test pointwise_i == [1.0, 4.0, 9.0]
     end
 
+    @testset "simulator trace warmup" begin
+        transitions = ([1, 2], [2, 1])
+        rates = [0.30, 0.15, 0.60, 1.0, 0.10, 0.0, 0.10, 1.0, 0.10]
+
+        @test StochasticGene._automatic_warmuptime(rates, transitions, 1, 0, 1, 10.0) == 100.0
+
+        Random.seed!(2)
+        cold = StochasticGene.simulator(
+            rates, transitions, 2, 1, 0, 1;
+            nhist=0, traceinterval=1.0, totalsteps=0, warmuptime=0.0, verbose=true,
+        )
+        Random.seed!(2)
+        warm = StochasticGene.simulator(
+            rates, transitions, 2, 1, 0, 1;
+            nhist=0, traceinterval=1.0, totalsteps=0, warmuptime=100.0, verbose=true,
+        )
+        @test only(cold[2])[1] == 0.0
+        @test only(warm[2])[1] == 0.0
+        @test only(cold[2])[2] != only(warm[2])[2]
+
+        Random.seed!(3)
+        stepped = StochasticGene.simulator(
+            rates, transitions, 2, 1, 0, 1;
+            nhist=0, traceinterval=1.0, totalsteps=1, warmupsteps=5, verbose=true,
+        )
+        @test length(stepped[2]) == 2
+        @test stepped[2][1][1] == 0.0
+        @test stepped[2][2][1] > 0.0
+
+        Random.seed!(4)
+        trace = StochasticGene.simulate_trace(
+            rates, transitions, 2, 1, 0, 1, 1.0, Int[];
+            totaltime=10.0,
+        )
+        @test size(trace, 2) == 4
+        @test !isempty(trace)
+    end
+
     if FULL_TESTS
         @testset "RNA histograms" begin
             h1, h2 = StochasticGene.test_compare()
