@@ -11,7 +11,7 @@ The most current, runnable workflow examples are:
 - [Cluster and batch workflows](../cluster_batch_workflows.md)
 
 Several older pages in this section are retained as conceptual sketches while
-the v1.11/2.0 API is being finalized. Those pages are marked with a legacy
+the 2.0 API. Those pages are marked with a legacy
 notice and should not be copied verbatim until refreshed.
 
 ## Basic Examples
@@ -31,7 +31,7 @@ notice and should not be copied verbatim until refreshed.
 
 ## Advanced Examples
 
-Cluster / Biowulf batch generation and combined rate files are documented on the top-level page [Cluster and batch workflows](../cluster_batch_workflows.md) (`makeswarmfiles`, `create_combined_file`, etc.), not in this examples tree.
+Cluster / Biowulf batch generation and combined rate files are documented on the top-level page [Cluster and batch workflows](../cluster_batch_workflows.md) (`makeswarm`, `stage_write_run_specs`, `create_combined_file`, etc.), not in this examples tree.
 
 ### Parallel Processing
 - [Parallel Processing](parallel_processing.md): Legacy conceptual sketch; use [Cluster and batch workflows](../cluster_batch_workflows.md) for current batch generation

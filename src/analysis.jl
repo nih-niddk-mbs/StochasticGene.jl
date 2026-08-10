@@ -2329,6 +2329,13 @@ function _analysis_insertstep_token(insertstep)
 end
 
 
+"""
+    write_RNAhistogram(rates, transitions, G, R, decayrate, nalleles, nRNA; kwargs...)
+    write_RNAhistogram(folder, nRNA; ejectnumber=1)
+
+Write theoretical RNA-count histograms from one rate vector, or for every RNA
+rate file in a results folder.
+"""
 function write_RNAhistogram(r, transitions, G::Int, R::Int, decayrate::Float64, nalleles::Int, nRNA::Int; outfile::String="", splicetype="", ejectnumber=1)
     mcomponents = MComponents(transitions, G, R, nRNA, decayrate, splicetype, ejectnumber)
     df = DataFrame(Freq=predictedRNA(r, mcomponents, nalleles, nRNA), Bin=collect(0:nRNA-1))
@@ -4607,6 +4614,12 @@ function _correlation_default_pairs(observables, pairs)
     return _correlation_default_pairs(observables, :all)
 end
 
+"""
+    write_correlation_general_csv(outfile, results)
+
+Write generalized observable-pair correlation results returned by
+[`correlate_observables`](@ref) to a long-form CSV file.
+"""
 function write_correlation_general_csv(outfile::String, results)
     pair_col = String[]
     x_col = String[]

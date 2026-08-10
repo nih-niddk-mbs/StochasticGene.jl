@@ -61,11 +61,12 @@ end
 
 function docstring_candidates(symbols)
     src = join(read.(collect_files(relpath("src"); exts=(".jl",)), String), "\n")
+    blocks = [m.match for m in eachmatch(r"\"\"\"[\s\S]*?\"\"\"", src)]
     documented = Set{Symbol}()
     for sym in symbols
         name = String(sym)
-        pattern = Regex("\"\"\"[\\s\\S]{0,2500}\\b" * escape_string(name) * "\\b[\\s\\S]{0,2500}\"\"\"")
-        occursin(pattern, src) && push!(documented, sym)
+        pattern = Regex("(?<![A-Za-z0-9_])" * escape_string(name) * "(?![A-Za-z0-9_])")
+        any(block -> occursin(pattern, block), blocks) && push!(documented, sym)
     end
     return documented
 end

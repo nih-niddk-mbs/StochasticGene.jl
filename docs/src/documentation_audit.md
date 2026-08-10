@@ -1,7 +1,7 @@
 # Documentation Audit
 
-This page records the current documentation/docstring audit for the v1.11 beta
-line. It is aimed at maintainers and should be updated whenever public APIs or
+This page records the current documentation/docstring audit for the 2.0
+release line. It is aimed at maintainers and should be updated whenever public APIs or
 workflow defaults change.
 
 ## Current Source Of Truth

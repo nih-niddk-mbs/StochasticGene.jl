@@ -88,7 +88,7 @@ Do not confuse these summaries:
 - `optimized_*.txt` contains the separate numerical optimizer result;
 - `burst_*.txt` summarizes burst size evaluated over posterior samples.
 
-### v1.11 beta API changes
+### v2.0 API changes
 
 - **`CombinedData`**: Multimodal fits use `datatype = (:rna, :trace)` or `datatype = (:rna, :dwelltime)`. The order is canonicalized, likelihoods are evaluated per modality, scalar likelihoods are summed, and WAIC pointwise predictions are concatenated in canonical modality order.
 - **Retired legacy input keywords**: `infolder` and `inlabel` are no longer part of the public API. Use `root`, `datapath`, `label`, and `resultfolder`. Older key-based run specs may still contain `infolder`; `fit(; key=...)` ignores it during migration.
@@ -174,7 +174,7 @@ fits, stats, measures, data, model, options = fit(
 )
 ```
 
-For new scripts, the keyed `datapath` form is preferred over the legacy positional `"rnadwelltime"` layout. See [v1.11 beta CombinedData API](combined_data.md).
+For new scripts, the keyed `datapath` form is preferred over the legacy positional `"rnadwelltime"` layout. See [CombinedData API](combined_data.md).
 
 ### Trace fit with multiple MH chains
 
@@ -206,7 +206,7 @@ Trace observation likelihoods use Gaussian **densities** (`prob_Gaussian`) for t
 
 3. **MH proposal covariance and warmup** — See [Package overview](../package_overview.md#MCMC-proposal-covariance-and-warmup).
 
-4. **Key-based workflows** — Use `key="..."` for reproducible cluster runs and `write_run_spec_preset` / `makeswarmfiles`; include `inference_method` / `parallel` / `gradient` in the saved dict when needed.
+4. **Key-based workflows** — Use `key="..."` for reproducible cluster runs and `stage_write_run_specs`; include `inference_method` / `parallel` / `gradient` in the saved dict when needed.
 
 5. **Cluster scripts** — `makeswarm` and related helpers can emit `fit(; key=..., inference_method=:nuts, …)` overrides; positional gene/coupled scripts append `; kw=...` suffixes for the same keywords. See [Cluster and batch workflows](../cluster_batch_workflows.md).
 

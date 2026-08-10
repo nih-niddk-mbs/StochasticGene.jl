@@ -145,4 +145,4 @@ Batch coupled jobs can read CSVs processed in **`coupled_csv.jl`**. Each row def
 
 Minimal example: `Model_name`, `enhancer_to_gene_1`, `enhancer_sign_1` (other couplings default to `:free` mode).
 
-See docstrings for `csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, and `makeswarmfiles_coupled` (use `?` in REPL after `using StochasticGene`), and the *Coupled CSV* section in the long docstring of `makeswarmfiles` (source: `biowulf.jl`; overview: [Cluster and batch workflows](cluster_batch_workflows.md)).
+See docstrings for `csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, `stage_write_run_specs`, and `make_fitscripts_and_commandfile_from_csv` (use `?` in the REPL after `using StochasticGene`), plus the [Cluster and batch workflows](cluster_batch_workflows.md) overview.

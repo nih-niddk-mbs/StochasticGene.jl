@@ -246,4 +246,10 @@ function transient_master_initial(config_distribution::AbstractVector, nhist::In
     return P0
 end
 
+"""
+    transient_master_marginal(P)
+
+Marginalize a configuration-by-RNA-count transient master distribution over
+finite promoter configurations.
+"""
 transient_master_marginal(P::AbstractMatrix) = vec(sum(P; dims=1))

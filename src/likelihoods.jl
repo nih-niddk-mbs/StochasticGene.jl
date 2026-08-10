@@ -1106,6 +1106,19 @@ function get_reporter(model::AbstractGeneTransitionModel, data)
     return model.reporter
 end
 
+"""
+    recursive_assignment_rates(r, trait)
+    recursive_transition_group_rates(r, trait)
+    recursive_emission_group_rates(r, trait)
+    shared_assignment_rates(args...; kwargs...)
+    shared_transition_group_rates(args...; kwargs...)
+    shared_emission_group_rates(args...; kwargs...)
+
+Bridge fitted recursive/shared parameters to complete assignment-level rates
+and to the unique transition or emission groups used by likelihood caches.
+The `shared_*` names are compatibility aliases for the corresponding
+`recursive_*` functions.
+"""
 function recursive_assignment_rates(r::AbstractVector, trait::RecursiveHierarchyTrait)
     [
         r[trait.assignment_parameter_indices[:, aidx]]

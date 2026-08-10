@@ -6,7 +6,7 @@
 
 A Julia package for stochastic modeling of gene transcription and Bayesian inference.
 
-**Version:** 1.11.0
+**Version:** 2.0.0
 
 # Overview
 StochasticGene.jl is a comprehensive Julia package for simulating and fitting stochastic models of gene transcription. It provides tools for:
@@ -90,7 +90,7 @@ fits = fit(
 - `simulator_coupled.jl`: Stochastic simulation algorithms
 - `fit.jl`: Model fitting functions
 - `analysis.jl`: Post-fit analysis tools
-- `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarmfiles`, `makeswarm_models`, …)
+- `biowulf.jl`: scheduler support (`makeswarm`, `makeswarm_genes`, command writers)
 - `stage.jl`: results staging (`stage_label_to_key`, legacy → key-based filenames; `stage_combine_rates` merges rate files)
 - `coupled_csv.jl`: `Coupled_models_to_test.csv` → coupling specs (`csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, …)
 - `hmm.jl`: Hidden Markov model functions
@@ -112,7 +112,7 @@ Batch workflows (swarms, combined starts, key-based runs) are documented in the 
 
 # Documentation
 
-Hosted manual: [stable](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) · [dev](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/). Stable docs track the released version (v1.11.0).
+Hosted manual: [stable](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) · [dev](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/). Stable docs track the latest registered release.
 """
 module StochasticGene
 # __precompile__(true)
@@ -172,7 +172,7 @@ export TComponents, TransientMasterProblem
 export load_data, load_model, loglikelihood, loglikelihood_ad
 export get_param, get_rates, get_rates_ad, fixed_rates_ad
 export prepare_rates, prepare_rates_ad, num_rates, num_all_parameters
-export set_indices, set_elements_TCoupledUnit, source_states, on_states
+export set_indices, set_elements_TCoupledUnit, on_states
 export prior_context, set_priormean_empty, prior_ratemean_trace, trace_prior_variables
 export normalize_trace_specs_legacy_t_end!, mean_elongationtime, n_observed_trace_units
 export combined_modalities, reconstruct_tracerna
@@ -207,42 +207,39 @@ export simulate_fit_burst_identifiability_auc
 # Analysis output writers and dataframe assembly.
 export assemble_all, assemble_all_key, assemble_measures_key, assemble_measures_model
 export assemble_rates_key, assemble_stats_key
-export make_array, make_dataframes, make_dataframes_key, make_mat, make_traces
-export make_traces_dataframe, plot_empirical_vs_theory, score_models_from_traces
+export make_array, make_dataframes, make_dataframes_key, make_mat
+export make_traces_dataframe, score_models_from_traces
 export summarize_model_scores, joint_residence_prob_onoff
 export write_augmented, write_correlation_functions, write_correlation_functions_key
 export write_correlation_general_csv, write_correlation_functions_file
-export write_correlation_functions_empirical, correlation_functions_uncertainty_mc
-export correlation_functions_uncertainty_delta, write_joint_residence_prob_onoff
+export write_correlation_functions_empirical, write_joint_residence_prob_onoff
 export write_joint_residence_prob_onoff_key, write_shared_group_measures_from_samples
 export write_dataframes, write_dataframes_only, write_dataframes_only_key
 export write_histograms, write_ONOFFhistograms, write_ONOFFhistograms_key
-export write_residency_G_folder, write_RNAhistogram, write_traces, write_traces_coupling
-export write_traces_coupling_spawn, write_winners, write_traces_key
+export write_residency_G_folder, write_RNAhistogram, write_traces
+export write_winners, write_traces_key
 
 # File IO, run specs, and staged batch generation.
 export create_label, folder_path, folder_setup, fix, fix_filenames, readfile, readrates
 export read_run_spec, read_run_spec_for_rates_file, info_jld2_path
-export info_toml_path_for_rates_file, read_rates_folder, rate_distribution_summary
+export info_toml_path_for_rates_file
 export rna_setup, make_fitscript, write_fitfile_full, build_julia_script_command
 export write_julia_command_file, make_commandfile, make_commandfile_from_csv
 export make_swarmfile_from_csv, make_fitscripts_from_csv
 export make_fitscripts_and_commandfile_from_csv, make_fitscripts_and_swarm_from_csv
 export stage_label_to_key, label_to_key, staging_key_segment, stage_write_run_specs
-export write_run_spec_preset, write_fitscript_tracejoint_key, default_model_key
 
 # Biowulf and CSV-driven coupled helpers.
-export makeswarm, makeswarm_models, makeswarm_coupled, makeswarm_genes
-export makeswarmfiles_driver, makeswarmfiles, makeswarmfiles_coupled, makeswarmfiles_h3_latent
-export write_fitfile_coupled, csv_row_to_connections_simple
+export makeswarm, makeswarm_genes
+export csv_row_to_connections_simple
 export build_coupled_fit_spec_from_csv_cells, parse_coupling_sign_csv
 export replace_csv_cell_legacy_r, csv_row_has_legacy_r
 export stage_combine_rates, stage_combine_rates_specs_from_csv, stage_combine_rates_from_csv
 
 # Coupled-model staging and rate-table utilities.
-export COUPLING_MODE_RECIPROCAL_DEFAULT, coupling_ranges, coupling_parameter_labels
+export coupling_ranges
 export default_coupling_prior_mean, default_coupling_prior_means, default_trace_specs_for_coupled
-export make_coupling_hidden_latent, parse_h3_transition_key
+export make_coupling_hidden_latent
 export create_combined_file, create_combined_file_mult, create_combined_files_driver
 export create_combined_files, create_combined_files_h3_latent
 export read_rates_table, write_rates_table, merge_coupled_two_unit_rates
@@ -250,14 +247,14 @@ export merge_coupled_stacked_units, combined_rates_key, read_combined_file_specs
 export create_coupled_rate_templates_from_shared
 
 # Miscellaneous helpers retained for compatibility.
-export digit_vector, find_best_models, large_deviance, large_rhat
+export digit_vector, large_deviance, large_rhat
 export longest_trace_timesteps, check_ad_gradient_feasibility, T_dimension, zero_median
 
 # Test and benchmark helpers exported for compatibility with existing scripts.
 export test_compare, test_compare_3unit, test_compare_coupling, test_num_reporters_consistency
 export diagnose_sim_vs_cme, test_fit_rna, test_fit_rnadwelltime
 export test_load_model_keyword_compatibility, test_fit_rnaonoff, test_fit_simrna
-export test_compare_mh_nuts_posterior, test_fit_simrna_mh_nuts, test_simulate_trials
+export test_simulate_trials
 export test_fit_trace, test_fit_trace_hierarchical, test_fit_tracejoint
 export test_fit_tracejoint_hierarchical, test_ad_gradient_smoke, test_get_rates_ad_consistency
 export test_run_nuts_fit_smoke, test_run_advi_fit_smoke, test_run_advi_trace_smoke
@@ -265,11 +262,10 @@ export test_nuts_vs_advi_consistency, test_normalized_nullspace_augmented_pullba
 export test_trace_specs_utilities, test_trace_subset_benchmark_keyword_bundle
 export test_benchmark_trace_joint_fit_stacks
 export benchmark_inference_simrna_small, benchmark_inference_trace_gr2r2
-export benchmark_inference_trace_coupled_3x3, benchmark_scenario_coupled_3x3_10traces_220frames
-export benchmark_inference_trace_coupled_3x3_g3r0, benchmark_inference_ensure_workers
-export benchmark_inference_setup_parallel_workers, benchmark_inference_run_mh
+export benchmark_inference_trace_coupled_3x3
+export benchmark_inference_trace_coupled_3x3_g3r0, benchmark_inference_run_mh
 export benchmark_combined_likelihood_stack, benchmark_inference_run_nuts_parallel
-export benchmark_trace_zygote_gradient, benchmark_trace_forwarddiff_gradient
+export benchmark_trace_forwarddiff_gradient
 export benchmark_trace_finitediff_gradient, benchmark_trace_compare_forwarddiff_vs_finitediff
 export benchmark_trace_zygote_subset_gradient, compare_trace_subset_gradient_benchmarks
 export benchmark_inference_run_advi, benchmark_inference_compare_mh_nuts_advi

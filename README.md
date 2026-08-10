@@ -1,6 +1,9 @@
 # StochasticGene.jl
 
-**Version 1.11.0**
+Current release: **2.0.0**. See the [2.0 release notes](docs/src/release_notes.md)
+for highlights and migration guidance.
+
+**Version 2.0.0**
 
 [![Documents](https://img.shields.io/badge/Documents-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 
@@ -13,7 +16,7 @@ Julia package for **stochastic models of gene transcription**, **Bayesian infere
 | Resource | URL |
 |----------|-----|
 | **Manual (hosted)** | [Documents](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/) |
-| **Cluster & batch workflows** | [Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/cluster_batch_workflows.html) — Biowulf swarms, `makeswarm`, `makeswarmfiles`, combined rate files, key-based `fit` |
+| **Cluster & batch workflows** | [Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/cluster_batch_workflows.html) — scheduler commands, `makeswarm`, `makeswarm_genes`, combined rate files, key-based `fit` |
 | **Package overview** | [Repository layout, nomenclature, data types](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/package_overview.html) |
 | **Issues** | [GitHub Issues](https://github.com/nih-niddk-mbs/StochasticGene.jl/issues) |
 
@@ -27,7 +30,7 @@ From the Julia REPL, enter package mode with `]` and run:
 pkg> add StochasticGene
 ```
 
-Julia **≥ 1.11** is required for the v1.11 beta / 2.0-beta line (see `Project.toml`). For development, clone the repo and `pkg> dev path/to/StochasticGene.jl`.
+Julia **≥ 1.11** is required for StochasticGene 2.0 (see `Project.toml`). For development, clone the repo and `pkg> dev path/to/StochasticGene.jl`.
 
 ---
 
@@ -35,7 +38,7 @@ Julia **≥ 1.11** is required for the v1.11 beta / 2.0-beta line (see `Project.
 
 - **Models:** Generalized telegraph / GRSM dynamics — arbitrary **G** (gene) states, **R** pre-RNA steps, **S** splice sites, reporter **insertstep**, multiple alleles, **coupled** transcribing units (e.g. enhancer–gene, hidden latent units).
 - **Inference:** `fit` selects **MH**, **NUTS**, or **ADVI** via `inference_method`; shared budgets (`samplesteps`, `warmupsteps`, …) map through `load_options` to method-specific structs. MH uses fixed proposal CVs or saved covariance proposals and multi-chain `Distributed` pooling; cluster helpers emit compatible `fit(; …)` overrides (see **Cluster & batch workflows** in the manual).
-- **Data:** Stationary RNA histograms, ON/OFF and dwell-time histograms, intensity traces (`.trk` etc.), joint traces, grids — alone or in combination. In the v1.11 beta / 2.0-beta line, multimodal fits use `CombinedData` via tuple/vector `datatype` values such as `(:rna, :dwelltime)`.
+- **Data:** Stationary RNA histograms, ON/OFF and dwell-time histograms, intensity traces (`.trk` etc.), joint traces, grids — alone or in combination. In 2.0, multimodal fits use `CombinedData` via tuple/vector `datatype` values such as `(:rna, :dwelltime)`.
 - **Batch & HPC:** Helpers in `biowulf.jl` write **swarm** files and **fit scripts** for NIH Biowulf or any scheduler; run specs can be saved as `info_<key>.toml` + `info_<key>.jld2` for reproducible `fit(; key=...)`.
 
 ---
@@ -152,7 +155,7 @@ Batch helpers:
 - **`makeswarm(["key1", "key2"]; filedir=..., resultfolder=..., ...)`** — one swarm line and **`fitscript_<key>.jl`** per key (`fit(; key=..., ...)`).
 - **`makeswarm_genes(["GENE1", "GENE2"]; ...)`** — same model, one job per **gene** (genome-scale scRNA-style).
 - **`makeswarm_genes(; datapath="data/HCT116_testdata", datacond="MOCK", ...)`** — scan the RNA data folder for matching `GENE_COND.txt` files, then run the same gene-panel writer. This is the current replacement for the old v0.7-style `makeswarm(; datafolder=..., conds=...)` RNA sweep. By default it uses `checkgenes` and restricts to genes with available halflife/allele metadata; pass `filter_metadata=false` to scan filenames only.
-- **`makeswarm_models`** / **`makeswarmfiles`** — model sweeps, coupled CSV workflows, combined-rate keys; see the [cluster & batch chapter](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html).
+- **`makeswarm`** / **`makeswarm_genes`** — key-based jobs and large RNA gene batches; see the [cluster & batch chapter](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html).
 
 The `makeswarm` family always writes a plain command list (`fit.swarm` by default).
 Use `scheduler` to add a launcher for the machine you are on:
@@ -192,7 +195,7 @@ Then run `swarm -f fit.swarm` on Biowulf, `sbatch fit_slurm.sh` on Slurm,
 | `analysis.jl` | Post-fit analysis, correlation functions, exports |
 | `hmm.jl` | Observation models / HMM pieces |
 | `coupled_csv.jl` | **`Coupled_models_to_test.csv`** → coupling specs for batch coupled fits |
-| `biowulf.jl` | **`makeswarm`**, **`makeswarmfiles`**, swarm writers |
+| `biowulf.jl` | **`makeswarm`**, **`makeswarm_genes`**, scheduler command writers |
 | `test.jl` | Regression / dev tests |
 
 Public API is exported from `StochasticGene.jl`; full lists appear under **API** in the hosted manual.

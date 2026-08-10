@@ -8,7 +8,7 @@
 This example demonstrates how to analyze coupled models of gene expression, where multiple genes interact with each other.
 
 !!! note "Batch jobs and combined rate files"
-    For **generating swarm files**, **run-spec presets**, and **stacking single-unit `rates_*.txt` files** into combined starts for coupled fits, see the dedicated guide [Cluster and batch workflows](../cluster_batch_workflows.md) (`makeswarmfiles`, `create_combined_file`, etc.).
+    For **generating scheduler commands**, **staging run specs**, and **stacking single-unit `rates_*.txt` files** into combined starts for coupled fits, see the dedicated guide [Cluster and batch workflows](../cluster_batch_workflows.md) (`makeswarm`, `stage_write_run_specs`, `create_combined_file`, etc.).
 
 ## Setup
 

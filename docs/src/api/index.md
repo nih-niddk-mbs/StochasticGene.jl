@@ -4,7 +4,7 @@
 
 ### Model Fitting
 - [`fit`](fit.md): Main function for fitting models to data (MH, NUTS, ADVI via `inference_method`)
-- [v1.11 beta CombinedData API](combined_data.md): Tuple/vector `datatype`, modality-keyed `datapath`, and migration notes for retired legacy input keywords
+- [CombinedData API](combined_data.md): Tuple/vector `datatype`, modality-keyed `datapath`, and migration notes for retired legacy input keywords
 - `load_options`: Build `MHOptions` / `NUTSOptions` / `ADVIOptions` from a run-spec dict
 - `run_inference`: Unified entry point used by `fit(nchains, data, model, …)`
 - `run_mh`: Metropolis–Hastings MCMC sampling
@@ -334,7 +334,7 @@ A structure for parameter transformations during fitting.
 
 Narrative guide (when to use which function, file layout, order of operations): [Cluster and batch workflows](../cluster_batch_workflows.md).
 
-Relevant APIs include stage-native `make_fitscript`, `make_fitscripts_from_csv`, `build_julia_script_command`, `make_commandfile`, `make_commandfile_from_csv`, `make_fitscripts_and_commandfile_from_csv`, compatibility wrappers `make_swarmfile_from_csv`, `make_fitscripts_and_swarm_from_csv`, plus Biowulf-oriented `makeswarm`, `makeswarm_genes`, `makeswarm_models`, `makeswarmfiles`, `makeswarmfiles_h3_latent`, `write_run_spec_preset`, `normalize_trace_specs_legacy_t_end!`, and combined-rate helpers `create_combined_file`, `create_combined_file_mult`, `combined_rates_key`, `read_combined_file_specs_csv`, `create_combined_files_driver`, `create_combined_files`, `create_combined_files_h3_latent`, `read_rates_table`, `write_rates_table`.
+Relevant APIs include stage-native `stage_write_run_specs`, `make_fitscript`, `make_fitscripts_from_csv`, `build_julia_script_command`, `make_commandfile`, `make_commandfile_from_csv`, `make_fitscripts_and_commandfile_from_csv`, compatibility wrappers `make_swarmfile_from_csv`, `make_fitscripts_and_swarm_from_csv`, Biowulf-oriented `makeswarm` and `makeswarm_genes`, `normalize_trace_specs_legacy_t_end!`, and combined-rate helpers `create_combined_file`, `create_combined_file_mult`, `combined_rates_key`, `read_combined_file_specs_csv`, `create_combined_files_driver`, `create_combined_files`, `create_combined_files_h3_latent`, `read_rates_table`, and `write_rates_table`.
 
 ## Analysis Functions
 

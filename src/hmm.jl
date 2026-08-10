@@ -3562,6 +3562,15 @@ function _local_gene_state_vector(G::Int, R::Int, S::Int, insertstep::Int)
     Float64[inverse_state(i, G, R, S, insertstep)[1] for i in 1:n]
 end
 
+"""
+    build_correlation_context(rates, transitions, G, R, S, insertstep,
+                              probfn, coupling, lags; kwargs...)
+
+Precompute the coupled HMM stationary distribution, lagged transition powers,
+reporter observables, and emission moments used by repeated correlation
+calculations. Reuse the returned `HMMCorrelationContext` when evaluating many
+observable pairs for the same model and rates.
+"""
 function build_correlation_context(
     rin,
     transitions,
@@ -3691,6 +3700,14 @@ function _correlation_spec_parts(spec)
     end
 end
 
+"""
+    correlation_observable_label(spec)
+    correlation_observable(context, spec)
+
+Name and construct a state-space observable for correlation analysis. Specs
+support ON state, reporter number, intensity, gene state, reporter count,
+full-state masks, and custom state vectors.
+"""
 function correlation_observable_label(spec)
     kind, unit, value, label, _ = _correlation_spec_parts(spec)
     label !== nothing && return label
@@ -3767,6 +3784,12 @@ end
 
 _symmetrize_positive_lag(ac) = vcat(reverse(ac), ac[2:end])
 
+"""
+    correlate_observables(context, xspec, yspec)
+
+Compute cross-correlation, both autocorrelations, means, and variances for two
+observables using a cached [`HMMCorrelationContext`](@ref).
+"""
 function correlate_observables(ctx::HMMCorrelationContext, xspec, yspec)
     x = correlation_observable(ctx, xspec)
     y = correlation_observable(ctx, yspec)
@@ -4066,6 +4089,12 @@ function predicted_states(r::Matrix, nT, components::TComponents, n_noiseparams:
     states, observation_dist
 end
 
+"""
+    posterior_state_probabilities(a, b, p0)
+
+Return normalized posterior state probabilities at every observation time from
+the scaled forward-backward HMM recursion.
+"""
 function posterior_state_probabilities(a, b, p0)
     N, T = size(b)
     α, C = forward(a, b, p0, N, T)
@@ -4082,6 +4111,15 @@ function posterior_state_probabilities(a, b, p0)
     return γ
 end
 
+"""
+    posterior_burst_probability(trace, rates, components, n_noiseparams,
+                                reporters_per_state, probfn, interval; kwargs...)
+    posterior_burst_probability(trace, rates, transitions, G, R, S,
+                                insertstep, interval; kwargs...)
+
+Compute the posterior probability that reporter number is greater than zero at
+each time point in a trace.
+"""
 function posterior_burst_probability(
     trace,
     r::AbstractVector,
@@ -4121,6 +4159,12 @@ function posterior_burst_probability(
     posterior_burst_probability(trace, r, components, n_noiseparams, reporters_per_state, probfn, interval; method=method)
 end
 
+"""
+    auc_binary_score(scores, truth)
+
+Compute ROC AUC from continuous scores and Boolean labels using average ranks
+for ties. Returns `NaN` if either class is absent.
+"""
 function auc_binary_score(scores, truth)
     s = Float64.(vec(scores))
     y = Bool.(vec(truth))
@@ -4143,6 +4187,14 @@ function auc_binary_score(scores, truth)
     return (sum(ranks[y]) - npos * (npos + 1) / 2) / (npos * nneg)
 end
 
+"""
+    burst_prediction_auc(traces, rates, transitions, G, R, S, insertstep,
+                         interval; kwargs...)
+
+Evaluate burst-state recovery on simulated traces. Posterior burst
+probabilities are scored against the simulated reporter-number ground truth,
+returning pooled and per-trace ROC AUC summaries.
+"""
 function burst_prediction_auc(
     traces,
     r::AbstractVector,

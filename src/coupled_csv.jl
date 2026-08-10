@@ -112,6 +112,12 @@ function replace_csv_cell_legacy_r(cell, kind::Symbol)
     return join(out, ",")
 end
 
+"""
+    csv_row_has_legacy_r(e1, e2, ge)
+
+Return whether any coupled-model CSV cell contains a legacy bare `Rk` token
+instead of an explicit `Rsumk` or `Ranyk` token.
+"""
 function csv_row_has_legacy_r(e1, e2, ge)
     for cell in (e1, e2, ge)
         s = strip(string(cell))

@@ -268,8 +268,8 @@ end
     fit_default_spec() -> Dict{Symbol,Any}
 
 Return a copy of default `fit` keyword arguments as a `Dict`, with `probfn` resolved to `prob_Gaussian`
-when the default would be `nothing`. Used by batch utilities (e.g. `makeswarm_models`) to build
-run specs consumed by `write_run_spec_preset` / `fit(; key=...)`.
+when the default would be `nothing`. Used by batch utilities to build run specs
+consumed by `stage_write_run_specs` / `fit(; key=...)`.
 """
 function fit_default_spec()
     d = Dict{Symbol, Any}(pairs(_FIT_DEFAULTS))
@@ -283,11 +283,11 @@ end
     fit_coupled_default_spec() -> Dict{Symbol,Any}
 
 Like [`fit_default_spec`](@ref), but baseline keywords for **coupled** / trace-joint batch jobs
-(`makeswarmfiles` with CSV keys, `base_keys`, or H3 grids): `datatype=\"tracejoint\"`,
+with CSV keys, explicit key lists, or H3 grids: `datatype=\"tracejoint\"`,
 `datacond=[\"gene\", \"enhancer\"]` (joint trace filename tags), more chains,
 fewer MCMC steps than the single-gene RNA default, etc. Shared **two-unit** structure matches the
-`coupled_G` / `coupled_R` / … defaults on [`makeswarmfiles`](@ref) (not the single-unit RNA `G=2`, `R=0`
-from [`fit_default_spec`](@ref)). Override with `kwargs` or an existing `info_<key>` merge when needed
+the standard two-unit coupled layout (not the single-unit RNA `G=2`, `R=0`
+from [`fit_default_spec`](@ref)). Override the returned dictionary when needed
 (e.g. H3 latent layouts).
 """
 function fit_coupled_default_spec()
@@ -3912,13 +3912,13 @@ workflows.
 """
 abstract type AbstractPriorContext end
 
-"""Coupled multi-unit model: use `prior_ratemean(..., coupling)`."""
+"""`PriorContextCoupled` selects coupled multi-unit prior construction via `prior_ratemean(..., coupling)`."""
 struct PriorContextCoupled <: AbstractPriorContext end
 
 """Trace-like single-unit GRSM (`datatype` contains `\"trace\"`), no grid/hierarchical, ≥2 transition pairs: use `prior_ratemean_trace`."""
 struct PriorContextTraceSingleUnit <: AbstractPriorContext end
 
-"""Default single-unit GRSM prior (`prior_ratemean`): RNA, hierarchical trace, grid, short transition list, etc."""
+"""`PriorContextGenericSingle` selects the default single-unit GRSM `prior_ratemean` recipe."""
 struct PriorContextGenericSingle <: AbstractPriorContext end
 
 """
@@ -5246,7 +5246,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     run_spec = _current_run_spec[]
     name_override = _current_name_override[]
     println("final max ll: ", fits.llml)
-    print_ll(transform_rates(vec(stats.medparam), model), data, model, "median ll: ")
+    print_ll(transform_rates(vec(stats.medparam), model), data, model, "ll at coordinate-wise median rates: ")
     println("Median fitted rates: ", stats.medparam[:, 1])
     println("ML rates: ", inverse_transform_params(fits.parml, model))
     println("Acceptance: ", fits.accept, "/", fits.total, " (", fits.accept / fits.total * 100, "% )    ")

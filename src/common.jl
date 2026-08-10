@@ -846,6 +846,16 @@ function recursive_hierarchy_cache_plan(
     )
 end
 
+"""
+    SharedParameterCachePlan
+    SharedParameterTrait
+    shared_parameter_cache_plan(args...; kwargs...)
+    compile_shared_parameter_trait(args...; kwargs...)
+
+Compatibility aliases for the recursive-hierarchy shared-parameter stack.
+They compile dataset assignments into fitted-parameter mappings and cache groups;
+likelihood code still receives complete rate vectors for each assignment.
+"""
 const SharedParameterCachePlan = RecursiveHierarchyCachePlan
 const SharedParameterTrait = RecursiveHierarchyTrait
 
@@ -1556,5 +1566,10 @@ IDLCorrelation(; m=16) = CorrelationTrait(centering=:windowed_mean, multitau=:mu
 # Default correlation algorithm
 const DEFAULT_CORRELATION_ALGORITHM = StandardCorrelation()
 
-# Type alias for backward compatibility
+"""
+    CorrelationAlgorithm
+
+Backward-compatible alias for [`CorrelationTrait`](@ref), which selects
+centering, multi-tau binning, and normalization behavior.
+"""
 const CorrelationAlgorithm = CorrelationTrait

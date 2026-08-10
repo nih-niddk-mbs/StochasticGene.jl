@@ -722,6 +722,12 @@ This function finds jobs that failed in the specified folder and writes a swarmf
 """
 fix(folder) = writeruns(fixruns(findjobs(folder)))
 
+"""
+    fix_filenames(folder, old="scRNA-ss-", new="scRNA-ss_")
+
+Rename result files in `folder` by replacing `old` with `new` in each matching
+basename. Existing destinations are overwritten.
+"""
 function fix_filenames(folder, old="scRNA-ss-", new="scRNA-ss_")
     files = readdir(folder)
     for file in files

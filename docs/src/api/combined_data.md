@@ -1,6 +1,6 @@
-# v1.11 Beta CombinedData API
+# CombinedData API
 
-StochasticGene v1.10 introduced the `CombinedData` path for multimodal fits. The v1.11 beta / 2.0-beta line continues that migration: each elementary modality keeps its own loader and likelihood while `fit` combines the scalar log-likelihoods and WAIC pointwise predictions in a stable order.
+StochasticGene v1.10 introduced the `CombinedData` path for multimodal fits. In v2.0, each elementary modality keeps its own loader and likelihood while `fit` combines the scalar log-likelihoods and WAIC pointwise predictions in a stable order.
 
 This API is intended to replace new uses of legacy combined datatypes such as `"tracerna"` and `"rnadwelltime"` over time. Those legacy datatypes are still supported for compatibility, but new multimodal workflows should prefer tuple or vector `datatype` values.
 

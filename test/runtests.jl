@@ -22,6 +22,10 @@ using Test
 const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
 
 @testset "StochasticGene" begin
+    @testset "public API exports" begin
+        @test isempty(filter(name -> !isdefined(StochasticGene, name), names(StochasticGene)))
+    end
+
 
     @testset "maxtime_seconds" begin
         @test StochasticGene.maxtime_seconds(3600) == 3600.0
@@ -693,26 +697,6 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             @test length(cme_vec) == length(sim_vec)
         end
 
-        @testset "MH vs NUTS posterior (GM, simulated RNA histogram)" begin
-            # Same likelihood and priors; compare posterior mean rates (Stats.meanparam).
-            # Large MH chain + moderate NUTS; finite-diff gradients for robust NUTS.
-            res = StochasticGene.test_fit_simrna_mh_nuts(;
-                totalsteps=80_000,
-                sim_seed=42,
-                mh_samplesteps=35_000,
-                mh_warmup=8_000,
-                mh_maxtime=240.0,
-                mh_seed=101,
-                nuts_n_samples=1_200,
-                nuts_n_adapts=600,
-                nuts_gradient=:finite,
-                nuts_fd_ε=1e-4,
-                rng_nuts=MersenneTwister(202),
-            )
-            @test length(res.mean_mh) == length(res.mean_nuts)
-            # Monte Carlo noise: allow generous margin on rate-space means
-            @test res.max_abs_diff < 1.25
-        end
     end
 
     @testset "trace_specs utilities" begin

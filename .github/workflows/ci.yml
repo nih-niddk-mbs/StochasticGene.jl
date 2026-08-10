@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate
+        run: julia --project=. -e 'import Pkg; Pkg.instantiate()'
+      - name: Test
+        run: julia --project=. -e 'import Pkg; Pkg.test()'
+      - name: Audit documentation
+        run: julia --startup-file=no docs/audit_docs.jl --strict-docstrings

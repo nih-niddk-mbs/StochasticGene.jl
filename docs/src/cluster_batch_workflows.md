@@ -200,7 +200,7 @@ For **coupled** transcriptional units (e.g. enhancer + gene, with or without a h
 
 1. **Fit each unit as its own single-unit model**  
    Run separate fits (e.g. enhancer-only and gene-only traces or histograms) so each produces a standard MCMC **`rates_*.txt`** (rows = posterior samples, columns = rate headers for that unit).  
-   Use normal [`fit`][fit] calls or batch them with [`makeswarm_models`][makeswarm_models] / [`makeswarmfiles`][makeswarmfiles] in **single-unit** mode.
+   Use normal [`fit`][fit] calls, or stage explicit run specs with [`stage_write_run_specs`][stage_write_run_specs] and emit jobs with [`makeswarm`][makeswarm].
 
 2. **Merge the fitted rates into one wide table**  
    Stack the columns from the two (or more) unit files and append **coupling** placeholder columns using [`create_combined_file`][create_combined_file] for two-unit models, or [`create_combined_file_mult`][create_combined_file_mult] for models with more than two units.  
@@ -342,17 +342,16 @@ bash fit.swarm
 
 **Generating keys and `info_<key>` in bulk**
 
-- [`write_run_spec_preset`][write_run_spec_preset] — write `info_<key>.jld2` + marker TOML for one key.
-- [`makeswarm_models`][makeswarm_models] — sweep single-unit `G,R,S,insertstep`, write presets, then call Biowulf-oriented writers.
-- [`makeswarmfiles`][makeswarmfiles] — **unified** legacy Biowulf entry: coupled key lists (CSV, explicit `base_keys`, or H3 grids) **or** single-unit sweeps; writes presets and emits swarm+scripts.
-- [`makeswarmfiles_h3_latent`][makeswarmfiles_h3_latent] — convenience for H3 latent key grids.
+- [`stage_write_run_specs`][stage_write_run_specs] writes `info_<key>.jld2` plus marker TOML files from explicit spec dictionaries.
+- [`makeswarm`][makeswarm] emits scheduler commands and fit scripts for staged keys.
+- [`make_fitscripts_and_commandfile_from_csv`][make_fitscripts_and_commandfile_from_csv] handles CSV-defined batches without a legacy model-sweep wrapper.
 
 ### Swarm `julia -p`, `nchains`, merged `info_<key>`, and `root`
 
-- **Parallel workers:** The swarm command should use **`-p N`** (or equivalent) consistent with how many chains run in parallel. For [`makeswarmfiles`][makeswarmfiles] / [`makeswarm_models`][makeswarm_models], if you do **not** pass an explicit swarm-only **`nchains=`** in kwargs, the generated **`-p`** is taken from each run spec’s **`nchains`** (e.g. coupled defaults often use 16), so it stays aligned with **`fit(; …, nchains=…)`**. See the [`makeswarmfiles`][makeswarmfiles] docstring. For **NUTS/ADVI**, `nchains` still controls how many independent chains are launched; within-chain parallelism follows each method’s options (`parallel` on [`NUTSOptions`][NUTSOptions] / [`ADVIOptions`][ADVIOptions], set via [`load_options`][load_options] from the run spec).
+- **Parallel workers:** The generated command should use **`-p N`** (or equivalent) consistent with how many chains run in parallel. Pass `nchains=N` to [`makeswarm`][makeswarm] and to the corresponding run specs. For **NUTS/ADVI**, `nchains` still controls how many independent chains are launched; within-chain parallelism follows each method’s options (`parallel` on [`NUTSOptions`][NUTSOptions] / [`ADVIOptions`][ADVIOptions], set via [`load_options`][load_options] from the run spec).
 - **Biowulf gradient NUTS default:** use `gradient = :finite` unless a per-model benchmark shows otherwise. On Biowulf, the usual production shape is `julia -p N -t 1` with `nchains = N`, `parallel = :distributed`, and `inference_method = :nuts`.
 
-- **Merged presets:** With **`merge_existing_info=true`** (default), older **`info_<key>.jld2`** files are merged into new specs. Legacy **`trace_specs`** sometimes used a huge **`t_end`** (historical “open end” sentinel). When saving, [`write_run_spec_preset`][write_run_spec_preset] runs [`normalize_trace_specs_legacy_t_end!`][normalize_trace_specs_legacy_t_end] so those values are rewritten to **`t_end = -1.0`**, matching current [`default_trace_specs_for_coupled`][default_trace_specs_for_coupled] and avoiding invalid frame indices in [`read_tracefiles`][read_tracefiles].
+- **Legacy trace metadata:** Before staging migrated specs, run [`normalize_trace_specs_legacy_t_end!`][normalize_trace_specs_legacy_t_end] so historical huge `t_end` sentinels become **`-1.0`**, matching current [`default_trace_specs_for_coupled`][default_trace_specs_for_coupled] and avoiding invalid frame indices in [`read_tracefiles`][read_tracefiles].
 
 - **`root` in generated fit scripts:** Scripts list **`root`** exactly as in the run spec (no forced `abspath`). Use **`root="."`** if the job’s **working directory** is the project root (set **`cd`** in the swarm or submit from the right folder). Paths resolved in an **interactive** Biowulf session can differ from **batch** jobs; **`"."`** avoids baking in an interactive-only absolute path.
 
@@ -365,7 +364,7 @@ Many batch helpers assume a string **`key`** per run:
 - `results/<resultfolder>/info_<key>.toml` and `info_<key>.jld2`
 - `rates_<key>.txt`
 
-See [Run specification (info TOML)](run_spec_toml.md). Presets for cluster reruns are written with [`write_run_spec_preset`][write_run_spec_preset].
+See [Run specification (info TOML)](run_spec_toml.md). Presets for cluster reruns are written with [`stage_write_run_specs`][stage_write_run_specs].
 
 ---
 
@@ -422,9 +421,7 @@ Post-processing examples: [`write_correlation_functions`][write_correlation_func
 [make_fitscripts_from_csv]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=make_fitscripts_from_csv&type=code
 [make_swarmfile_from_csv]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=make_swarmfile_from_csv&type=code
 [makeswarm_genes]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=makeswarm_genes&type=code
-[makeswarm_models]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=makeswarm_models&type=code
-[makeswarmfiles]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=makeswarmfiles&type=code
-[makeswarmfiles_h3_latent]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=makeswarmfiles_h3_latent&type=code
+[makeswarm]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=makeswarm&type=code
 [merge_coupled_stacked_units]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=merge_coupled_stacked_units&type=code
 [merge_coupled_two_unit_rates]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=merge_coupled_two_unit_rates&type=code
 [normalize_trace_specs_legacy_t_end]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=normalize_trace_specs_legacy_t_end%21&type=code
@@ -435,5 +432,5 @@ Post-processing examples: [`write_correlation_functions`][write_correlation_func
 [write_fitfile_genes]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=write_fitfile_genes&type=code
 [write_julia_command_file]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=write_julia_command_file&type=code
 [write_rates_table]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=write_rates_table&type=code
-[write_run_spec_preset]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=write_run_spec_preset&type=code
+[stage_write_run_specs]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=stage_write_run_specs&type=code
 [write_traces]: https://github.com/nih-niddk-mbs/StochasticGene.jl/search?q=write_traces&type=code

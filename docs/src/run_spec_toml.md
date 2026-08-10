@@ -27,7 +27,7 @@ Unset or optional arguments are stored as the string `"nothing"`; when the file 
 
 Coupling is stored as `coupling_unit_model` and `coupling_connections` in `[run]` (format `(unit_model, connections)` with each connection `(β, s, α, t)`).
 
-Full run state for **`fit(; key=...)`** is read from the companion **JLD2** file (same stem as the marker TOML). When batch helpers call `write_run_spec_preset`, legacy **`trace_specs[].t_end`** values from old merged specs (historical huge “open end” markers) are normalized to **`-1.0`** via `normalize_trace_specs_legacy_t_end!` before writing—see [Cluster and batch workflows](cluster_batch_workflows.md).
+Full run state for **`fit(; key=...)`** is read from the companion **JLD2** file (same stem as the marker TOML). Before staging migrated specs, normalize legacy **`trace_specs[].t_end`** values (historical huge “open end” markers) to **`-1.0`** with `normalize_trace_specs_legacy_t_end!`; see [Cluster and batch workflows](cluster_batch_workflows.md).
 
 ## Starting a fit from a TOML file
 
@@ -74,4 +74,4 @@ Typical entries (all optional except what your model needs):
 
 - [Model fitting (`fit`)](api/fit.md): summary of `fit` and inference keywords.
 - [Key-based naming](#Key-based-naming): `fit(; key = "id", ...)`.
-- [Cluster and batch workflows](cluster_batch_workflows.md): generating `info_<key>` presets with `makeswarmfiles` / `write_run_spec_preset` and combining single-unit rates for coupled starts.
+- [Cluster and batch workflows](cluster_batch_workflows.md): staging `info_<key>` run specs and combining single-unit rates for coupled starts.
