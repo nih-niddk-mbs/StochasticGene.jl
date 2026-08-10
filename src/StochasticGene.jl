@@ -218,7 +218,7 @@ export write_joint_residence_prob_onoff_key, write_shared_group_measures_from_sa
 export write_dataframes, write_dataframes_only, write_dataframes_only_key
 export write_histograms, write_ONOFFhistograms, write_ONOFFhistograms_key
 export write_residency_G_folder, write_RNAhistogram, write_traces, write_traces_coupling
-export write_traces_coupling_spawn, write_winners
+export write_traces_coupling_spawn, write_winners, write_traces_key
 
 # File IO, run specs, and staged batch generation.
 export create_label, folder_path, folder_setup, fix, fix_filenames, readfile, readrates
