@@ -1,5 +1,24 @@
 # Version 2.0
 
+## Version 2.0.1
+
+Version 2.0.1 is a correctness patch for coupled-model simulation and
+correlation analysis.
+
+- Centered theoretical correlations now subtract the correct stationary means
+  and approach zero at long lag.
+- Coupled simulation now handles multiple active coupling connections to the
+  same target transition correctly.
+- Physical-time equilibration follows any requested event-count warmup and
+  ends at a time cutoff rather than a reaction epoch.
+- Sparse simulated traces retain the requested recording endpoint.
+- `simulate_trials(...; nexperiments=N)` runs independent experiments in
+  parallel and reports ON-ON correlation intervals across experiments.
+
+These corrections can change coupled simulated traces and theoretical
+correlation outputs relative to version 2.0.0. Fitted rate-file formats and the
+public fitting interface are unchanged.
+
 StochasticGene 2.0 is the first stable release of the API tested on the 1.11
 beta line. It requires Julia 1.11.
 
