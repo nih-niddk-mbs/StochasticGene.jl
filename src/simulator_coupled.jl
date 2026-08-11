@@ -108,11 +108,12 @@ function _warmup_simulation!(tau, state, m, r, reactions, transitions, G, R, S, 
 
     events = 0
     last_event_time = 0.0
-    while true
+
+    # An event epoch samples the embedded jump chain, not the stationary-time
+    # distribution of a continuous-time Markov chain. Keep event-count burn-in
+    # for compatibility, but complete it before starting the physical-time burn.
+    while events < warmupsteps
         next_time, index, allele = findmin_tau(tau)
-        need_steps = events < warmupsteps
-        before_cutoff = next_time <= target_time
-        (need_steps || before_cutoff) || break
         isfinite(next_time) || throw(ArgumentError("warmup requested more events than this model can generate"))
         initial, final, disabled, enabled, action = set_arguments(reactions, index)
         m = update!(tau, state, index, next_time, m, r, allele, G, R, S, insertstep,
@@ -121,9 +122,19 @@ function _warmup_simulation!(tau, state, m, r, reactions, transitions, G, R, S, 
         last_event_time = next_time
     end
 
-    # A physical-time burn ends at its deterministic cutoff, between events if necessary.
-    # Event-count-only warmup retains its legacy event-epoch endpoint.
-    burn_end = max(target_time, last_event_time)
+    burn_end = last_event_time + target_time
+    while true
+        next_time, index, allele = findmin_tau(tau)
+        next_time <= burn_end || break
+        isfinite(next_time) || break
+        initial, final, disabled, enabled, action = set_arguments(reactions, index)
+        m = update!(tau, state, index, next_time, m, r, allele, G, R, S, insertstep,
+                    disabled, enabled, initial, final, action, coupling, ejectnumber)
+        events += 1
+    end
+
+    # Physical burn-in ends between events at its time cutoff. Event-only burn
+    # (`warmuptime=0`) retains the legacy event-epoch behavior.
     burn_end > 0 && _shift_reaction_times!(tau, burn_end)
     return m, events, burn_end
 end
@@ -154,7 +165,7 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
 - `totaltime`::Float64=0.0: total time of simulation
 - `warmuptime=0.0`: physical burn-in time. Use `nothing` to choose ten slowest-rate time constants automatically.
-- `warmupsteps::Int=0`: optional legacy minimum number of burn-in reaction events.
+- `warmupsteps::Int=0`: optional legacy event-count burn performed before physical-time burn-in.
 - `equilibration_timescales::Real=10.0`: number of slowest-rate time constants used when `warmuptime=nothing`.
 - `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
 - `verbose::Bool=false`: flag for printing state information
@@ -246,6 +257,15 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps::Integer=0
     while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
         t, index, allele = findmin_tau(tau)   # reaction index and allele for least time transition
+        if totaltime > 0.0 && t > totaltime
+            # The next reaction lies outside the requested recording window.
+            # Preserve the current state through the exact endpoint instead of
+            # applying that reaction and letting sparse events truncate traces.
+            nhist > 0 && update_mhist!(mhist, m, totaltime - t0, nhist)
+            traceinterval > 0 && set_tracelog!(tracelog, totaltime, state)
+            t = totaltime
+            break
+        end
         initial, final, disabled, enabled, action = set_arguments(reactions, index)
         dth = t - t0
         t0 = t
@@ -669,16 +689,32 @@ function prepare_rates_sim(rates, coupling, transitions, R, S, insertstep, n_noi
         push!(r, rates[j:j+n-1])
         j += n
     end
-    # Canonical order: [(β, α) for α in 1:n for β in sources[α]], one param per (source, target) pair
-    sources = coupling[2]
-    for α in eachindex(coupling[1])
-        for β in sources[α]
-            push!(couplingStrength, rates[j])
-            j += 1
-        end
+    # Coupling parameters always follow the public connection-list order. There
+    # may be several connections between the same pair of units, distinguished
+    # by source state and/or target transition.
+    for _ in 1:coupling[5]
+        push!(couplingStrength, rates[j])
+        j += 1
     end
     push!(r, couplingStrength)
     r
+end
+
+function _coupling_factor_for_target(state, target::Int, coupling_strength,
+    connections, unit_model, G, R, S; override_unit::Int=0, override_state=nothing)
+    factor = 1.0
+    for (k, (source, source_state, connection_target, _)) in enumerate(connections)
+        connection_target == target || continue
+        source_vector = source == override_unit ? override_state : state[source, 1]
+        model_source = unit_model[source]
+        occupied = _source_occupied(
+            findall(!iszero, vec(source_vector)), [source_state],
+            G[model_source], R[model_source], S[model_source] > 0 ? 3 : 2,
+        )
+        occupied && (factor += coupling_strength[k])
+    end
+    factor > 0 || throw(ArgumentError("active coupling factor must be positive; got $factor for target unit $target"))
+    return factor
 end
 
 """
@@ -698,7 +734,7 @@ Simulate a single intensity trace for a GRSM model.
 - `totaltime::Float64=1000.0`: Total simulation time
 - `reporterfn::Function=sum`: Function to combine reporter signals
 - `warmuptime=nothing`: Burn in for ten slowest-rate time constants before recording.
-- `warmupsteps::Int=0`: Optional minimum event-count burn-in for compatibility.
+- `warmupsteps::Int=0`: Optional event-count burn performed before physical-time burn-in.
 - `equilibration_timescales::Real=10.0`: Override the automatic burn-in multiplier.
 
 # Returns
@@ -745,7 +781,7 @@ Create simulated trace files in the specified data folder.
 - `reporterfn::Function=sum`: Function to combine reporter signals
 - `a_grid`: Optional grid transition matrix
 - `warmuptime=nothing`: Automatic burn-in for ten slowest-rate time constants.
-- `warmupsteps::Int=0`: Optional additional minimum number of burn-in events.
+- `warmupsteps::Int=0`: Optional event-count burn performed before physical-time burn-in.
 - `equilibration_timescales::Real=10.0`: Multiplier used for automatic burn-in.
 
 # Returns
@@ -804,7 +840,7 @@ physical-time burn-in of ten slowest-rate time constants; override with `warmupt
 `equilibration_timescales`.
 """
 # function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
-function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Integer=0, warmuptime=nothing, equilibration_timescales::Real=10.0, trace_specs=nothing, noiseparams=nothing, splicetype="", observed_units=nothing)
+function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, probfn=prob_Gaussian, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Integer=0, warmuptime=nothing, equilibration_timescales::Real=10.0, trace_specs=nothing, noiseparams=nothing, splicetype="", observed_units=nothing)
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
     if verbose
@@ -815,7 +851,7 @@ function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, cou
         if !isempty(hierarchical)
             r[hierarchical[1]] = hierarchical[2][i]
         end
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales, verbose=verbose, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, observed_units=observed_units)[1]
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, probfn=probfn, reporterfn=reporterfn, warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales, verbose=verbose, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, observed_units=observed_units)[1]
         if col isa Vector
             # When col is a vector, extract multiple columns and combine them
             tr = Vector[]
@@ -913,8 +949,10 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, i
     i = 2
     base = S > 0 ? 3 : 2
     d = probfn(par, reporters, G * base^R)
-    while i < n
-        while tracelog[i][1] <= frame && i < n
+    endpoint = tracelog[end][1]
+    frame_tolerance = max(eps(endpoint), eps(interval)) * 8
+    while frame <= endpoint + frame_tolerance
+        while i <= n && tracelog[i][1] <= frame
             state = tracelog[i][2]
             i += 1
         end
@@ -940,7 +978,8 @@ function make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, pa
     for i in eachindex(tracelog)
         # Skip units not in observed_units (for hidden units with no reporters)
         if isnothing(observed_units) || i in observed_units
-            push!(trace, make_trace(tracelog[i], G[i], R[i], S[i], insertstep[i], onstates[i], interval, par[i], probfn, reporterfn))
+            probfn_i = probfn isa Tuple ? probfn[i] : probfn
+            push!(trace, make_trace(tracelog[i], G[i], R[i], S[i], insertstep[i], onstates[i], interval, par[i], probfn_i, reporterfn))
         end
     end
     trace
@@ -1347,22 +1386,12 @@ end
 function update_coupling!(tau, state, index, t, r, enabled, initialstate, coupling, G::Tuple, R::Tuple, S::Tuple, verbose=false)
     unit = index[1]
     reaction = index[2]
-    sources = coupling[2][unit]
-    connections = coupling[3]  # derive source states via source_states_for_unit(connections, unit)
+    connections = coupling[3]
     ttrans = coupling[4]
     targets = coupling[6][unit]
-    model_unit = coupling[1][unit]
-    G_unit = G[model_unit]
-    R_unit = R[model_unit]
-    base_unit = S[model_unit] > 0 ? 3 : 2
-    # Canonical (β, α) order: same as transition_rate_make and prepare_rates_sim
-    coupling_pairs = Tuple{Int,Int}[(β, α) for α in eachindex(coupling[1]) for β in coupling[2][α]]
-    coupling_strength = r[end]  # Vector of length ncoupling
+    coupling_strength = r[end]  # Connection-list order, one value per connection.
 
-    oldstate = findall(!iszero, vec(initialstate))
-    newstate = findall(!iszero, vec(state[unit, 1]))
-
-    verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
+    verbose && println("unit: ", unit, ", targets: ", targets, ", ttrans: ", ttrans)
     verbose && println("tau1: ", tau)
 
     # unit as source: for each target, rescale target's coupling-transition tau when source occupancy changes.
@@ -1370,18 +1399,18 @@ function update_coupling!(tau, state, index, t, r, enabled, initialstate, coupli
     # If source unit β controls α1 from state s1 and α2 from state s2, using s=[s1,s2] for both targets
     # incorrectly activates both couplings whenever either source state is occupied.
     for target in targets
-        sstate_pair = [Int(s) for (β, s, α, _) in connections if β == unit && α == target]
-        old_occupied = _source_occupied(oldstate, sstate_pair, G_unit, R_unit, base_unit)
-        new_occupied = _source_occupied(newstate, sstate_pair, G_unit, R_unit, base_unit)
-        verbose && println("src=", unit, " -> tgt=", target, " sstate=", sstate_pair, " ", !old_occupied, " : ", new_occupied)
         if isfinite(tau[target][ttrans[target], 1])
-            idx = findfirst(isequal((unit, target)), coupling_pairs)
-            γc = idx === nothing ? 0.0 : coupling_strength[idx]
-            if !old_occupied && new_occupied
-                tau[target][ttrans[target], 1] = 1 / (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
-            elseif old_occupied && !new_occupied
-                tau[target][ttrans[target], 1] = (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
-            end
+            old_factor = _coupling_factor_for_target(
+                state, target, coupling_strength, connections, coupling[1], G, R, S;
+                override_unit=unit, override_state=initialstate,
+            )
+            new_factor = _coupling_factor_for_target(
+                state, target, coupling_strength, connections, coupling[1], G, R, S,
+            )
+            verbose && println("src=", unit, " -> tgt=", target,
+                " factor ", old_factor, " -> ", new_factor)
+            tau[target][ttrans[target], 1] = old_factor / new_factor *
+                (tau[target][ttrans[target], 1] - t) + t
         end
     end
 
@@ -1390,22 +1419,13 @@ function update_coupling!(tau, state, index, t, r, enabled, initialstate, coupli
     #  2. ttrans[unit] ∈ enabled: the coupling target was just re-enabled (e.g. unit re-entered G=2
     #     from G=1 or G=3), so transitionG!/deactivateG! drew a fresh base-rate tau for it.
     if reaction == ttrans[unit] || ttrans[unit] ∈ enabled
-        for source in sources
-            sstate_source = [Int(s) for (β, s, α, _) in connections if β == source && α == unit]
-            model_source = coupling[1][source]
-            G_source = G[model_source]
-            R_source = R[model_source]
-            base_source = S[model_source] > 0 ? 3 : 2
-            source_state_indices = findall(!iszero, vec(state[source, 1]))
-            verbose && println("s2 unit=$unit src=$source sstate=$sstate_source occ=",
-                _source_occupied(source_state_indices, sstate_source, G_source, R_source, base_source),
-                " tau=", tau[unit][ttrans[unit], 1])
-            if _source_occupied(source_state_indices, sstate_source, G_source, R_source, base_source)
-                idx = findfirst(isequal((source, unit)), coupling_pairs)
-                γc = idx === nothing ? 0.0 : coupling_strength[idx]
-                tau[unit][ttrans[unit], 1] = 1 / (1 + γc) * (tau[unit][ttrans[unit], 1] - t) + t
-            end
-        end
+        factor = _coupling_factor_for_target(
+            state, unit, coupling_strength, connections, coupling[1], G, R, S,
+        )
+        verbose && println("target=$unit fresh rate factor=$factor tau=",
+            tau[unit][ttrans[unit], 1])
+        tau[unit][ttrans[unit], 1] = 1 / factor *
+            (tau[unit][ttrans[unit], 1] - t) + t
     end
     verbose && println("tau2: ", tau)
 end

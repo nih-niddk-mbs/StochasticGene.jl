@@ -3752,7 +3752,7 @@ end
 
 
 """
-    simulate_trials(r, transitions, G, R, S, insertstep, coupling, ntrials; trial_time=720.0, lags=collect(0:60), probfn=prob_Gaussian, correlation_algorithm=StandardCorrelation(), warmupsteps=1000, dwell_specs=nothing, observed_units=nothing, noiseparams=nothing, trace_specs=nothing, interval=1.0, zeromedian=false)
+    simulate_trials(r, transitions, G, R, S, insertstep, coupling, ntrials; trial_time=720.0, lags=collect(0:60), nexperiments=1, probfn=prob_Gaussian, correlation_algorithm=StandardCorrelation(), warmupsteps=0, warmuptime=nothing, equilibration_timescales=10.0, dwell_specs=nothing, observed_units=nothing, noiseparams=nothing, trace_specs=nothing, interval=1.0, zeromedian=false)
 
 Simulate multiple trials and compute empirical correlation functions from simulated traces, comparing to theoretical predictions.
 
@@ -3762,9 +3762,16 @@ functions (E[xy]) from the HMM, which are then transformed to match the empirica
 
 This function integrates simulation with empirical covariance computation:
 1. Computes theoretical cross-covariances from model parameters
-2. Simulates multiple traces from the model
+2. Simulates multiple traces from the model in parallel with `Threads.@threads`
 3. Computes empirical cross-correlation functions from simulated traces using `compute_correlation_functions`
-4. Compares theoretical and empirical results
+4. Estimates finite-experiment 95% intervals, either by whole-trace bootstrap
+   (`nexperiments=1`) or by repeatedly simulating complete experiments
+   (`nexperiments>1`)
+5. Compares theoretical and empirical results
+
+For the lowest-noise model validation, compare the returned `ccON_theory` and
+`ccON_mean` fields and their `ccON_lower`/`ccON_upper` interval. This tests the
+binary reporter-occupancy process without Gaussian observation noise.
 
 # Arguments
 - `r::Vector{Float64}`: Rate parameters for the model
@@ -3772,12 +3779,17 @@ This function integrates simulation with empirical covariance computation:
 - `G, R, S, insertstep`: Model structure parameters
 - `coupling::Tuple`: Coupling structure for coupled models
 - `ntrials::Int`: Number of simulation trials to run
+- `nexperiments::Int=1`: Number of independent experiments. Each experiment
+  contains `ntrials` traces of length `trial_time`; values greater than one use
+  the experiment distribution for the returned ON-ON interval.
 - `trial_time::Float64=720.0`: Length of each simulated trace (minutes)
 - `lags=collect(0:60)`: Time lags for correlation computation
 - `probfn::Function=prob_Gaussian`: Probability function for noise
 - `offset::Float64=0.0`: Offset for ON state computation
 - `correlation_algorithm::CorrelationTrait=StandardCorrelation()`: Algorithm for computing correlations
-- `warmupsteps::Int=1000`: Number of warmup steps for simulation
+- `warmupsteps::Int=0`: Optional legacy event-count burn before physical equilibration
+- `warmuptime=nothing`: Physical burn-in time; `nothing` selects an automatic equilibrium burn
+- `equilibration_timescales::Real=10.0`: Slowest-rate time constants used for automatic burn-in
 - `splicetype::String=""`: Splicing type for model (default: empty for no splicing)
 - `dwell_specs::Vector=nothing`: Reserved for dwell-histogram workflows; not used for intensity-trace simulation here.
 - `observed_units::Vector{Int}=nothing`: Observed units (hidden units have `R[i]=0`); defaults to all units with `R[i] > 0`.
@@ -3801,7 +3813,7 @@ result = simulate_trials(r, transitions, G, R, S, (1, 1), coupling, 100,
 println("L2 norm: ", result.l2_norm)
 ```
 """
-function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(0:60); probfn=prob_Gaussian, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000, splicetype::String="", dwell_specs=nothing, observed_units=nothing, noiseparams=nothing, trace_specs=nothing, interval::Float64=1.0, zeromedian=false)
+function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(0:60); nexperiments::Int=1, probfn=prob_Gaussian, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=0, warmuptime=nothing, equilibration_timescales::Real=10.0, splicetype::String="", dwell_specs=nothing, observed_units=nothing, noiseparams=nothing, trace_specs=nothing, interval::Float64=1.0, zeromedian=false)
     # If lags is a single integer, treat it as max lag (backward compatibility)
     if lags isa Integer
         positive_lags = collect(0:lags)
@@ -3837,7 +3849,7 @@ function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, cou
     # Theory (`cc`, `ccON`, etc.) is indexed by symmetric `full_lags` from `correlation_functions`, not the
     # user-supplied positive-only `lags` vector (e.g. `0:60` → 61 points vs 121 symmetric lags). Always pass
     # `full_lags` so empirical correlations align with theory length and zero-centered lag grid.
-    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, full_lags, ntrials, trial_time, offset, correlation_algorithm, warmupsteps; dwell_specs=dwell_specs, observed_units=observed_units, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, interval=interval, zeromedian=zeromedian)
+    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, full_lags, ntrials, trial_time, offset, correlation_algorithm, warmupsteps; nexperiments=nexperiments, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales, probfn=probfn, dwell_specs=dwell_specs, observed_units=observed_units, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, interval=interval, zeromedian=zeromedian)
 end
 
 """
@@ -3859,7 +3871,46 @@ Coupled runs use the same `trace_specs` layout as [`default_trace_specs_for_coup
 # Returns
 NamedTuple with theoretical and empirical results (see main `simulate_trials` docstring).
 """
-function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000; dwell_specs=nothing, observed_units=nothing, trace_specs=nothing, noiseparams=nothing, splicetype::String="", interval::Float64=1.0, zeromedian=false)
+function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=0; nexperiments::Int=1, bootstrap::Bool=true, show_audit::Bool=true, warmuptime=nothing, equilibration_timescales::Real=10.0, probfn=prob_Gaussian, dwell_specs=nothing, observed_units=nothing, trace_specs=nothing, noiseparams=nothing, splicetype::String="", interval::Float64=1.0, zeromedian=false)
+    nexperiments >= 1 || throw(ArgumentError("nexperiments must be at least 1"))
+    if nexperiments > 1
+        experiments = Vector{Any}(undef, nexperiments)
+        Threads.@threads for experiment in 1:nexperiments
+            experiments[experiment] = simulate_trials(
+                theory, r, transitions, G, R, S, insertstep, coupling, lags,
+                ntrials, trial_time, offset, correlation_algorithm, warmupsteps;
+                nexperiments=1, bootstrap=false, show_audit=false,
+                warmuptime=warmuptime, equilibration_timescales=equilibration_timescales,
+                probfn=probfn, dwell_specs=dwell_specs, observed_units=observed_units,
+                trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype,
+                interval=interval, zeromedian=zeromedian,
+            )
+        end
+        ccON_experiments = reduce(hcat, (result.ccON_mean for result in experiments))
+        ccON_mean = vec(mean(ccON_experiments; dims=2))
+        ccON_lower = [quantile(view(ccON_experiments, lag, :), 0.025) for lag in axes(ccON_experiments, 1)]
+        ccON_median = [quantile(view(ccON_experiments, lag, :), 0.5) for lag in axes(ccON_experiments, 1)]
+        ccON_upper = [quantile(view(ccON_experiments, lag, :), 0.975) for lag in axes(ccON_experiments, 1)]
+        ccON_se = vec(std(ccON_experiments; dims=2))
+        within = (ccON_lower .<= experiments[1].ccON_theory) .& (experiments[1].ccON_theory .<= ccON_upper)
+        @info "Repeated finite-experiment ON-ON simulation complete" nexperiments ntrials trial_time Threads.nthreads()
+        return merge(experiments[1], (
+            ccON_mean=ccON_mean,
+            ccON_lower=ccON_lower,
+            ccON_median=ccON_median,
+            ccON_upper=ccON_upper,
+            ccON_se=ccON_se,
+            ccON_experiments=ccON_experiments,
+            mON1_empirical=mean(result.mON1_empirical for result in experiments),
+            mON2_empirical=mean(result.mON2_empirical for result in experiments),
+            mean1=mean(result.mean1 for result in experiments),
+            mean2=mean(result.mean2 for result in experiments),
+            ccON_max_abs_diff=maximum(abs.(experiments[1].ccON_theory .- ccON_mean)),
+            theory_within_ci_fraction_ccON=mean(within),
+            theory_within_ci_count_ccON=sum(within),
+            n_experiments=nexperiments,
+        ))
+    end
     # Extract theory values from NamedTuple
     ac1 = theory.ac1
     ac2 = theory.ac2
@@ -3907,10 +3958,10 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     Threads.@threads for i in 1:ntrials
         tvec = if G isa Tuple
             simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, interval, trial_time, 1;
-                warmupsteps=warmupsteps, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, observed_units=observed_units, col=col_eff)
+                warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, observed_units=observed_units, col=col_eff, probfn=probfn)
         else
             simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, trial_time, 1;
-                warmupsteps=warmupsteps, col=col_eff)
+                warmupsteps=warmupsteps, warmuptime=warmuptime, equilibration_timescales=equilibration_timescales, col=col_eff)
         end
         trace_data = tvec[1]
         ncols = size(trace_data, 2)
@@ -3930,9 +3981,9 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     end
 
     # frame_interval matches `interval` used in simulate_trace_vector
-    intensity_result = isempty(intensity_traces) ? nothing : compute_correlation_functions(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=interval)
-    on_result = compute_correlation_functions(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=interval)
-    reporter_result = compute_correlation_functions(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=interval)
+    intensity_result = isempty(intensity_traces) ? nothing : compute_correlation_functions(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
+    on_result = compute_correlation_functions(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
+    reporter_result = compute_correlation_functions(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
     onoff_empirical = _onoff_probs_from_binary_traces(on_traces, n_observed)
 
     # Extract results
@@ -4192,7 +4243,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     # Check zero-lag values for ON state autocovariance (should match if uncentered)
     # Theory returns uncentered R_ON_ON(0) = E[ON²], empirical returns uncentered R_ON_ON(0) = E[ON²]
     # At zero lag, both should equal the second moment E[ON²] = mON (since ON is binary, ON² = ON)
-    @info """
+    show_audit && @info """
     THEORY VS EMPIRICAL AUDIT SUMMARY:
     =================================
     Lag range: [$(lags[1]), ..., $(lags[end])] ($(n_lags_theory) lags)
@@ -4291,7 +4342,8 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         # Diagnostic info for validation
         n_lags=n_lags_theory,  # Number of lags (should be same for all theory and empirical)
         trace_lengths=[size(t, 1) for t in intensity_traces],  # Length of each trace (for validation)
-        n_trials=ntrials  # Number of simulation trials
+        n_trials=ntrials,  # Number of traces per simulated experiment
+        n_experiments=1
     )
 end
 
@@ -4628,6 +4680,9 @@ function write_correlation_general_csv(outfile::String, results)
     cc_col = Float64[]
     ac_x_col = Float64[]
     ac_y_col = Float64[]
+    cc_centered_col = Float64[]
+    ac_x_centered_col = Float64[]
+    ac_y_centered_col = Float64[]
     mean_x_col = Float64[]
     mean_y_col = Float64[]
     var_x_col = Float64[]
@@ -4645,6 +4700,9 @@ function write_correlation_general_csv(outfile::String, results)
             push!(cc_col, Float64(result.cc[i]))
             push!(ac_x_col, Float64(result.ac_x[i]))
             push!(ac_y_col, Float64(result.ac_y[i]))
+            push!(cc_centered_col, Float64(result.cc_centered[i]))
+            push!(ac_x_centered_col, Float64(result.ac_x_centered[i]))
+            push!(ac_y_centered_col, Float64(result.ac_y_centered[i]))
             push!(mean_x_col, Float64(result.mean_x))
             push!(mean_y_col, Float64(result.mean_y))
             push!(var_x_col, Float64(result.var_x))
@@ -4659,6 +4717,9 @@ function write_correlation_general_csv(outfile::String, results)
         cc=cc_col,
         ac_x=ac_x_col,
         ac_y=ac_y_col,
+        cc_centered=cc_centered_col,
+        ac_x_centered=ac_x_centered_col,
+        ac_y_centered=ac_y_centered_col,
         mean_x=mean_x_col,
         mean_y=mean_y_col,
         var_x=var_x_col,

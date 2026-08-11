@@ -3801,13 +3801,19 @@ function correlate_observables(ctx::HMMCorrelationContext, xspec, yspec)
     my = mean_hmm(ctx.p0, y.values)
     zero_idx = findfirst(==(0), ctx.step_indices)
     zero_idx === nothing && (zero_idx = 1)
+    cc = vcat(reverse(cc21), cc12[2:end])
+    ac_x = _symmetrize_positive_lag(acx)
+    ac_y = _symmetrize_positive_lag(acy)
     return (
         x=x.label,
         y=y.label,
         tau=ctx.tau,
-        cc=vcat(reverse(cc21), cc12[2:end]),
-        ac_x=_symmetrize_positive_lag(acx),
-        ac_y=_symmetrize_positive_lag(acy),
+        cc=cc,
+        ac_x=ac_x,
+        ac_y=ac_y,
+        cc_centered=cc .- mx * my,
+        ac_x_centered=ac_x .- mx^2,
+        ac_y_centered=ac_y .- my^2,
         mean_x=mx,
         mean_y=my,
         var_x=acx[zero_idx] - mx^2,
@@ -3890,12 +3896,27 @@ function correlation_functions_centered(
     observed_units=nothing,
     noise_per_unit=nothing,
 )
-    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(
+    tau, cc, ac1, ac2, m1, m2, v1, v2,
+    ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON,
+    ccReporters, ac1Reporters, ac2Reporters,
+    m1Reporters, m2Reporters, v1Reporters, v2Reporters = correlation_functions(
         rin, transitions, G, R, S, insertstep, probfn, coupling, lags;
         offset=offset, splicetype=splicetype, coupled_stack=coupled_stack,
         observed_units=observed_units, noise_per_unit=noise_per_unit
     )
-    return lags, cc-m1*m2, ac1-m1^2, ac2-m1^2, m1, m2, v1, v2, ccON-m1ON*m2ON, ac1ON-m1ON^2, ac2ON-m2ON^2, m1ON, m2ON, v1ON, v2ON, ccReporters-m1Reporters*m2Reporters,  ac1Reporters-m1Reporters^2, ac2Reporters-m2Reporters^2, m1Reporters, m2Reporters, v1Reporters, v2Reporters
+    return tau,
+        cc .- m1 * m2,
+        ac1 .- m1^2,
+        ac2 .- m2^2,
+        m1, m2, v1, v2,
+        ccON .- m1ON * m2ON,
+        ac1ON .- m1ON^2,
+        ac2ON .- m2ON^2,
+        m1ON, m2ON, v1ON, v2ON,
+        ccReporters .- m1Reporters * m2Reporters,
+        ac1Reporters .- m1Reporters^2,
+        ac2Reporters .- m2Reporters^2,
+        m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 
 """

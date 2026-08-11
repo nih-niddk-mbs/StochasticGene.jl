@@ -3394,8 +3394,12 @@ function compute_correlation_functions_traces(traces::Vector{Matrix{Float64}}, l
         bootstrap_result = bootstrap_correlation_functions(normalized_traces.cc_traces, normalized_traces.ac1_traces, normalized_traces.ac2_traces, n_bootstrap)
         return merge(result, bootstrap_result)
     end
-    
-    return result
+
+    return merge(result, (
+        cc_lower=nothing, cc_median=nothing, cc_upper=nothing, cc_se=nothing,
+        ac1_lower=nothing, ac1_median=nothing, ac1_upper=nothing, ac1_se=nothing,
+        ac2_lower=nothing, ac2_median=nothing, ac2_upper=nothing, ac2_se=nothing,
+    ))
 end
 
 """

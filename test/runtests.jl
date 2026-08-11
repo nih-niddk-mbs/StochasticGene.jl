@@ -36,6 +36,67 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
+    @testset "centered coupled HMM correlations" begin
+        params = StochasticGene.get_3unit_model_params()
+        lags = collect(0.0:10.0:2000.0)
+        raw = StochasticGene.correlation_functions(
+            params.r, params.transitions, params.G, params.R, params.S,
+            params.insertstep, StochasticGene.prob_Gaussian, params.coupling, lags;
+            observed_units=params.observed_units,
+            noise_per_unit=params.noiseparams,
+        )
+        centered = StochasticGene.correlation_functions_centered(
+            params.r, params.transitions, params.G, params.R, params.S,
+            params.insertstep, StochasticGene.prob_Gaussian, params.coupling, lags;
+            observed_units=params.observed_units,
+            noise_per_unit=params.noiseparams,
+        )
+
+        @test length(raw) == 22
+        @test length(centered) == length(raw)
+        @test centered[1] == raw[1]
+        @test centered[2] ≈ raw[2] .- raw[5] * raw[6]
+        @test centered[3] ≈ raw[3] .- raw[5]^2
+        @test centered[4] ≈ raw[4] .- raw[6]^2
+        @test centered[9] ≈ raw[9] .- raw[12] * raw[13]
+        @test centered[10] ≈ raw[10] .- raw[12]^2
+        @test centered[11] ≈ raw[11] .- raw[13]^2
+        @test centered[16] ≈ raw[16] .- raw[19] * raw[20]
+        @test centered[17] ≈ raw[17] .- raw[19]^2
+        @test centered[18] ≈ raw[18] .- raw[20]^2
+        @test abs(centered[9][1]) < 1e-8
+        @test abs(centered[9][end]) < 1e-8
+
+        ctx = StochasticGene.build_correlation_context(
+            params.r, params.transitions, params.G, params.R, params.S,
+            params.insertstep, StochasticGene.prob_Gaussian, params.coupling, lags;
+            observed_units=params.observed_units,
+            noise_per_unit=params.noiseparams,
+        )
+        on = StochasticGene.correlate_observables(ctx, (:ON, 1), (:ON, 2))
+        reporters = StochasticGene.correlate_observables(ctx, (:reporters, 1), (:reporters, 2))
+        intensity = StochasticGene.correlate_observables(ctx, (:intensity, 1), (:intensity, 2))
+        @test on.cc ≈ raw[9]
+        @test reporters.cc ≈ raw[16]
+        @test intensity.cc ≈ raw[2]
+        @test on.cc_centered ≈ centered[9]
+        @test reporters.cc_centered ≈ centered[16]
+        @test intensity.cc_centered ≈ centered[2]
+
+        state_results = [
+            StochasticGene.correlate_observables(ctx, (:gene_state, 1, i), (:gene_state, 2, j))
+            for i in 1:params.G[1], j in 1:params.G[2]
+        ]
+        @test sum(result.mean_x for result in state_results[:, 1]) ≈ 1.0
+        @test sum(result.mean_y for result in state_results[1, :]) ≈ 1.0
+        @test all(sum(result.cc[k] for result in state_results) ≈ 1.0 for k in eachindex(ctx.tau))
+        @test all(abs(sum(result.cc_centered[k] for result in state_results)) < 1e-10 for k in eachindex(ctx.tau))
+        @test all(abs(result.cc_centered[1]) < 1e-8 for result in state_results)
+        @test all(abs(result.cc_centered[end]) < 1e-8 for result in state_results)
+        @test_throws ArgumentError StochasticGene.correlate_observables(ctx, (:intensity, 1), (:intensity, 3))
+
+    end
+
     @testset "hierarchical split proposal CV expands to sampled parameters" begin
         fittedparam, _, _ = StochasticGene.make_fitted_hierarchical([1, 2, 3, 4, 5], 2, [10, 12], 13, 145)
         reporter = StochasticGene.HMMReporter(4, Int[], StochasticGene.prob_Gaussian, 0, Int[], collect(10:13))
@@ -658,6 +719,81 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         )
         @test size(trace, 2) == 4
         @test !isempty(trace)
+
+        # A sparse process may have no reaction inside the recording window.
+        # Its observable trace must nevertheless span the full frame grid.
+        sparse_rates = [1e-12, 1e-12, 1e-12, 1e-12, 1.0, 0.0, 0.1, 1.0, 0.1]
+        Random.seed!(5)
+        sparse = StochasticGene.simulator(
+            sparse_rates, transitions, 2, 1, 0, 1;
+            nhist=0, traceinterval=1.0, totaltime=10.0, warmuptime=0.0,
+        )[1]
+        @test size(sparse) == (10, 4)
+        @test sparse[:, 1] == collect(1.0:10.0)
+
+        # Event-count burn-in ends at a reaction epoch and therefore samples the
+        # embedded jump chain. When physical burn-in is also requested, it must
+        # start after the event phase and end between events at a time cutoff.
+        reactions = StochasticGene.set_reactions(transitions, 2, 1, 0, 1)
+        Random.seed!(6)
+        tau_event, state_event = StochasticGene.initialize(rates, 2, 1, reactions, 1)
+        _, _, event_end = StochasticGene._warmup_simulation!(
+            tau_event, state_event, 0, rates, reactions, transitions,
+            2, 1, 0, 1, (); warmupsteps=5, warmuptime=0.0,
+        )
+        Random.seed!(6)
+        tau_physical, state_physical = StochasticGene.initialize(rates, 2, 1, reactions, 1)
+        _, _, physical_end = StochasticGene._warmup_simulation!(
+            tau_physical, state_physical, 0, rates, reactions, transitions,
+            2, 1, 0, 1, (); warmupsteps=5, warmuptime=100.0,
+        )
+        @test physical_end ≈ event_end + 100.0
+    end
+
+    @testset "coupled simulator matches full HMM" begin
+        transitions = (([1, 2], [2, 1]), ([1, 2], [2, 1]))
+        G, R, S, insertstep = (2, 2), (1, 1), (0, 0), (1, 1)
+        coupling = ((1, 2), [(1, 1, 2, 1), (1, 2, 2, 1)])
+        rates = [0.3, 0.2, 0.4, 0.5, 1.0,
+                 0.25, 0.35, 0.45, 0.55, 1.0,
+                 0.2, 0.8]
+
+        components = StochasticGene.TCoupledFullComponents(
+            coupling, transitions, G, R, S, insertstep, "",
+        )
+        unit_rates, coupling_strength, _ = StochasticGene.prepare_rates_coupled(
+            rates, coupling, transitions, R, S, insertstep, [0, 0],
+        )
+        coupling_rates = [
+            coupling_strength[k] * unit_rates[components.targets[k][1]][components.targets[k][2]]
+            for k in eachindex(components.targets)
+        ]
+        _, stationary = StochasticGene.make_ap(unit_rates, coupling_rates, 1.0, components)
+
+        Random.seed!(7)
+        residence = StochasticGene.simulator_ss(
+            rates, transitions, G, R, S, insertstep;
+            coupling=coupling, noiseparams=[0, 0], totalsteps=200_000,
+            warmuptime=100.0,
+        )
+        residence ./= sum(residence)
+        @test maximum(abs.(stationary .- residence)) < 0.015
+    end
+
+    @testset "repeated finite-experiment ON correlations" begin
+        algorithm = StochasticGene.CorrelationTrait(centering=:global_mean)
+        result = StochasticGene.test_simulate_trials(
+            ntrials=2,
+            nexperiments=3,
+            trial_time=20.0,
+            lags=collect(0:2),
+            correlation_algorithm=algorithm,
+            warmuptime=20.0,
+        )
+        @test size(result.ccON_experiments) == (5, 3)
+        @test result.n_trials == 2
+        @test result.n_experiments == 3
+        @test all(result.ccON_lower .<= result.ccON_median .<= result.ccON_upper)
     end
 
     if FULL_TESTS
