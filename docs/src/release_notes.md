@@ -1,5 +1,25 @@
 # Version 2.0
 
+## Version 2.0.2
+
+Version 2.0.2 corrects the parameter domain for `Rsum` coupled models. An
+`Rsum` coupling shared by `m` R positions contributes through
+`1 + γR₁ + ... + γRₘ`. Because those R positions can be occupied
+simultaneously, the physical lower bound is `γ > -1/m`, not `γ > -1` for each
+expanded connection independently.
+
+The real-line parameter transform now detects tied R-position connections and
+uses `(-1/m, 0)` for inhibitory `Rsum` couplings and `(-1/m, Inf)` for free
+`Rsum` couplings. This applies to ordinary and hierarchical fits. Default CSV
+priors are also kept strictly inside the appropriate interval. `Rany` models
+and tied couplings between mutually exclusive source states retain the usual
+lower bound of `-1`.
+
+Historical `Rsum` fits are not modified on disk. Before using an older rate
+file as an initial condition, check every tied group and migrate values for
+which `1 + mγ <= 0` into the open valid interval. For new CSV workflows, use
+explicit `Rsumk` or `Ranyk` tokens when the distinction matters.
+
 ## Version 2.0.1
 
 Version 2.0.1 is a correctness patch for coupled-model simulation and

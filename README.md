@@ -1,9 +1,9 @@
 # StochasticGene.jl
 
-Current release: **2.0.0**. See the [2.0 release notes](docs/src/release_notes.md)
+Current release: **2.0.2**. See the [2.0 release notes](docs/src/release_notes.md)
 for highlights and migration guidance.
 
-**Version 2.0.0**
+**Version 2.0.2**
 
 [![Documents](https://img.shields.io/badge/Documents-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 
