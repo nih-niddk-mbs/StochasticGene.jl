@@ -266,6 +266,17 @@ function build_coupled_fit_spec_from_csv_cells(
     conns, default_γ, tie_groups, modes = csv_row_to_connections_simple(e1, e1s, e2, e2s, ge, ges, G, R; tie_rsum=tie_rsum)
     isempty(conns) && return nothing
     ncoupling = length(conns)
+    # Keep default inhibitory Rsum values strictly inside the transform domain
+    # (-1/m, 0), including models with ten or more reporter steps.
+    for group in tie_groups
+        m = length(group)
+        m > 1 || continue
+        if all(i -> modes[i] === :inhibit, group) && default_γ[first(group)] <= -1 / m
+            default_γ[group] .= -0.5 / m
+        elseif all(i -> modes[i] === :free, group) && default_γ[first(group)] <= -1 / m
+            default_γ[group] .= 0.0
+        end
+    end
     coupling = ((1, 2), conns, modes)
     coupling_prior_mean = _coupling_prior_mean_from_gammas(default_γ, ncoupling)
 

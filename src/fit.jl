@@ -958,6 +958,10 @@ Valid modes and their semantics:
 - `:inhibit`:  γ ∈ (-1, 0) (logit-style transform via `coupling_inhibitory_fwd` / `coupling_inhibitory_inv`)
 - `:free`:     γ ∈ (-1, ∞) (shifted-log transform via `log_shift1` / `invlog_shift1`)
 
+For a tied `Rsum` group with `m` simultaneously occupiable R positions, the
+lower endpoint is tightened from `-1` to `-1/m`: `:inhibit` uses `(-1/m, 0)`
+and `:free` uses `(-1/m, ∞)`. This keeps `1 + mγ` strictly positive.
+
 The returned value is a `Vector{Symbol}` of length `ncoupling(coupling)`.
 """
 @inline function _normalize_coupling_mode(mode::Symbol)
@@ -2949,7 +2953,7 @@ end
 
 
 """
-    make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
+    make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian, fixedeffects=tuple())
 
 Create transformation functions for all model parameters.
 
@@ -2972,7 +2976,63 @@ Create transformation functions for all model parameters.
 - Extends transformations for hierarchical models
 - Used for parameter transformation in MCMC sampling
 """
-function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
+function _rsum_transform_multiplicities(coupling, couplingindices, fixedeffects, G, R)
+    multiplicities = ones(Int, length(couplingindices))
+    isempty(coupling) && return multiplicities
+    (G isa Tuple && R isa Tuple) || return multiplicities
+
+    # CSV Rsum models are represented as one R-position connection per step and
+    # a fixed-effect group tying their coupling parameters.  Recover that group
+    # here so its shared gamma can use the correct physical lower bound -1/m.
+    # Do not rescale arbitrary tied connections (for example mutually exclusive
+    # promoter states), for which the contributions cannot overlap.
+    for effect in fixedeffects
+        locals = Int[]
+        for global_index in effect
+            local_index = findfirst(==(global_index), couplingindices)
+            local_index === nothing || push!(locals, local_index)
+        end
+        length(locals) > 1 || continue
+
+        connections = coupling[2][locals]
+        β, _, α, t = first(connections)
+        source_model = coupling[1][β]
+        rrange = (G[source_model] + 1):(G[source_model] + R[source_model])
+        is_rsum_group = all(c -> c[1] == β && c[3] == α && c[4] == t && c[2] in rrange,
+                            connections)
+        is_rsum_group || continue
+        multiplicities[locals] .= length(locals)
+    end
+    multiplicities
+end
+
+function _coupling_transform_triplet(mode::Symbol, multiplicity::Int)
+    multiplicity >= 1 || throw(ArgumentError("coupling overlap multiplicity must be positive"))
+    lower_scale = 1.0 / multiplicity
+    if mode === :activate
+        return log, exp, sigmalognormal
+    elseif mode === :inhibit
+        # gamma in (-1/m, 0): logit(m*gamma + 1) maps to the real line.
+        f = x -> logit(x / lower_scale + 1.0)
+        f_inv = function (y)
+            p = invlogit(y)
+            δ = oftype(p, eps(Float64))
+            p_open = min(max(p, δ), one(p) - δ)
+            lower_scale * (p_open - one(p_open))
+        end
+        return f, f_inv, sigmanormal
+    else
+        # Free Rsum coupling has the analogous lower bound gamma > -1/m.
+        f = x -> log(x + lower_scale)
+        f_inv = function (y)
+            shifted = max(exp(y), oftype(y, lower_scale * eps(Float64)))
+            shifted - lower_scale
+        end
+        return f, f_inv, sigmalognormal
+    end
+end
+
+function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian, fixedeffects=tuple())
     ftransforms = Function[]
     invtransforms = Function[]
     sigmatransforms = Function[]
@@ -2989,24 +3049,13 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
         modes = coupling_ranges(coupling)
+        multiplicities = _rsum_transform_multiplicities(coupling, couplingindices, fixedeffects, G, R)
         for i in eachindex(couplingindices)
             mode = i <= length(modes) ? modes[i] : :free
-            if mode === :activate
-                # γ ∈ (0, ∞)
-                push!(ftransforms, log)
-                push!(invtransforms, exp)
-                push!(sigmatransforms, sigmalognormal)
-            elseif mode === :inhibit
-                # γ ∈ (-1, 0)
-                push!(ftransforms, coupling_inhibitory_fwd)
-                push!(invtransforms, coupling_inhibitory_inv)
-                push!(sigmatransforms, sigmanormal)
-            else
-                # :free — γ ∈ (-1, ∞)
-                push!(ftransforms, log_shift1)
-                push!(invtransforms, invlog_shift1)
-                push!(sigmatransforms, sigmalognormal)
-            end
+            f, f_inv, f_cv = _coupling_transform_triplet(mode, multiplicities[i])
+            push!(ftransforms, f)
+            push!(invtransforms, f_inv)
+            push!(sigmatransforms, f_cv)
         end
     end
     if !isnothing(grid)
@@ -3615,7 +3664,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     end
 
     nrates = num_rates(transitions, R, S, insertstep)
-    ratetransforms = make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
+    ratetransforms = make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian, fixedeffects)
 
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)

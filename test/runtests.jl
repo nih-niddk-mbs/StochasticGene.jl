@@ -1268,6 +1268,35 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test ties == [[2, 3, 4]]
     end
 
+    @testset "Rsum coupling transforms use overlap-dependent bounds" begin
+        coupling = ((1, 2), [(1, 4, 2, 1), (1, 5, 2, 1), (1, 6, 2, 1)], fill(:inhibit, 3))
+        couplingindices = [21, 22, 23]
+        multiplicities = StochasticGene._rsum_transform_multiplicities(
+            coupling, couplingindices, ([21, 22, 23],), (3, 3), (3, 3),
+        )
+        @test multiplicities == [3, 3, 3]
+
+        f, f_inv, _ = StochasticGene._coupling_transform_triplet(:inhibit, 3)
+        for γ in (-0.3, -0.2, -0.01)
+            @test f_inv(f(γ)) ≈ γ
+        end
+        @test -1 / 3 < f_inv(-100.0) < 0.0
+        @test -1 / 3 < f_inv(100.0) < 0.0
+
+        ff, ff_inv, _ = StochasticGene._coupling_transform_triplet(:free, 3)
+        for γ in (-0.3, 0.0, 2.0)
+            @test ff_inv(ff(γ)) ≈ γ
+        end
+        @test ff_inv(-100.0) > -1 / 3
+
+        # Tied promoter-state couplings are not Rsum: their source conditions
+        # are mutually exclusive and retain the ordinary (-1, 0) bound.
+        gene_coupling = ((1, 2), [(1, 1, 2, 1), (1, 2, 2, 1)], fill(:inhibit, 2))
+        @test StochasticGene._rsum_transform_multiplicities(
+            gene_coupling, [21, 22], ([21, 22],), (3, 3), (3, 3),
+        ) == [1, 1]
+    end
+
     @testset "stage-native make_fitscript helpers" begin
         mktempdir() do dir
             csv_path = joinpath(dir, "keys.csv")
