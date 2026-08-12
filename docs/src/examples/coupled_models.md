@@ -166,6 +166,10 @@ write_traces_key("results/my-coupled-trace-run")
 write_correlation_functions_key("results/my-coupled-trace-run")
 ```
 
+To validate a coupled model's theoretical ON-ON cross-correlation against
+simulation, use `simulate_trials(...; nexperiments=N)` as described in
+[Validate theory against simulation](../api/analysis.md#Validate-theory-against-simulation).
+
 ### Model Comparison
 
 ```julia

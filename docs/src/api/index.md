@@ -17,7 +17,9 @@
 - `simulate_trace`: Generate intensity traces from models
 - `simulate_trace_data`: Generate trace data with metadata
 - `simulate_trace_vector`: Generate vectors of traces
-- `simulate_trials`: Simulate multiple model realizations
+- [`simulate_trials`](analysis.md#Validate-theory-against-simulation): Simulate
+  repeated experiments and validate theoretical intensity, reporter, and ON-ON
+  correlations
 
 ### Data Loading and Management
 - [`load_data`](load_data.md): Load experimental data from files

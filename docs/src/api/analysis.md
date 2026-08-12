@@ -165,6 +165,62 @@ res = correlate_observables(ctx, :ON1, :ON2)
 That avoids rebuilding the expensive model/correlation context for every
 observable pair.
 
+### Validate theory against simulation
+
+Use `simulate_trials` to compare theoretical HMM correlations with correlations
+measured from traces simulated using the same rates. For ON-ON analysis, ON is
+defined as reporter count greater than zero. Center both theory and simulation
+with the global stationary/sample means:
+
+```julia
+result = simulate_trials(
+    rates, transitions, G, R, S, insertstep, coupling,
+    1,                       # traces in each experiment
+    200_000.0,               # minutes per trace
+    collect(0:60) .* interval;
+    nexperiments = 10,
+    correlation_algorithm = CorrelationTrait(centering = :global_mean),
+    observed_units = [1, 2],
+    noiseparams = [4, 4],
+    interval = interval,
+)
+```
+
+Start Julia with the requested number of threads before running independent
+experiments:
+
+```sh
+julia --project=. -t 10
+```
+
+`ntrials` is the number of traces in **each** simulated experiment;
+`nexperiments` is the number of independent experiments. With
+`nexperiments > 1`, experiments are threaded and the returned ON-ON interval is
+computed across complete experiments. Increasing `nexperiments` stabilizes the
+estimated interval; it does not change the number of traces in an experiment.
+
+The main ON-ON outputs are:
+
+```julia
+result.ccON_theory
+result.ccON_mean
+result.ccON_lower
+result.ccON_median
+result.ccON_upper
+result.ccON_experiments
+```
+
+Use two complementary designs:
+
+- **Theory implementation check:** a small number of extremely long traces,
+  such as `ntrials=1`, `nexperiments=10`, and `trial_time=200_000.0`.
+- **Experimental predictive check:** many experiments with `ntrials` and
+  `trial_time` set to the actual number and duration of experimental traces.
+
+Centered correlations may remain nonzero over the plotted lag range when the
+model contains slow transitions. They should approach zero at lags much longer
+than the slowest model timescale.
+
 ## Burst Prediction Analyses
 
 Two AUC-style helpers address burst observability and identifiability:

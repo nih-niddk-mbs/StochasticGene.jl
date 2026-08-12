@@ -253,6 +253,8 @@ The function includes validation for:
 ## See Also
 
 - `simulate_trace`: Generate traces only
-- `simulate_trials`: Multiple simulation runs
+- [`simulate_trials`](analysis.md#Validate-theory-against-simulation): Compare
+  theoretical and simulated correlations, including threaded repeated
+  experiments and ON-ON validation
 - `fit`: Fit models to data
 - `prob_Gaussian`: Gaussian observation model
