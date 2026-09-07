@@ -152,10 +152,14 @@ end
 """
 
 """
-    prepare_hyper(r, param, hierarchy::HierarchicalTrait)
+    prepare_hyper(r, rindividual, hierarchy::HierarchicalTrait)
+
+Return hierarchical individual parameters, population means, and population CVs
+in physical parameter space. Sampling coordinates must not cross this boundary.
 """
-function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
-    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nindividualparams, hierarchy.nindividuals)))
+function prepare_hyper(r, rindividual, hierarchy::HierarchicalTrait)
+    individual_indices = hierarchy.hyperindices[1]
+    pindividual = [ri[individual_indices] for ri in rindividual]
     rhyper = [r[i] for i in hierarchy.hyperindices]
     return pindividual, rhyper
 end
@@ -196,8 +200,69 @@ end
 """
 function prepare_rates(r, param, hierarchy::HierarchicalTrait)
     rshared, rindividual = prepare_rates(r, hierarchy)
-    pindividual, rhyper = prepare_hyper(r, param, hierarchy)
+    pindividual, rhyper = prepare_hyper(r, rindividual, hierarchy)
     return rshared, rindividual, pindividual, rhyper
+end
+
+function _hierarchy_distribution(mean, cv, transform)
+    cv > zero(cv) || return nothing
+    if transform === log
+        mean > zero(mean) || return nothing
+        return LogNormal_meancv(mean, cv)
+    elseif transform === identity
+        return Normal(mean, sigmanormal(mean, cv))
+    end
+    throw(ArgumentError(
+        "physical-space hierarchical distributions are not defined for transform $(transform). " *
+        "Use positive (log) or real-valued (identity) individual parameters."
+    ))
+end
+
+"""
+    ll_hierarchy(pindividual, rhyper, transforms)
+
+Evaluate the conditional hierarchy density in physical parameter space. `rhyper[1]`
+contains population means, `rhyper[2]` contains positive coefficients of variation,
+and each element of `pindividual` contains one individual's physical parameters.
+"""
+function ll_hierarchy(pindividual, rhyper, transforms)
+    length(rhyper) == 2 || throw(ArgumentError("hierarchical likelihood requires mean and CV hyperparameter blocks"))
+    means, cvs = rhyper
+    length(means) == length(cvs) == length(transforms) ||
+        throw(DimensionMismatch("hierarchical mean, CV, and transform lengths must match"))
+    distributions = [_hierarchy_distribution(means[i], cvs[i], transforms[i]) for i in eachindex(means)]
+    any(isnothing, distributions) && return fill(-Inf, length(pindividual))
+    return [sum(logpdf(distributions[i], values[i]) for i in eachindex(values)) for values in pindividual]
+end
+
+function hierarchy_logdensity(prepared_rates, model::AbstractGRSMmodel)
+    hierarchy = model.trait.hierarchical
+    transforms = model.transforms.f[hierarchy.hyperindices[1]]
+    return sum(ll_hierarchy(prepared_rates[5], prepared_rates[6], transforms))
+end
+
+function hierarchy_logabsdetjacobian(param, model::AbstractGRSMmodel)
+    hastrait(model, :hierarchical) || return zero(eltype(param))
+    hierarchy = model.trait.hierarchical
+    transforms = model.transforms.f[hierarchy.hyperindices[1]]
+    individual_params = reshape(
+        param[hierarchy.paramstart:end],
+        hierarchy.nindividualparams,
+        hierarchy.nindividuals,
+    )
+    value = zero(eltype(param))
+    for j in axes(individual_params, 2), i in axes(individual_params, 1)
+        transform = transforms[i]
+        if transform === log
+            # theta = exp(z), hence log|d theta / dz| = z.
+            value += individual_params[i, j]
+        elseif transform !== identity
+            throw(ArgumentError(
+                "Jacobian for hierarchical individual transform $(transform) is not defined"
+            ))
+        end
+    end
+    return value
 end
 
 """
@@ -507,7 +572,7 @@ end
 function prepare_rates_ad(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:hierarchical,)}}
     r = get_rates_ad(param, model)
     rshared, rindividual = prepare_rates_ad(r, model.trait.hierarchical)
-    pindividual, rhyper = prepare_hyper(r, param, model.trait.hierarchical)
+    pindividual, rhyper = prepare_hyper(r, rindividual, model.trait.hierarchical)
     rshared, noiseshared = prepare_rates_noiseparams(rshared, model.nrates, model.reporter)
     rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, model.nrates, model.reporter)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper
@@ -524,7 +589,7 @@ end
 function prepare_rates_ad(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
     r = get_rates_ad(param, model)
     rshared, rindividual = prepare_rates_ad(r, model.trait.hierarchical)
-    pindividual, rhyper = prepare_hyper(r, param, model.trait.hierarchical)
+    pindividual, rhyper = prepare_hyper(r, rindividual, model.trait.hierarchical)
     couplingshared = prepare_coupling_ad(rshared, model.trait.coupling.couplingindices)
     couplingindividual = prepare_coupling_ad(rindividual, model.trait.coupling.couplingindices)
     rshared, noiseshared = prepare_rates_noiseparams(rshared, model.nrates, model.reporter)
@@ -1280,7 +1345,7 @@ function ll_hmm_trace(
         components = get_components(model, data)
         reporter = get_reporter(model, data)
         observed_units = isempty(data.units) ? nothing : data.units
-        if !isnothing(model.trait) && haskey(model.trait, :grid)
+        result = if !isnothing(model.trait) && haskey(model.trait, :grid)
             ll_hmm(
                 r, model.trait.grid.ngrid, components, reporter, data.interval, data.trace, model.method;
                 steady_state_solver=steady_state_solver, hmm_stack=hmm_stack,
@@ -1299,6 +1364,10 @@ function ll_hmm_trace(
                 )
             end
         end
+        if hastrait(model, :hierarchical)
+            return result[1] + hierarchy_logdensity(r, model), result[2]
+        end
+        return result
     end
 end
 
@@ -2266,6 +2335,9 @@ function logprior(param, model::AbstractGeneTransitionModel)
     p = 0
     for i in eachindex(d)
         p += logpdf(d[i], param[i])
+    end
+    if model isa AbstractGRSMmodel && hastrait(model, :hierarchical)
+        p += hierarchy_logabsdetjacobian(param, model)
     end
     return p
 end

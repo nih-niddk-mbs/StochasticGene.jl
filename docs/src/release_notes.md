@@ -1,5 +1,29 @@
 # Version 2.0
 
+## Version 2.0.5
+
+Version 2.0.5 restores one coordinate convention across the legacy
+`hierarchical=(2, fittedindividual, fixedeffects)` trace stack. The scientific
+likelihood now receives only physical rates and noise parameters. Its first
+hierarchical block is the vector of population means; its second block is the
+vector of positive population coefficients of variation.
+
+For a positive individual parameter, the hierarchy conditional is log-normal
+and is parameterized by its arithmetic mean and CV. For a signed parameter,
+such as a zero-median Gaussian noise mean, the conditional is normal. Every CV
+is positive even when its corresponding individual parameter is signed. The
+sampler still operates in unconstrained coordinates, and the individual
+inverse-transform Jacobian is included exactly once in the posterior density.
+
+The HMM layer now calculates only observation likelihoods. The trace likelihood
+adds the hierarchy density above that layer, including for grid models, and
+continues to return data-only pointwise terms for WAIC.
+
+This is a correctness change relative to versions 1.5.0 through 2.0.4, which
+could compare physical hyperparameters with transformed individual parameters.
+Old rate and info files remain readable, but continuing one targets the
+corrected posterior and may move away from the previous result.
+
 ## Version 2.0.4
 
 Version 2.0.4 exposes the ON/OFF dwell-time CDFs that were already calculated

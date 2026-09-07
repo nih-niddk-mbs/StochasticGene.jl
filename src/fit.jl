@@ -1175,6 +1175,10 @@ Create and configure data, model, and options structures for fitting.
 - Sets up priors and initial conditions
 - Creates appropriate model structure based on parameters
 - Handles hierarchical, coupled, and grid models
+- For legacy `hierarchical=(2, fittedindividual, ...)` models, the first block
+  contains population means in physical parameter space and the second contains
+  positive population coefficients of variation. Individual values are also
+  interpreted in physical space by the hierarchy likelihood.
 - Loads proposal covariance via [`get_propcv`](@ref) after fittedparam is determined, enabling validation against actual model parameters
 - Optional trailing `kwargs...` (filtered to inference / sampler option keys; see `_MAKE_STRUCTURES_OPTION_KW` in the source) are merged into the run dict before [`load_options`](@ref) (e.g. `inference_method=:nuts`, `parallel=:distributed`, `gradient=:finite`).
 """
@@ -2858,6 +2862,9 @@ Construct hierarchical model traits and priors.
 - Organizes parameters into shared, hyper, and individual components
 - Sets up appropriate prior distributions
 - Handles parameter indexing for hierarchical structure
+- Population means and individual values use each parameter's physical domain.
+  Population-CV blocks are always positive and therefore use log transforms,
+  including CVs associated with signed noise means.
 """
 function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=true)
     fittedindividual = hierarchical[2]
@@ -2974,6 +2981,8 @@ Create transformation functions for all model parameters.
 - Creates comprehensive transformation functions for all parameters
 - Handles rate parameters, noise parameters, coupling parameters, and grid parameters
 - Extends transformations for hierarchical models
+- Uses each parameter's ordinary transform for population means and individual
+  values, and a log transform for every population coefficient of variation
 - Used for parameter transformation in MCMC sampling
 """
 function _rsum_transform_multiplicities(coupling, couplingindices, fixedeffects, G, R)
@@ -3071,10 +3080,12 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
         iset = copy(invtransforms)
         sset = copy(sigmatransforms)
         nindividuals = length(data.trace[1])
+        # Hyper blocks after the first contain coefficients of variation.  A CV
+        # is positive regardless of the domain of its corresponding parameter.
         for i in 1:hierarchical[1]-1
-            ftransforms = vcat(ftransforms, fset)
-            invtransforms = vcat(invtransforms, iset)
-            sigmatransforms = vcat(sigmatransforms, sset)
+            ftransforms = vcat(ftransforms, fill(log, length(fset)))
+            invtransforms = vcat(invtransforms, fill(exp, length(iset)))
+            sigmatransforms = vcat(sigmatransforms, fill(sigmalognormal, length(sset)))
         end
         ftransforms = vcat(ftransforms, repeat(fset, nindividuals))
         invtransforms = vcat(invtransforms, repeat(iset, nindividuals))

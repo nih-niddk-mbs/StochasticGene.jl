@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.0.5
+
+Correctness patch for legacy hierarchical trace models:
+
+- Evaluate individual hierarchy distributions entirely in physical parameter
+  space, after the inverse sampling transforms have been applied.
+- Interpret the first hierarchical block as population means and the second as
+  positive coefficients of variation. Positive individual parameters use a
+  log-normal conditional distribution parameterized by arithmetic mean and CV;
+  signed individual parameters use a normal conditional distribution.
+- Include the individual inverse-transform Jacobian exactly once in the
+  posterior density sampled by MH, NUTS, and ADVI.
+- Keep HMM methods responsible only for the observation likelihood. Hierarchy
+  terms are now assembled by the higher-level trace likelihood, including grid
+  models, while pointwise trace terms remain data-only for WAIC.
+
+This corrects mixed-coordinate hierarchy calculations present from version
+1.5.0 through 2.0.4. Hierarchical posterior values and fitted results can change.
+Existing rate and info files are not rewritten; continuing an old run uses its
+saved physical rates as an initial condition for the corrected posterior.
+
 ## 2.0.4
 
 ON/OFF dwell-time output improvement:

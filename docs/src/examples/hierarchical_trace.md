@@ -6,6 +6,41 @@
 
 This example demonstrates how to analyze trace data using hierarchical models to account for cell-to-cell variability.
 
+## Parameter Convention
+
+The current legacy hierarchical interface is:
+
+```julia
+hierarchical = (2, fittedindividual, fixedeffects)
+```
+
+`fittedindividual` contains the one-based indices of parameters that vary by
+trace. The first complete rate block stores population means in the same
+physical units as ordinary rates and noise parameters. The second complete
+block stores positive population coefficients of variation. Each trace then
+has a complete physical rate vector; shared entries are copied from the
+population block before the HMM is evaluated.
+
+Positive individual parameters, including rates and noise standard deviations,
+use log-normal hierarchy distributions specified by arithmetic mean and CV.
+Signed individual parameters, including zero-median Gaussian noise means, use
+normal hierarchy distributions. Sampling occurs in unconstrained coordinates,
+but both the HMM and hierarchy distributions are evaluated in physical space.
+The sampler accounts for the corresponding inverse-transform Jacobian.
+
+For a four-noise-parameter trace model whose complete rate vector places noise
+at indices `10:13`, this fits the first noise mean and standard deviation per
+trace:
+
+```julia
+hierarchical = (2, [10, 11], ())
+```
+
+Changing the fitted individual indices changes the posterior dimension. A
+saved proposal covariance with incompatible metadata is therefore rejected;
+the fit starts a fresh proposal while it may still use compatible saved rates
+as its initial condition.
+
 ## Setup
 
 First, let's set up our project directory and load the package:

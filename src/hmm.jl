@@ -2270,25 +2270,12 @@ function _ll_hmm_grid(r::Vector, couplingStrength::Vector, noiseparams::Vector, 
 end
 
 """
-    ll_hierarchy(pindividual, rhyper)
+    _hierarchical_hmm_result(ll, lb, lhp, logpredictions)
 
-Loglikelihood for coupled hierarchical model individual parameters.
-    lognormal distribution constructed from hyper untransformed noise parameters
+Combine HMM, background, and hierarchy contributions while preserving data-only
+pointwise predictions. Retained as a regression helper for WAIC bookkeeping;
+production hierarchy assembly occurs in `ll_hmm_trace`.
 """
-function ll_hierarchy(pindividual, rhyper)
-    # d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
-    d = distribution_array(rhyper[1], sigmanormal.(rhyper[1], rhyper[2]))
-    lhp = Float64[]
-    for pc in pindividual
-        lhpc = 0
-        for i in eachindex(pc)
-            lhpc += logpdf(d[i], pc[i])  # Convention: accumulate positive log-likelihoods
-        end
-        push!(lhp, lhpc)
-    end
-    lhp
-end
-
 function _hierarchical_hmm_result(ll, lb, lhp, logpredictions)
     return ll + lb + sum(lhp), logpredictions
 end
@@ -2393,8 +2380,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
         ll, logpredictions = _ll_hmm(rindividual, noiseindividual, interval, components, reporter, trace[1], method[1]; hmm_stack=hmm_stack)
     end
     lb = ll_off(trace, noiseshared[1], reporter, components, a, p0; hmm_stack=hmm_stack)
-    lhp = ll_hierarchy(pindividual, rhyper)
-    _hierarchical_hmm_result(ll, lb, lhp, logpredictions)
+    ll + lb, logpredictions
 end
 
 # Helper: filter reporter and per-individual noiseparams to observed units only.
@@ -2418,8 +2404,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponent
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1], method[1]; hmm_stack=hmm_stack)
     end
     lb = ll_off(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1]; hmm_stack=hmm_stack)
-    lhp = ll_hierarchy(pindividual, rhyper)
-    _hierarchical_hmm_result(ll, lb, lhp, logpredictions)
+    ll + lb, logpredictions
 end
 
 # full coupled matrix, hierarchical
@@ -2436,8 +2421,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledFullCompo
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1], method[1]; hmm_stack=hmm_stack)
     end
     lb = ll_off(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1]; hmm_stack=hmm_stack)
-    lhp = ll_hierarchy(pindividual, rhyper)
-    _hierarchical_hmm_result(ll, lb, lhp, logpredictions)
+    ll + lb, logpredictions
 end
 
 # forced, hierarchical
@@ -2451,8 +2435,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TForcedComponents
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1], method[1]; hmm_stack=hmm_stack)
     end
     lb = ll_off(trace, noiseshared[1], reporter, components, a[1], p0[1]; hmm_stack=hmm_stack)
-    lhp = ll_hierarchy(pindividual, rhyper)
-    _hierarchical_hmm_result(ll, lb, lhp, logpredictions)
+    ll + lb, logpredictions
 end
 
 ### grid trait likelihoods

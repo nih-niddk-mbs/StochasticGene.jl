@@ -123,6 +123,118 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.effective_initial_proposalcv(level_aware, nothing, opts) === level_aware
     end
 
+    @testset "hierarchical densities use physical parameters" begin
+        mean_positive = 2.0
+        cv_positive = 0.5
+        mean_signed = -0.2
+        cv_signed = 0.1
+        individual = [3.0, -0.15]
+        contributions = StochasticGene.ll_hierarchy(
+            [individual],
+            [[mean_positive, mean_signed], [cv_positive, cv_signed]],
+            [log, identity],
+        )
+        expected =
+            StochasticGene.logpdf(StochasticGene.LogNormal_meancv(mean_positive, cv_positive), individual[1]) +
+            StochasticGene.logpdf(
+                StochasticGene.Normal(mean_signed, StochasticGene.sigmanormal(mean_signed, cv_signed)),
+                individual[2],
+            )
+        @test only(contributions) ≈ expected
+
+        # A physical LogNormal density plus the inverse-transform Jacobian is
+        # exactly its Normal density in z = log(theta) sampling coordinates.
+        z = log(individual[1])
+        physical_with_jacobian =
+            StochasticGene.logpdf(StochasticGene.LogNormal_meancv(mean_positive, cv_positive), exp(z)) + z
+        transformed = StochasticGene.logpdf(
+            StochasticGene.Normal(
+                StochasticGene.mulognormal(mean_positive, cv_positive),
+                StochasticGene.sigmalognormal(cv_positive),
+            ),
+            z,
+        )
+        @test physical_with_jacobian ≈ transformed
+
+        hierarchy = StochasticGene.HierarchicalTrait(2, 2, 1, 2, 5, 3, [[1], [3]], Int[], [1, 3])
+        rates = [2.0, 10.0, 0.5, 10.0, 3.0, 10.0, 4.0, 10.0]
+        _, physical_individuals = StochasticGene.prepare_rates(rates, hierarchy)
+        extracted_individuals, hyperparameters =
+            StochasticGene.prepare_hyper(rates, physical_individuals, hierarchy)
+        @test extracted_individuals == [[3.0], [4.0]]
+        @test hyperparameters == [[2.0], [0.5]]
+
+        traces = [zeros(2), zeros(2)]
+        data = StochasticGene.TraceData("trace", "gene", 1.0, (traces, Vector[], 0.0, 2, 1.0))
+        transitions = ([1, 2], [2, 1], [2, 3], [3, 2])
+        noisepriors = [0.0, 0.2, 1.0, 0.2]
+        base_mean = [fill(0.01, 4); 0.2; fill(0.6, 3); 1.0; noisepriors]
+        prior_mean = [base_mean; fill(0.5, length(base_mean))]
+        prior_cv = [fill(0.5, length(base_mean)); fill(2.0, length(base_mean))]
+        hierarchy_spec = (2, [10, 11], ())
+        initial_rates = StochasticGene.set_rinit(
+            Float64[], prior_mean, transitions, 3, 0, 1, noisepriors, 2;
+            nhypersets=2,
+        )
+        model = StochasticGene.load_model(
+            data, initial_rates, prior_mean, collect(1:11), (), transitions,
+            3, 3, 0, 1, "", 1, prior_cv, Int[], 1.0, 0.01,
+            StochasticGene.prob_Gaussian, noisepriors, (StochasticGene.Tsit5(), true),
+            hierarchy_spec, (), nothing, true,
+        )
+        sampled = StochasticGene.get_param(model)
+        h = model.trait.hierarchical
+        individual_sampled = reshape(sampled[h.paramstart:end], h.nindividualparams, h.nindividuals)
+        expected_jacobian = sum(individual_sampled[2, :])
+        @test StochasticGene.hierarchy_logabsdetjacobian(sampled, model) ≈ expected_jacobian
+        prepared = StochasticGene.prepare_rates(sampled, model)
+        @test prepared[5] == [base_mean[[10, 11]], base_mean[[10, 11]]]
+        @test prepared[6] == [base_mean[[10, 11]], fill(0.5, 2)]
+
+        components = StochasticGene.get_components(model, data)
+        reporter = StochasticGene.get_reporter(model, data)
+        hmm_ll, hmm_pointwise = StochasticGene.ll_hmm(
+            prepared, components, reporter, data.interval, data.trace, model.method,
+        )
+        full_ll, full_pointwise = StochasticGene.loglikelihood(sampled, data, model)
+        @test full_ll ≈ hmm_ll + StochasticGene.hierarchy_logdensity(prepared, model)
+        @test full_pointwise == hmm_pointwise
+
+        ad_ll, ad_pointwise = StochasticGene.loglikelihood_ad(sampled, data, model)
+        @test ad_ll ≈ full_ll
+        @test ad_pointwise ≈ full_pointwise
+        posterior_gradient = StochasticGene.ForwardDiff.gradient(sampled) do p
+            first(StochasticGene.loglikelihood_ad(p, data, model)) + StochasticGene.logprior(p, model)
+        end
+        @test all(isfinite, posterior_gradient)
+    end
+
+    @testset "hierarchical CV blocks are positive" begin
+        traces = [zeros(2), zeros(2)]
+        data = StochasticGene.TraceData("trace", "gene", 1.0, (traces, Vector[], 0.0, 2, 1.0))
+        reporter = StochasticGene.HMMReporter(
+            4, Int[], StochasticGene.prob_Gaussian, 0, Int[], collect(10:13),
+        )
+        transforms = StochasticGene.make_ratetransforms(
+            data,
+            9,
+            ([1, 2], [2, 1], [2, 3], [3, 2]),
+            3,
+            3,
+            0,
+            1,
+            reporter,
+            (),
+            nothing,
+            (2, [10, 12], ()),
+            true,
+        )
+        nbase = 13
+        @test all(f === log for f in transforms.f[nbase+1:2nbase])
+        @test transforms.f[10] === identity
+        @test transforms.f[2nbase+10] === identity
+    end
+
     @testset "shared parameter vocabulary is passive and composable" begin
         spec3 = DatasetSpec(
             :ThreePrime,
