@@ -4589,7 +4589,8 @@ Compute theoretical correlation functions for a single rate file and return the 
 - `Tuple` containing:
   - `ac1, ac2`: Auto-correlation functions for intensity (unit1, unit2)
   - `cc`: Cross-correlation function for intensity
-  - `ccON`: Cross-correlation function for ON states (unnormalized: E[xy] - E[x]E[y])
+  - `ccON`: Raw cross-moment for ON states, E[xy]. The legacy CSV writer stores this
+    raw value; subtract `mON1 * mON2` for the centered cross-covariance.
   - `tau`: Time lags (with negative lags included)
   - `m1, m2`: Mean intensities
   - `v1, v2`: Variances
@@ -4601,7 +4602,9 @@ Compute theoretical correlation functions for a single rate file and return the 
 
 # Notes
 - Extracts coupling information from the filename using `pattern`
-- All cross-correlations and auto-correlations are unnormalized (E[xy] - E[x]E[y])
+- The returned values are raw, uncentered moments: cross terms are E[xy] and
+  auto terms are E[x²]. Subtract the corresponding products of means to obtain
+  centered covariances.
 - ON states are binary (1 if reporter count > 0, 0 otherwise)
 """
 function correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml"; splicetype::String="")
@@ -4836,18 +4839,20 @@ For each input file matching `*rates*tracejoint*.txt`, creates a corresponding o
 - `tau::Vector{Int}`: Time lags from `-max_lag` to `+max_lag` (symmetric around zero)
 
 ## ON State Correlation Functions (Binary: 1 if reporter > 0, 0 otherwise)
-- `cc_ON::Vector{Float64}`: Cross-correlation function between enhancer and gene ON states (unnormalized: E[xy] - E[x]E[y]).
-  Positive τ means enhancer leads (E[enhancer(t) × gene(t+τ)] - E[enhancer] × E[gene]).
-- `ac1_ON::Vector{Float64}`: Auto-correlation function of enhancer ON states (unnormalized, symmetric: includes negative lags).
-- `ac2_ON::Vector{Float64}`: Auto-correlation function of gene ON states (unnormalized, symmetric: includes negative lags).
+- `cc_ON::Vector{Float64}`: Raw cross-moment between enhancer and gene ON states, E[xy].
+  Positive τ means enhancer leads: E[enhancer(t) × gene(t+τ)]. For a centered
+  cross-covariance use `cc_ON - mON1*mON2`; for a mean-normalized curve divide
+  that centered value by `mON1*mON2`.
+- `ac1_ON::Vector{Float64}`: Raw auto-moment E[x²] for enhancer ON states (symmetric: includes negative lags).
+- `ac2_ON::Vector{Float64}`: Raw auto-moment E[y²] for gene ON states (symmetric: includes negative lags).
 - `mON1::Vector{Float64}`: Mean ON state probability for enhancer (repeated for each lag, scalar value).
 - `mON2::Vector{Float64}`: Mean ON state probability for gene (repeated for each lag, scalar value).
 
 ## Reporter Count Correlation Functions (Raw integer counts)
-- `cc_Reporters::Vector{Float64}`: Cross-correlation function between enhancer and gene reporter counts (unnormalized).
-  Same convention as `cc_ON` (positive τ means enhancer leads).
-- `ac1_Reporters::Vector{Float64}`: Auto-correlation function of enhancer reporter counts (unnormalized, symmetric).
-- `ac2_Reporters::Vector{Float64}`: Auto-correlation function of gene reporter counts (unnormalized, symmetric).
+- `cc_Reporters::Vector{Float64}`: Raw cross-moment E[xy] between enhancer and gene reporter counts.
+  Same lag convention as `cc_ON`; center with `cc_Reporters - mR1*mR2`.
+- `ac1_Reporters::Vector{Float64}`: Raw auto-moment E[x²] for enhancer reporter counts (symmetric).
+- `ac2_Reporters::Vector{Float64}`: Raw auto-moment E[y²] for gene reporter counts (symmetric).
 - `mR1::Vector{Float64}`: Mean reporter count for enhancer (repeated for each lag, scalar value).
 - `mR2::Vector{Float64}`: Mean reporter count for gene (repeated for each lag, scalar value).
 
@@ -4882,8 +4887,12 @@ write_correlation_functions(
 
 # Notes
 
-- **Unnormalized Correlation Functions**: All correlation function values are unnormalized (E[xy] - E[x]E[y]). To normalize
-  by means, divide by (m1 × m2) for cross-correlations or by (m × m) for auto-correlations.
+- **Legacy raw output**: `crosscorrelation_*.csv` contains uncentered moments
+  (`E[xy]` and `E[x²]`) for backward compatibility. Use the means in the same
+  file to center them. The key-based writer also emits
+  `crosscorrelation-general_*.csv`, whose `*_centered` columns are already
+  centered; divide those by the relevant mean product for FCS-style
+  mean-normalized curves.
 
 - **Lag Convention**: Positive τ means the first unit (enhancer) leads the second unit (gene). This matches
   the convention used in `StatsBase.crosscov(enhancer, gene, lags)`.
