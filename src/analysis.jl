@@ -4649,47 +4649,158 @@ Write correlation functions to a CSV file.
 # Returns
 - `nothing`: Returns nothing
 """
-function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern::String="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype::String="median"; splicetype::String="")
+function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern::String="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype::String="median"; splicetype::String="", trace_center::Bool=false, window_lengths=nothing, window_interval=nothing)
 
-    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype; splicetype=splicetype)
+    trace_center && window_lengths === nothing &&
+        throw(ArgumentError("window_lengths is required when trace_center=true"))
+    plan = _correlation_window_plan(lags, trace_center ? window_lengths : nothing, window_interval)
+    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, plan.lags, probfn, ratetype; splicetype=splicetype)
     parts = fields(basename(file))
     new_model = create_modelstring(G, R, S, insertstep)
     out = joinpath(dirname(file), "crosscorrelation_" * parts.label * "_" * parts.cond * "_" * parts.gene * "_" * new_model * "_" * parts.nalleles * ".csv")
     write_correlation_csv(out, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
-
-        # CSV.write(out, DataFrame(
-        #     tau=tau,
-        #     # ON state: unnormalized cc, ac1, ac2, m1, m2
-        #     cc_ON=ccON,
-        #     ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
-        #     ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
-        #     m_ON1=fill(mON1, n_lags),
-        #     m_ON2=fill(mON2, n_lags),
-        #     # Reporters: unnormalized cc, ac1, ac2, m1, m2
-        #     cc_Reporters=ccReporters,
-        #     ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
-        #     ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
-        #     m_Reporters1=fill(mReporters1, n_lags),
-        #     mReporters2=fill(mReporters2, n_lags)
-        # ))
-        # return nothing
+    trace_center && write_correlation_functions_centered(out;
+        window_lengths=plan.lengths, window_interval=plan.interval,
+        maxlag=maximum(Float64.(collect(lags))))
+    return nothing
 end
 
-function write_correlation_csv(outfile::String, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+"""
+    finite_trace_center_correlation(moment, window_lengths)
+
+Apply the expected finite-record, per-trace mean-subtraction operator to a
+stationary theoretical moment curve. `moment` must contain uniformly spaced
+symmetric lags ordered from negative to positive, with zero lag at its center.
+`window_lengths` is either one trace length or a collection of trace lengths,
+expressed in frames.
+
+The result is the expectation of the usual lagged product after subtracting
+each finite trace's own sample mean. Traces are weighted equally at every lag
+where they contain an overlapping pair, matching the per-trace aggregation
+used by the empirical correlation stack. This operation can create negative
+side lobes even when the infinite-record stationary covariance is positive.
+"""
+function finite_trace_center_correlation(moment::AbstractVector, window_lengths)
+    isodd(length(moment)) || throw(ArgumentError("moment must have odd length with zero lag at its center"))
+    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
+    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
+    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
+    nmax = (length(moment) + 1) ÷ 2
+    maximum(lengths) <= nmax || throw(ArgumentError(
+        "moment supports at most $nmax frames, but window_lengths contains $(maximum(lengths)); " *
+        "compute theory through at least (maximum(window_lengths)-1)*window_interval",
+    ))
+
+    values = Float64.(moment)
+    total = zeros(Float64, length(values))
+    weights = zeros(Int, length(values))
+    center = nmax
+
+    length_counts = Dict{Int,Int}()
+    for n in lengths
+        length_counts[n] = get(length_counts, n, 0) + 1
+    end
+    for (n, multiplicity) in length_counts
+        rowmean = zeros(Float64, n)
+        colmean = zeros(Float64, n)
+        grand = 0.0
+        @inbounds for i in 1:n, j in 1:n
+            value = values[center + j - i]
+            rowmean[i] += value / n
+            colmean[j] += value / n
+            grand += value / n^2
+        end
+        @inbounds for lag in -(n - 1):(n - 1)
+            overlap = n - abs(lag)
+            adjusted = 0.0
+            if lag >= 0
+                for i in 1:overlap
+                    j = i + lag
+                    adjusted += values[center + lag] - rowmean[i] - colmean[j] + grand
+                end
+            else
+                for j in 1:overlap
+                    i = j - lag
+                    adjusted += values[center + lag] - rowmean[i] - colmean[j] + grand
+                end
+            end
+            index = center + lag
+            total[index] += multiplicity * adjusted / overlap
+            weights[index] += multiplicity
+        end
+    end
+
+    result = fill(NaN, length(values))
+    used = weights .> 0
+    result[used] .= total[used] ./ weights[used]
+    return result
+end
+
+function _correlation_window_plan(lags, window_lengths, window_interval)
+    requested = Float64.(collect(lags))
+    isempty(requested) && throw(ArgumentError("lags cannot be empty"))
+    iszero(requested[1]) || throw(ArgumentError("lags must begin at zero"))
+    issorted(requested) || throw(ArgumentError("lags must be sorted"))
+    if window_lengths === nothing
+        return (lags=requested, lengths=nothing, interval=nothing)
+    end
+
+    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
+    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
+    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
+    interval = if window_interval === nothing
+        length(requested) > 1 || throw(ArgumentError("window_interval is required when lags contains only zero"))
+        requested[2] - requested[1]
+    else
+        Float64(window_interval)
+    end
+    interval > 0 || throw(ArgumentError("window_interval must be positive"))
+    requested_steps = round.(Int, requested ./ interval)
+    all(isapprox.(requested, requested_steps .* interval; atol=1e-8, rtol=1e-8)) ||
+        throw(ArgumentError("every requested lag must be an integer multiple of window_interval=$interval"))
+    maximum(requested_steps) < maximum(lengths) || throw(ArgumentError(
+        "requested lags must be shorter than at least one trace window",
+    ))
+
+    internal_lags = collect(0.0:interval:(maximum(lengths) - 1) * interval)
+    return (lags=internal_lags, lengths=lengths, interval=interval)
+end
+
+function _correlation_legacy_dataframe(tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
     n_lags = length(tau)
-    CSV.write(outfile, DataFrame(
+    ac1_ON_full = [reverse(ac1ON); ac1ON[2:end]]
+    ac2_ON_full = [reverse(ac2ON); ac2ON[2:end]]
+    ac1_Reporters_full = [reverse(ac1Reporters); ac1Reporters[2:end]]
+    ac2_Reporters_full = [reverse(ac2Reporters); ac2Reporters[2:end]]
+    return DataFrame(
         tau=tau,
         cc_ON=ccON,
-        ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
-        ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
+        ac1_ON=ac1_ON_full,
+        ac2_ON=ac2_ON_full,
         m_ON1=fill(mON1, n_lags),
         m_ON2=fill(mON2, n_lags),
         cc_Reporters=ccReporters,
-        ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
-        ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
+        ac1_Reporters=ac1_Reporters_full,
+        ac2_Reporters=ac2_Reporters_full,
         m_Reporters1=fill(mReporters1, n_lags),
-        mReporters2=fill(mReporters2, n_lags)
-    ))
+        mReporters2=fill(mReporters2, n_lags),
+        # `_centered` columns hold the global mean-centered covariance by
+        # default. `_trace_center_legacy_correlation!` overwrites these with
+        # the finite-window trace-centered covariance; `cc_ON` etc. above
+        # always keep their raw-moment meaning, unchanged either way.
+        cc_ON_centered=ccON .- mON1 * mON2,
+        ac1_ON_centered=ac1_ON_full .- mON1^2,
+        ac2_ON_centered=ac2_ON_full .- mON2^2,
+        cc_Reporters_centered=ccReporters .- mReporters1 * mReporters2,
+        ac1_Reporters_centered=ac1_Reporters_full .- mReporters1^2,
+        ac2_Reporters_centered=ac2_Reporters_full .- mReporters2^2,
+    )
+end
+
+function write_correlation_csv(outfile::String, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+    df = _correlation_legacy_dataframe(tau, ccON, ac1ON, ac2ON, mON1, mON2,
+        ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+    CSV.write(outfile, df)
 end
 
 function _correlation_default_pairs(observables, pairs)
@@ -4717,7 +4828,7 @@ end
 Write generalized observable-pair correlation results returned by
 [`correlate_observables`](@ref) to a long-form CSV file.
 """
-function write_correlation_general_csv(outfile::String, results)
+function _correlation_general_dataframe(results)
     pair_col = String[]
     x_col = String[]
     y_col = String[]
@@ -4754,7 +4865,7 @@ function write_correlation_general_csv(outfile::String, results)
             push!(var_y_col, Float64(result.var_y))
         end
     end
-    CSV.write(outfile, DataFrame(
+    return DataFrame(
         pair=pair_col,
         x=x_col,
         y=y_col,
@@ -4769,7 +4880,222 @@ function write_correlation_general_csv(outfile::String, results)
         mean_y=mean_y_col,
         var_x=var_x_col,
         var_y=var_y_col,
-    ))
+    )
+end
+
+function write_correlation_general_csv(outfile::String, results)
+    CSV.write(outfile, _correlation_general_dataframe(results))
+end
+
+function _correlation_trace_centered_output_path(file::String, output)
+    output !== nothing && return String(output)
+    name = basename(file)
+    if startswith(name, "crosscorrelation-general-global_")
+        name = replace(name, "crosscorrelation-general-global_" => "crosscorrelation-general-global-trace-centered_"; count=1)
+    elseif startswith(name, "crosscorrelation-general-")
+        name = replace(name, "crosscorrelation-general-" => "crosscorrelation-general-trace-centered-"; count=1)
+    elseif startswith(name, "crosscorrelation-general_")
+        name = replace(name, "crosscorrelation-general_" => "crosscorrelation-general-trace-centered_"; count=1)
+    elseif startswith(name, "crosscorrelation-global_")
+        name = replace(name, "crosscorrelation-global_" => "crosscorrelation-global-trace-centered_"; count=1)
+    elseif startswith(name, "crosscorrelation-")
+        name = replace(name, "crosscorrelation-" => "crosscorrelation-trace-centered-"; count=1)
+    elseif startswith(name, "crosscorrelation_")
+        name = replace(name, "crosscorrelation_" => "crosscorrelation-trace-centered_"; count=1)
+    else
+        throw(ArgumentError("not a correlation CSV file: $file"))
+    end
+    return joinpath(dirname(file), name)
+end
+
+function _validate_correlation_tau(tau; window_interval=nothing)
+    length(tau) > 1 || throw(ArgumentError("correlation file must contain more than one lag"))
+    isodd(length(tau)) || throw(ArgumentError("correlation lag grid must have odd length"))
+    all(diff(tau) .> 0) || throw(ArgumentError("correlation lags must be strictly increasing"))
+    center = (length(tau) + 1) ÷ 2
+    isapprox(tau[center], 0.0; atol=1e-8) || throw(ArgumentError("correlation lag grid must be centered at zero"))
+    interval = tau[center + 1] - tau[center]
+    all(isapprox.(diff(tau), interval; atol=1e-8, rtol=1e-8)) ||
+        throw(ArgumentError("finite-trace centering requires a uniformly spaced lag grid"))
+    if window_interval !== nothing && !isapprox(interval, Float64(window_interval); atol=1e-8, rtol=1e-8)
+        throw(ArgumentError("CSV lag interval $interval does not match window_interval=$(Float64(window_interval))"))
+    end
+    return interval
+end
+
+function _trace_centering_lengths(window_lengths)
+    window_lengths === nothing && throw(ArgumentError("window_lengths is required for trace centering"))
+    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
+    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
+    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
+    return lengths
+end
+
+function _preflight_trace_centering_lags(tau, lengths, file; window_interval=nothing, pair=nothing)
+    interval = _validate_correlation_tau(Float64.(tau); window_interval=window_interval)
+    supported_frames = (length(tau) + 1) ÷ 2
+    required_frames = maximum(lengths)
+    if required_frames > supported_frames
+        required_maxlag_minutes = (required_frames - 1) * interval
+        available_maxlag_minutes = (supported_frames - 1) * interval
+        @warn("Trace centering was not performed: the correlation file does not cover the full trace window.",
+            file, pair, required_frames, supported_frames,
+            required_maxlag_minutes, available_maxlag_minutes)
+        throw(ArgumentError(
+            "correlation file supports at most $supported_frames frames, but window_lengths contains $required_frames; " *
+            "recompute theory through at least $(required_frames - 1) * $interval minutes",
+        ))
+    end
+    return nothing
+end
+
+function _preflight_trace_centering!(df::DataFrame, file, lengths, window_interval)
+    if :pair in propertynames(df)
+        for pair in unique(df.pair)
+            rows = findall(==(pair), df.pair)
+            _preflight_trace_centering_lags(df.tau[rows], lengths, file;
+                window_interval=window_interval, pair=pair)
+        end
+    else
+        _preflight_trace_centering_lags(df.tau, lengths, file; window_interval=window_interval)
+    end
+    return df
+end
+
+function _trace_center_general_correlation!(df::DataFrame, window_lengths, window_interval)
+    required = (:pair, :tau, :cc, :ac_x, :ac_y)
+    all(column -> column in propertynames(df), required) ||
+        throw(ArgumentError("general correlation CSV is missing required columns"))
+    for pair in unique(df.pair)
+        rows = findall(==(pair), df.pair)
+        _validate_correlation_tau(Float64.(df.tau[rows]); window_interval=window_interval)
+        cc = finite_trace_center_correlation(df.cc[rows], window_lengths)
+        ac_x = finite_trace_center_correlation(df.ac_x[rows], window_lengths)
+        ac_y = finite_trace_center_correlation(df.ac_y[rows], window_lengths)
+        # Preserve the historical raw-moment fields. Downstream code obtains
+        # covariance by subtracting these repeated stationary mean products.
+        df.cc[rows] .= cc .+ df.mean_x[rows] .* df.mean_y[rows]
+        df.ac_x[rows] .= ac_x .+ df.mean_x[rows] .^ 2
+        df.ac_y[rows] .= ac_y .+ df.mean_y[rows] .^ 2
+        df.cc_centered[rows] .= cc
+        df.ac_x_centered[rows] .= ac_x
+        df.ac_y_centered[rows] .= ac_y
+    end
+    return df
+end
+
+function _trace_center_legacy_correlation!(df::DataFrame, window_lengths, window_interval)
+    columns = (:cc_ON, :ac1_ON, :ac2_ON, :cc_Reporters, :ac1_Reporters, :ac2_Reporters)
+    all(column -> column in propertynames(df), (:tau, columns...)) ||
+        throw(ArgumentError("legacy correlation CSV is missing required columns"))
+    _validate_correlation_tau(Float64.(df.tau); window_interval=window_interval)
+    # `column` always keeps its raw-moment meaning, untouched. The `_centered`
+    # companion is (re)written with the finite-window trace-centered
+    # covariance, replacing whatever centering (e.g. global mean subtraction)
+    # it may have held before.
+    for column in columns
+        centered = finite_trace_center_correlation(df[!, column], window_lengths)
+        df[!, Symbol("$(column)_centered")] = centered
+    end
+    :centering in propertynames(df) && (df.centering .= "trace-centered")
+    return df
+end
+
+function _write_trace_centered_correlation!(df::DataFrame, path::String, lengths, window_interval, maxlag, output)
+    _preflight_trace_centering!(df, path, lengths, window_interval)
+    if :pair in propertynames(df)
+        _trace_center_general_correlation!(df, lengths, window_interval)
+    else
+        _trace_center_legacy_correlation!(df, lengths, window_interval)
+    end
+    maxlag !== nothing && (df = df[abs.(df.tau) .<= Float64(maxlag), :])
+    outfile = _correlation_trace_centered_output_path(path, output)
+    CSV.write(outfile, df)
+    return outfile
+end
+
+"""
+    write_correlation_functions_centered(path; window_lengths,
+                                         window_interval=nothing,
+                                         maxlag=nothing, output=nothing,
+                                         threaded=true)
+
+Post-process previously written theoretical correlation CSV files without
+rebuilding the HMM. `window_lengths`, in frames, specifies the finite-record
+lengths used to reproduce the expected effect of subtracting each trace's own
+sample mean.
+
+`path` may name one correlation CSV or a folder. Results are written as a
+separate `crosscorrelation-trace-centered_*` set with exactly the same column
+headings as the input. `maxlag` optionally trims the output. The input CSV must
+contain a uniform symmetric lag grid extending through at least
+`(maximum(window_lengths)-1) * window_interval`.
+
+When `path` is a folder, source CSVs are processed in parallel with
+`Threads.@threads` by default. Start Julia with multiple threads (for example,
+`julia -t 10`) to enable parallel execution. Set `threaded=false` for serial
+processing. Existing trace-centered and empirical files are excluded from the
+source scan. Global-centered files are accepted and retain their own
+`crosscorrelation-global-trace-centered_*` filename and CSV schema.
+"""
+function write_correlation_functions_centered(
+    path::String;
+    window_lengths,
+    window_interval=nothing,
+    maxlag=nothing,
+    output=nothing,
+    threaded::Bool=true,
+)
+    lengths = _trace_centering_lengths(window_lengths)
+    if isdir(path)
+        output === nothing || throw(ArgumentError("output is only supported when path names one CSV file"))
+        files = sort!(filter(readdir(path; join=true)) do file
+            name = basename(file)
+            (startswith(name, "crosscorrelation_") || startswith(name, "crosscorrelation-general_") ||
+                startswith(name, "crosscorrelation-global_")) &&
+                endswith(name, ".csv") &&
+                !occursin("-trace-centered_", name) &&
+                !occursin("empirical", lowercase(name))
+        end)
+        inputs = Vector{DataFrame}(undef, length(files))
+        for i in eachindex(files)
+            inputs[i] = CSV.read(files[i], DataFrame)
+            # Validate all inputs before parallel writers can create a partial output set.
+            _preflight_trace_centering!(inputs[i], files[i], lengths, window_interval)
+        end
+        outputs = Vector{String}(undef, length(files))
+        process_file(i) = _write_trace_centered_correlation!(
+            inputs[i], files[i], lengths, window_interval, maxlag, nothing,
+        )
+        if threaded && Threads.nthreads() > 1 && length(files) > 1
+            Threads.@threads for i in eachindex(files)
+                outputs[i] = process_file(i)
+            end
+        else
+            for i in eachindex(files)
+                outputs[i] = process_file(i)
+            end
+        end
+        return outputs
+    end
+
+    isfile(path) || throw(ArgumentError("correlation CSV does not exist: $path"))
+    df = CSV.read(path, DataFrame)
+    return _write_trace_centered_correlation!(df, path, lengths, window_interval, maxlag, output)
+end
+
+"""
+    write_correlation_functions_centered_folder(folder; threaded=true, kwargs...)
+
+Threaded folder frontend for [`write_correlation_functions_centered`](@ref).
+Processes every base theoretical `crosscorrelation*.csv` file in `folder` and
+returns trace-centered output paths in deterministic filename order.
+Trace-centered and empirical files are not treated as inputs. Global-centered
+files are accepted and produce separately named global trace-centered outputs.
+"""
+function write_correlation_functions_centered_folder(folder::String; threaded::Bool=true, kwargs...)
+    isdir(folder) || throw(ArgumentError("correlation folder does not exist: $folder"))
+    return write_correlation_functions_centered(folder; threaded=threaded, kwargs...)
 end
 
 function _find_correlation_result(results, x::String, y::String)
@@ -4871,6 +5197,10 @@ For each input file matching `*rates*tracejoint*.txt`, creates a corresponding o
 
 5. **File Writing**: Writes results to CSV with filename pattern: `rates_*.txt` → `crosscorrelation_*.csv`.
 
+6. **Trace Centering Postprocess**: Set `trace_center=true` with
+   `window_lengths` in frames to write a separate trace-centered set after the
+   normal correlation CSV has been created.
+
 # Usage Example
 
 ```julia
@@ -4916,12 +5246,14 @@ write_correlation_functions(
 - `score_models_from_traces`: Scores theoretical predictions against empirical data
 - `readrates`: Loads rate parameters from text files
 """
-function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", splicetype::String="")
+function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", splicetype::String="", trace_center::Bool=false, window_lengths=nothing, window_interval=nothing)
     for (root, _, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype; splicetype=splicetype)
+                write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype;
+                    splicetype=splicetype, trace_center=trace_center,
+                    window_lengths=window_lengths, window_interval=window_interval)
             end
         end
     end
@@ -4931,7 +5263,8 @@ end
     write_correlation_functions_key(folder::String; lags=0:200, ratetype="median",
                                     insertstep=nothing, observables=nothing,
                                     pairs=nothing, write_legacy=true,
-                                    write_general=true, validate=true)
+                                    write_general=true, validate=true,
+                                    trace_center=false, window_lengths=nothing)
 
 Compute theoretical correlation functions for key-based result folders.
 
@@ -4953,6 +5286,18 @@ processes each complete group-specific rate file separately.
   observable-pair outputs.
 - `validate`: compare generalized ON/reporter outputs against the legacy
   computation as a regression check.
+- `trace_center`: when `true`, write only trace-centered legacy and/or
+  generalized correlation CSVs, according to `write_legacy` and
+  `write_general`.
+- `window_lengths`: optional trace length in frames, or vector of trace lengths.
+  Required with `trace_center=true`; the writer computes the stationary
+  theory over the complete longest window and then calls the public
+  postprocessor to create `crosscorrelation-trace-centered_*` outputs. No raw
+  or global-centered companion CSV is written in this mode.
+- `window_interval`: frame interval in minutes. If omitted with
+  `window_lengths`, use the common interval in `trace_specs`, falling back to
+  the spacing in `lags` when trace metadata is unavailable. Requested lags must
+  be integer multiples of this interval.
 
 Returns the number of usable rate/info jobs processed.
 """
@@ -4968,7 +5313,12 @@ function write_correlation_functions_key(
     validate::Bool=true,
     validation_atol::Float64=1e-8,
     validation_rtol::Float64=1e-6,
+    trace_center::Bool=false,
+    window_lengths=nothing,
+    window_interval=nothing,
 )
+    trace_center && window_lengths === nothing &&
+        throw(ArgumentError("window_lengths is required when trace_center=true"))
     n = 0
     nrates = 0
     skipped = String[]
@@ -5006,20 +5356,48 @@ function write_correlation_functions_key(
                     n += 1
                     splicetype = String(get(info, :splicetype, ""))
                     this_insertstep = isnothing(insertstep) ? info[:insertstep] : insertstep
+                    this_window_interval = window_interval
+                    if trace_center && this_window_interval === nothing
+                        trace_specs = get(info, :trace_specs, [])
+                        intervals = unique(Float64(get(spec, :interval, NaN)) for spec in trace_specs)
+                        filter!(x -> !isnan(x), intervals)
+                        if length(intervals) == 1
+                            this_window_interval = only(intervals)
+                        elseif length(intervals) > 1
+                            throw(ArgumentError("trace_specs contains multiple frame intervals; pass window_interval explicitly"))
+                        end
+                    end
+                    plan = _correlation_window_plan(lags, trace_center ? window_lengths : nothing, this_window_interval)
                     @info "computing correlations for $ratefile with insertstep=$(this_insertstep)"
                     tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
-                        correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], lags; splicetype=splicetype)
+                        correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], plan.lags; splicetype=splicetype)
                     token = "_insertstep" * _analysis_insertstep_token(this_insertstep)
                     if write_legacy
                         outname = joinpath(root, "crosscorrelation_" * suffix * token * ".csv")
-                        write_correlation_csv(outname, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+                        if trace_center
+                            df = _correlation_legacy_dataframe(tau, ccON, ac1ON, ac2ON, mON1, mON2,
+                                ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+                            _write_trace_centered_correlation!(df, outname, plan.lengths,
+                                plan.interval, maximum(Float64.(collect(lags))),
+                                _correlation_trace_centered_output_path(outname, nothing))
+                        else
+                            write_correlation_csv(outname, tau, ccON, ac1ON, ac2ON, mON1, mON2,
+                                ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+                        end
                     end
                     if write_general
-                        ctx = build_correlation_context(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], lags; splicetype=splicetype)
-                        results = [correlate_observables(ctx, p[1], p[2]) for p in pair_specs]
-                        validate && _validate_general_correlations(results, ccON, ccReporters; atol=validation_atol, rtol=validation_rtol)
+                        ctx = build_correlation_context(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], plan.lags; splicetype=splicetype)
+                        full_results = [correlate_observables(ctx, p[1], p[2]) for p in pair_specs]
+                        validate && _validate_general_correlations(full_results, ccON, ccReporters; atol=validation_atol, rtol=validation_rtol)
                         outname_general = joinpath(root, "crosscorrelation-general_" * suffix * token * ".csv")
-                        write_correlation_general_csv(outname_general, results)
+                        if trace_center
+                            df = _correlation_general_dataframe(full_results)
+                            _write_trace_centered_correlation!(df, outname_general, plan.lengths,
+                                plan.interval, maximum(Float64.(collect(lags))),
+                                _correlation_trace_centered_output_path(outname_general, nothing))
+                        else
+                            write_correlation_general_csv(outname_general, full_results)
+                        end
                     end
                 end
             elseif startswith(f, "rates_") && endswith(f, ".txt")

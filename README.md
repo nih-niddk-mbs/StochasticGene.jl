@@ -186,6 +186,15 @@ occupied reporter position. The historical `make_coupling("R5", G, R)` form is
 see [Units and models](docs/src/concepts/units_and_models.md) and the
 [simulator API](docs/src/api/simulator.md).
 
+The key-aware theoretical correlation workflow is
+`write_correlation_functions_key(resultfolder)`. To mimic empirical per-trace
+mean subtraction, use `trace_center=true, window_lengths=<frames>`; the same
+transformation can be applied later with
+`write_correlation_functions_centered`. See the
+[analysis API](docs/src/api/analysis.md#Correlation-Functions) for lag-range and
+frame-interval requirements. For many existing files, launch Julia with
+multiple threads and use `write_correlation_functions_centered_folder`.
+
 ---
 
 ## Source code map (`src/`)

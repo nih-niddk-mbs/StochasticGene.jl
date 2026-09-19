@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.6
+
+Correctness patch for the theoretical trace-centering postprocessor:
+
+- `write_correlation_functions_centered` raised a `MethodError` instead of the
+  documented `ArgumentError` when a correlation file did not cover the full
+  requested trace window, because its diagnostic `@warn` used an invalid
+  backslash line continuation that Julia parsed as a division operator.
+- `write_correlation_functions_centered_folder` (and the folder form of
+  `write_correlation_functions_centered`) silently skipped existing
+  `crosscorrelation-global_*` files instead of trace-centering them.
+- Fixed a `MethodError` in the legacy trace-centering path
+  (`_trace_center_legacy_correlation!`) caused by building its column/mean-product
+  lookup as a tuple of pairs instead of a `Dict`.
+- Unified the column convention between the legacy and generalized correlation
+  CSVs: `cc_ON`/`cc`, `ac1_ON`/`ac_x`, etc. now always hold the raw,
+  uncentered moment (unchanged meaning in every file), and a `cc_ON_centered`/
+  `cc_centered`, `ac1_ON_centered`/`ac_x_centered`, etc. companion column is
+  always present holding the centered covariance — a simple mean-product
+  subtraction in base/global-centered files, or the full finite-window
+  trace-centering result in trace-centered files. Previously the legacy schema
+  conflated the two, storing a centered-plus-mean-product hybrid directly in
+  `cc_ON` for trace-centered output.
+
 ## 2.0.5
 
 Correctness patch for legacy hierarchical trace models:

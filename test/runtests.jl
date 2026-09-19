@@ -16,6 +16,8 @@
 using Random
 using DelimitedFiles
 using Statistics
+using CSV
+using DataFrames
 using StochasticGene
 using Test
 
@@ -95,6 +97,114 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test all(abs(result.cc_centered[end]) < 1e-8 for result in state_results)
         @test_throws ArgumentError StochasticGene.correlate_observables(ctx, (:intensity, 1), (:intensity, 3))
 
+    end
+
+    @testset "finite-trace theoretical centering" begin
+        n = 4
+        moment = [0.2, 0.3, 0.5, 1.2, 0.7, 0.4, 0.25]
+        K = [moment[n + j - i] for i in 1:n, j in 1:n]
+        H = [i == j ? 1 - 1 / n : -1 / n for i in 1:n, j in 1:n]
+        centered = H * K * H
+        expected = [
+            mean(centered[i, i + lag] for i in 1:(n - lag))
+            for lag in 0:(n - 1)
+        ]
+        expected_negative = [
+            mean(centered[i - lag, i] for i in 1:(n + lag))
+            for lag in -(n - 1):-1
+        ]
+        calculated = finite_trace_center_correlation(moment, n)
+        @test calculated ≈ vcat(expected_negative, expected)
+        @test finite_trace_center_correlation(moment, [n, n]) ≈ calculated
+        @test finite_trace_center_correlation(fill(3.0, 2n - 1), n) ≈ zeros(2n - 1) atol=1e-12
+        @test_throws ArgumentError finite_trace_center_correlation(moment, n + 1)
+        @test_throws ArgumentError finite_trace_center_correlation(moment, 1)
+
+        mktempdir() do dir
+            tau = collect(-3.0:3.0)
+            legacy = DataFrame(
+                tau=tau,
+                cc_ON=moment,
+                ac1_ON=moment,
+                ac2_ON=moment,
+                m_ON1=fill(0.2, 7),
+                m_ON2=fill(0.3, 7),
+                cc_Reporters=moment,
+                ac1_Reporters=moment,
+                ac2_Reporters=moment,
+                m_Reporters1=fill(0.4, 7),
+                mReporters2=fill(0.5, 7),
+            )
+            infile = joinpath(dir, "crosscorrelation_test.csv")
+            CSV.write(infile, legacy)
+
+            trace_centered_file = write_correlation_functions_centered(
+                infile; window_lengths=n,
+                window_interval=1.0, maxlag=2,
+            )
+            trace_centered_df = CSV.read(trace_centered_file, DataFrame)
+            @test basename(trace_centered_file) == "crosscorrelation-trace-centered_test.csv"
+            @test propertynames(trace_centered_df) == vcat(propertynames(legacy),
+                [:cc_ON_centered, :ac1_ON_centered, :ac2_ON_centered, :cc_Reporters_centered, :ac1_Reporters_centered, :ac2_Reporters_centered])
+            @test trace_centered_df.tau == collect(-2.0:2.0)
+            @test trace_centered_df.cc_ON ≈ moment[2:6]
+            @test trace_centered_df.cc_ON_centered ≈ calculated[2:6]
+            @test_logs (:warn, r"Trace centering was not performed") begin
+                @test_throws ArgumentError write_correlation_functions_centered(
+                    infile; window_lengths=n + 1, window_interval=1.0,
+                )
+            end
+
+            global_infile = joinpath(dir, "crosscorrelation-global_equivalent.csv")
+            CSV.write(global_infile, legacy)
+            from_global_file = write_correlation_functions_centered(
+                global_infile; window_lengths=n, window_interval=1.0, maxlag=2,
+            )
+            from_global_df = CSV.read(from_global_file, DataFrame)
+            @test basename(from_global_file) == "crosscorrelation-global-trace-centered_equivalent.csv"
+            @test propertynames(from_global_df) == propertynames(trace_centered_df)
+            @test from_global_df.cc_ON ≈ moment[2:6]
+            @test from_global_df.cc_ON_centered ≈ calculated[2:6]
+
+            second_input = joinpath(dir, "crosscorrelation_second.csv")
+            CSV.write(second_input, legacy)
+            outputs = write_correlation_functions_centered_folder(
+                dir; threaded=true, window_lengths=n, window_interval=1.0,
+            )
+            @test basename.(outputs) == [
+                "crosscorrelation-global-trace-centered_equivalent.csv",
+                "crosscorrelation-trace-centered_second.csv",
+                "crosscorrelation-trace-centered_test.csv",
+            ]
+            @test all(isfile, outputs)
+            @test_throws ArgumentError write_correlation_functions_centered_folder(joinpath(dir, "missing"))
+
+            general = DataFrame(
+                pair=fill("ON_unit1__ON_unit2", 7),
+                x=fill("ON_unit1", 7),
+                y=fill("ON_unit2", 7),
+                tau=tau,
+                cc=moment,
+                ac_x=moment,
+                ac_y=moment,
+                cc_centered=moment,
+                ac_x_centered=moment,
+                ac_y_centered=moment,
+                mean_x=fill(0.2, 7),
+                mean_y=fill(0.3, 7),
+                var_x=fill(1.0, 7),
+                var_y=fill(1.0, 7),
+            )
+            general_input = joinpath(dir, "crosscorrelation-general_test.csv")
+            CSV.write(general_input, general)
+            general_output = write_correlation_functions_centered(
+                general_input; window_lengths=n, window_interval=1.0,
+            )
+            general_df = CSV.read(general_output, DataFrame)
+            @test propertynames(general_df) == propertynames(general)
+            @test general_df.cc .- general_df.mean_x .* general_df.mean_y ≈ calculated
+            @test general_df.cc_centered ≈ calculated
+        end
     end
 
     @testset "hierarchical split proposal CV expands to sampled parameters" begin

@@ -162,6 +162,91 @@ generalized correlation CSV. The generalized path can evaluate arbitrary
 observable pairs supported by `correlation_observable`, including ON indicators
 and reporter counts.
 
+To predict what the theoretical curve should look like after subtracting each
+finite trace's own sample mean, request finite-trace centering. Lengths are in
+frames and the interval is in minutes:
+
+```julia
+write_correlation_functions_key(
+    "results/coupled-run";
+    lags = collect(0:5/3:120),
+    trace_center = true,
+    window_lengths = 216,
+    window_interval = 5/3,
+)
+```
+
+This first computes the stationary theory through the complete 216-frame
+window, then writes a separate `crosscorrelation-trace-centered_*` set trimmed to the
+requested ±120-minute plotting range. The operation applies the exact expected
+finite-record centering matrix, not a fitted baseline correction. It may
+therefore produce negative side lobes even when the stationary covariance is
+positive.
+
+Trace centering can also be applied later to existing theoretical CSV files:
+
+```julia
+# Trace-center one file or every theoretical file in a folder.
+write_correlation_functions_centered(
+    "results/coupled-run";
+    window_lengths = [216, 216, 210, 202],
+    window_interval = 5/3,
+    maxlag = 120,
+)
+```
+
+For an explicit multithreaded folder scan, start Julia with the desired thread
+count and use the folder frontend:
+
+```sh
+julia -t 10 --project=.
+```
+
+```julia
+using StochasticGene
+
+write_correlation_functions_centered_folder(
+    "results/coupled-run";
+    window_lengths = 216,
+    window_interval = 5/3,
+    maxlag = 120,
+)
+```
+
+Each base theoretical CSV is processed independently with `Threads.@threads`.
+The returned output paths are in deterministic filename order. Existing
+trace-centered and empirical correlation files are excluded from the scan.
+Existing global-centered files are valid inputs and produce distinct
+`crosscorrelation-global-trace-centered_*` outputs with exactly the same
+headings. Pass `threaded=false` when serial processing is preferable.
+
+The column convention is the same in both the legacy and generalized CSVs:
+`cc_ON`/`cc`, `ac1_ON`/`ac_x`, etc. always hold the raw, uncentered moment,
+and never change meaning. `cc_ON_centered`/`cc_centered`,
+`ac1_ON_centered`/`ac_x_centered`, etc. always hold the centered covariance,
+present in every file (base, global-centered, and trace-centered) — what
+"centered" means depends on how the file was produced: a simple mean-product
+subtraction for base and global-centered files, or the full finite-window
+trace-centering operator for trace-centered files. `write_correlation_functions_centered`
+overwrites only the `_centered` columns; the raw columns are always passed
+through unchanged.
+
+The postprocessor validates lag coverage before writing anything. If the input
+does not extend through `(maximum(window_lengths)-1) * window_interval`, it
+prints a warning with the required and available ranges, then stops without
+writing a trace-centered file.
+
+Postprocessing never overwrites the source CSVs. It creates
+`crosscorrelation-trace-centered_*` files with the same headings as the source.
+Finite-trace postprocessing requires
+the source lag grid to be uniformly spaced and to extend through the longest
+window; regenerate the stationary theory with a longer lag range if it does
+not.
+
+For array-level use, `finite_trace_center_correlation(moment,
+window_lengths)` applies the same linear operation to any symmetric theoretical
+moment curve.
+
 For repeated correlation calculations, use:
 
 ```julia

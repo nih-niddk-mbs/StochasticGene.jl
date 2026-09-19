@@ -1,5 +1,33 @@
 # Version 2.0
 
+## Version 2.0.6
+
+Version 2.0.6 is a correctness patch for the finite-trace theoretical
+correlation postprocessor introduced in 2.0.5:
+
+- `write_correlation_functions_centered` now raises the documented
+  `ArgumentError` (with its accompanying `@warn`) when a correlation file's lag
+  grid does not cover the requested trace window, instead of an unrelated
+  `MethodError` caused by an invalid backslash line continuation inside the
+  warning macro call.
+- `write_correlation_functions_centered_folder`, and the folder form of
+  `write_correlation_functions_centered`, now include existing
+  `crosscorrelation-global_*` files when scanning a folder, so global-centered
+  inputs are trace-centered instead of silently skipped.
+- Fixed a `MethodError` in the legacy-schema trace-centering path caused by an
+  incorrectly constructed mean-product lookup table.
+- Unified the legacy and generalized correlation CSV schemas around one rule:
+  `cc_ON`/`cc`, `ac1_ON`/`ac_x`, etc. always mean the raw, uncentered moment,
+  and a `cc_ON_centered`/`cc_centered`, `ac1_ON_centered`/`ac_x_centered`, etc.
+  companion column is always present with the centered covariance (mean-product
+  subtraction for base/global-centered files, the full finite-window operator
+  for trace-centered files). The legacy schema previously conflated the two by
+  storing a centered-plus-mean-product hybrid directly in `cc_ON` for
+  trace-centered output; the generalized schema already followed this rule.
+
+These were implementation bugs in the postprocessing/dispatch logic only; the
+underlying finite-record centering math and CSV schema are unchanged.
+
 ## Version 2.0.5
 
 Version 2.0.5 restores one coordinate convention across the legacy
@@ -23,6 +51,16 @@ This is a correctness change relative to versions 1.5.0 through 2.0.4, which
 could compare physical hyperparameters with transformed individual parameters.
 Old rate and info files remain readable, but continuing one targets the
 corrected posterior and may move away from the previous result.
+
+The theoretical correlation writers now support `trace_center=true` with
+`window_lengths`; it applies the same per-trace sample-mean subtraction
+expected from finite empirical records. `write_correlation_functions_centered`
+exposes that transformation as standalone CSV/folder postprocessing, so
+existing theoretical outputs can be transformed without rebuilding the HMM when
+their lag grid covers the required trace window. Trace-centered CSVs preserve
+the source headings and are identified only by the filename. The explicit
+`write_correlation_functions_centered_folder` frontend processes independent
+CSV files concurrently when Julia is started with multiple threads.
 
 ## Version 2.0.4
 

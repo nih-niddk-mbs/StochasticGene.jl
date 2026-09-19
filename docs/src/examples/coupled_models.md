@@ -167,6 +167,27 @@ write_traces_key("results/my-coupled-trace-run")
 write_correlation_functions_key("results/my-coupled-trace-run")
 ```
 
+To compare theory with empirical curves centered independently within each
+finite trace, use the actual trace lengths in frames:
+
+```julia
+write_correlation_functions_key(
+    "results/my-coupled-trace-run";
+    lags=collect(0:5/3:120),
+    trace_center=true,
+    window_lengths=216,
+    window_interval=5/3,
+)
+```
+
+The same operation is available without rebuilding the HMM through
+`write_correlation_functions_centered(path; ...)`, as
+long as the saved theoretical lag grid covers the complete trace window.
+To process every theoretical correlation file in a result folder concurrently,
+launch Julia with multiple threads (for example, `julia -t 10`) and call
+`write_correlation_functions_centered_folder("results/my-coupled-trace-run";
+window_lengths=216, window_interval=5/3)`.
+
 To validate a coupled model's theoretical ON-ON cross-correlation against
 simulation, use `simulate_trials(...; nexperiments=N)` as described in
 [Validate theory against simulation](../api/analysis.md#Validate-theory-against-simulation).
