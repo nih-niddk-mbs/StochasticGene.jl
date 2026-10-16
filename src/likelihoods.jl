@@ -232,7 +232,10 @@ function ll_hierarchy(pindividual, rhyper, transforms)
         throw(DimensionMismatch("hierarchical mean, CV, and transform lengths must match"))
     distributions = [_hierarchy_distribution(means[i], cvs[i], transforms[i]) for i in eachindex(means)]
     any(isnothing, distributions) && return fill(-Inf, length(pindividual))
-    return [sum(logpdf(distributions[i], values[i]) for i in eachindex(values)) for values in pindividual]
+    # Fixed per-trace noise may use the hierarchical layout without any fitted
+    # individual parameters; the empty conditional log density is zero.
+    return [sum((logpdf(distributions[i], values[i]) for i in eachindex(values));
+        init=zero(eltype(values))) for values in pindividual]
 end
 
 function hierarchy_logdensity(prepared_rates, model::AbstractGRSMmodel)

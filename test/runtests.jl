@@ -234,6 +234,9 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
     end
 
     @testset "hierarchical densities use physical parameters" begin
+        @test StochasticGene.ll_hierarchy(
+            [Float64[] for _ in 1:137], [Float64[], Float64[]], Function[],
+        ) == zeros(137)
         mean_positive = 2.0
         cv_positive = 0.5
         mean_signed = -0.2
