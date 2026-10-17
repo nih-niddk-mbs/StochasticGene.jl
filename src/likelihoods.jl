@@ -1328,6 +1328,16 @@ function ll_hmm_trace_recursive(
     end
 end
 
+"""
+    ll_hmm_trace(param, data, model; hmm_stack=:fast, ...)
+
+Evaluate the trace likelihood. The default `:fast` implementation is unchanged.
+Experimental `:batched` uses a likelihood-only, Float64 batched forward recursion
+for hierarchical traces sharing transition rates (`method[2] == true`). Other
+trace paths retain the reference forward recursion. It is an MH-only performance
+option, not an AD executor; emission probabilities are rebuilt each call.
+For fitting, opt in with `likelihood_executor=:batched`. Use `:fast` to revert.
+"""
 function ll_hmm_trace(
     param,
     data,

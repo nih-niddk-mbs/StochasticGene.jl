@@ -1,0 +1,32 @@
+Experimental batched likelihood benchmark, 2026-10-17
+====================================================
+Branch: perf/coupled-likelihood, based on c081d7c.
+Read-only inputs: 3Prime-hidden-multitarget-2026-10-16-restart,
+median fitted rates, all 137 paired traces.
+One Julia process; BLAS threads explicitly set to 1.
+Both paths warmed before one measured full likelihood evaluation each.
+These are preliminary single timings, not repeated benchmark statistics.
+
+Model                 Reference(s)  Batched(s)  Speed ratio
+H2-targets135-free-h   24.184109      2.484717     9.733
+H3-targets135-free-h  130.626400      5.261192    24.828
+
+Allocated bytes (not peak resident memory):
+H2 reference 1610373400; batched 1339206456
+H3 reference 3211284200; batched 2811126024
+
+Warmup maximum absolute per-trace likelihood discrepancy:
+H2: 4.547473508864641e-13
+H3: 5.684341886080801e-13
+
+Scope: batching and rolling forward buffers only. Emissions still recomputed
+each proposal. Transition construction, ODE solver, stationary distribution,
+priors, rate transforms, and the default :fast likelihood are unchanged.
+This is not a chain-convergence test or a Biowulf performance guarantee.
+
+Reproduce from this worktree:
+julia --project=. test/benchmark_hidden_likelihood.jl /Users/carsonc/OneDrive/Larson/nadya H2-targets135-free-h H3-targets135-free-h
+
+Opt in for the supported hierarchical shared-transition MH path with
+likelihood_executor=:batched in fit, or hmm_stack=:batched in loglikelihood.
+The default remains :fast. No emission cache is retained across calls.

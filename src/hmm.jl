@@ -837,7 +837,7 @@ end
 Emission matrix `b` for HMM forward: [`set_b`](@ref) on [`HMM_STACK_MH`](@ref), non-mutating [`set_b_ad`](@ref) on [`HMM_STACK_AD`](@ref) (Zygote).
 """
 function _set_b_emission(trace, d, hmm_stack::Symbol)
-    if hmm_stack === HMM_STACK_MH
+    if hmm_stack === HMM_STACK_MH || hmm_stack === :batched
         return set_b(trace, d)
     elseif hmm_stack === HMM_STACK_AD
         return _set_b_emission_ad(trace, d)
@@ -1466,12 +1466,14 @@ end
 # --- Parallel tracks: `HMM_STACK_MH` (MCMC) vs `HMM_STACK_AD` (Zygote); see `common.jl`. ---
 
 function _hmm_kolmogorov_fn(hmm_stack::Symbol)
+    hmm_stack === :batched && return kolmogorov_forward
     hmm_stack === HMM_STACK_MH && return kolmogorov_forward
     hmm_stack === HMM_STACK_AD && return kolmogorov_forward_ad
     throw(ArgumentError("hmm_stack must be HMM_STACK_MH or HMM_STACK_AD, got $(repr(hmm_stack))"))
 end
 
 function _hmm_stack_val(hmm_stack::Symbol)
+    hmm_stack === :batched && return Val(HMM_STACK_MH)
     hmm_stack === HMM_STACK_MH && return Val(HMM_STACK_MH)
     hmm_stack === HMM_STACK_AD && return Val(HMM_STACK_AD)
     throw(ArgumentError("hmm_stack must be HMM_STACK_MH or HMM_STACK_AD, got $(repr(hmm_stack))"))
@@ -2090,6 +2092,9 @@ end
 
 """
 function _ll_hmm(noiseparams::Vector, a, p0::Vector, reporter, traces; hmm_stack::Symbol=HMM_STACK_MH)
+    if hmm_stack === :batched
+        return _ll_hmm_batched(noiseparams, a, p0, reporter, traces)
+    end
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
     if hmm_stack === HMM_STACK_AD
@@ -2106,6 +2111,62 @@ function _ll_hmm(noiseparams::Vector, a, p0::Vector, reporter, traces; hmm_stack
         end
     end
     sum(logpredictions), logpredictions
+end
+
+"""
+    _forward_batched_loglik(a, p0, emissions)
+
+Experimental likelihood-only forward recursion. Each emission matrix has states
+in rows and frames in columns. Traces may have different lengths. Uses the same
+epsilon floor as `forward`; no transition approximation or precision change.
+"""
+function _forward_batched_loglik(a::Matrix{Float64}, p0, emissions)
+    n = size(a, 1)
+    k = length(emissions)
+    k == 0 && return Float64[]
+    lengths = [size(b, 2) for b in emissions]
+    all(>(0), lengths) || throw(ArgumentError("traces must contain at least one frame"))
+    all(b -> size(b, 1) == n, emissions) || throw(DimensionMismatch("emission state count"))
+    previous = zeros(n, k)
+    next = similar(previous)
+    ll = zeros(k)
+    for j in 1:k
+        @views previous[:, j] .= p0 .* emissions[j][:, 1]
+        c = 1 / max(sum(@view previous[:, j]), eps(Float64))
+        @views previous[:, j] .*= c
+        ll[j] = -log(c)
+    end
+    for t in 2:maximum(lengths)
+        mul!(next, transpose(a), previous)
+        for j in 1:k
+            t > lengths[j] && continue
+            @views next[:, j] .*= emissions[j][:, t]
+            c = 1 / max(sum(@view next[:, j]), eps(Float64))
+            @views next[:, j] .*= c
+            ll[j] -= log(c)
+        end
+        previous, next = next, previous
+    end
+    return ll
+end
+
+"""
+    _ll_hmm_batched(noiseparams, a, p0, reporter, traces; batchsize=16)
+
+Opt-in MH path (`hmm_stack=:batched`) for traces sharing a transition matrix.
+Bound emission storage by processing small batches. Emissions are rebuilt on
+every call so fitted noise cannot accidentally reuse stale probabilities.
+The default `:fast` path remains the reference implementation.
+"""
+function _ll_hmm_batched(noiseparams, a, p0, reporter, traces; batchsize::Int=16)
+    batchsize > 0 || throw(ArgumentError("batchsize must be positive"))
+    ll = zeros(length(traces))
+    for first in 1:batchsize:length(traces)
+        indices = first:min(first + batchsize - 1, length(traces))
+        emissions = [set_b(traces[i], set_d(noiseparams[i], reporter)) for i in indices]
+        ll[indices] = _forward_batched_loglik(a, p0, emissions)
+    end
+    return sum(ll), ll
 end
 
 function _ll_hmm_forced(noiseparams::Vector, a, p0::Vector, reporter, traces; hmm_stack::Symbol=HMM_STACK_MH)

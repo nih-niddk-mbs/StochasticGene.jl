@@ -1311,6 +1311,7 @@ Shared keys:
 - `parallel` (alias `parallelism`): `:single`, `:threaded`, `:distributed`
 - `gradient`: method-specific (`:none`/`:finite`/`:ForwardDiff`/`:Zygote`, with `:forward` accepted as `:ForwardDiff`)
 - `likelihood_executor` (alias `hmm_stack`): `:fast` ([`HMM_STACK_MH`](@ref)) vs `:zygote` ([`HMM_STACK_AD`](@ref)) for modalities with dual likelihood implementations (trace HMM today; extensible).
+- Experimental MH option `likelihood_executor=:batched`: batch the forward likelihood for hierarchical traces with shared transition rates; see [`ll_hmm_trace`](@ref). Default remains `:fast`.
 - `gradient_checkpoint_length` (alias `hmm_checkpoint_steps`): optional positive `Int` frame chunk size for reverse-mode checkpointing on long time-series likelihoods (Zygote); `nothing` leaves globals unchanged except where inference wrappers set them.
 - NUTS: `progress` / `nuts_progress` (default **`true`**): AdvancedHMC ProgressMeter bar for single-chain runs; set **`nuts_progress=false`** when you prefer plain logs only.
 """
