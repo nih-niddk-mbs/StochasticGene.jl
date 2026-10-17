@@ -24,6 +24,15 @@ each proposal. Transition construction, ODE solver, stationary distribution,
 priors, rate transforms, and the default :fast likelihood are unchanged.
 This is not a chain-convergence test or a Biowulf performance guarantee.
 
+Pre-merge integration validation:
+Two distributed H2 chains, two proposals per chain, all 137 paired traces,
+using fit(...; likelihood_executor=:batched). All 565 assertions passed,
+including four output rows, preservation of fixed rates and per-trace noise,
+normal info/measures/parameter-statistics files, and unchanged source rates.
+Diagnostic NaNs are expected for this deliberately tiny smoke test.
+Run explicitly with:
+julia --project=. -p 2 test/batched_fit_smoke.jl /Users/carsonc/OneDrive/Larson/nadya
+
 Reproduce from this worktree:
 julia --project=. test/benchmark_hidden_likelihood.jl /Users/carsonc/OneDrive/Larson/nadya H2-targets135-free-h H3-targets135-free-h
 

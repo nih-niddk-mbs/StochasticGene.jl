@@ -6,7 +6,8 @@
 # computations called from this file live in `src/test.jl` as exported `test_*` helpers,
 # so each check can also be rerun interactively (e.g. `using StochasticGene; test_fit_simrna()`).
 #
-# Standalone files under `test/` are developer-focused and are not included here.
+# Most standalone files under `test/` are developer-focused. The lightweight
+# batched forward regression checks are also run by this suite.
 #
 # Default `Pkg.test()` runs AD checks and other fast tests only. Long MCMC / fit
 # integration tests are gated: set environment variable
@@ -20,6 +21,8 @@ using CSV
 using DataFrames
 using StochasticGene
 using Test
+
+include("batched_forward_tests.jl")
 
 const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
 
