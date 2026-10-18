@@ -308,6 +308,15 @@ Run the Metropolis-Hastings MCMC algorithm for a given model and data.
 - `waic`: Watanabe-Akaike Information Criterion tuple
 """
 function metropolis_hastings(data, model, options)
+    if options.likelihood_executor === :batched
+        return with_batched_hmm_cache() do
+            _metropolis_hastings_chain(data, model, options)
+        end
+    end
+    _metropolis_hastings_chain(data, model, options)
+end
+
+function _metropolis_hastings_chain(data, model, options)
     proposalcv = effective_initial_proposalcv(model.proposal, model, options)
     param, d = initial_proposal(model, proposalcv)
     param, d = jitter_initial_proposal(param, d, proposalcv, model, options)

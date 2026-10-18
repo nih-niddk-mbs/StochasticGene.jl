@@ -38,4 +38,29 @@ julia --project=. test/benchmark_hidden_likelihood.jl /Users/carsonc/OneDrive/La
 
 Opt in for the supported hierarchical shared-transition MH path with
 likelihood_executor=:batched in fit, or hmm_stack=:batched in loglikelihood.
-The default remains :fast. No emission cache is retained across calls.
+The default remains :fast. The initial implementation retained no emission
+cache across calls; the follow-up below adds a chain-scoped cache.
+
+Cache follow-up on perf/coupled-likelihood, based on c9bae8a:
+Same inputs and single-threaded BLAS. Three warmed evaluations with changed
+sampling parameters, compared to the uncached batched implementation.
+
+Model                 Uncached(s)      Cached(s)        Speed ratio
+H2-targets135-free-h   2.347-2.362      2.149-2.163      1.085-1.097
+H3-targets135-free-h   5.023-5.067      4.753-4.804      1.046-1.065
+
+Allocated bytes per call: H2 ~1.34 GB -> 1.06 GB; H3 ~2.82 GB -> 2.39 GB.
+Retained cache: H2 4623880 bytes; H3 4780552 bytes.
+Joint states: H2 1152; H3 1728. Both use 16 unique emission combinations.
+Maximum per-trace likelihood discrepancy: 0.0 for all six comparisons.
+Cold cached evaluations: H2 2.349 s; H3 4.889 s.
+These are incremental improvements over batching, not over the scalar path.
+
+Cache validation: 14 forward-reference checks, 28 cache invalidation/ownership
+checks, and all 405 standard suite checks passed. Two distributed H2 chains
+with two proposals each passed all 565 end-to-end output checks, including
+unchanged fixed rates and per-trace noise. Outputs were written to a temporary
+directory; production results were read-only. This is not convergence testing.
+
+Reproduce:
+julia --project=. test/benchmark_batched_cache.jl /Users/carsonc/OneDrive/Larson/nadya H2-targets135-free-h H3-targets135-free-h

@@ -27,6 +27,41 @@ fit(;
 )
 ```
 
+## Batched Coupled Trace Likelihood
+
+For supported hierarchical coupled trace models sharing a transition matrix,
+`fit(...; likelihood_executor=:batched)` batches the forward recursion over
+traces. This is separate from distributed chains and from Swarm job bundling.
+The default executor remains `:fast`.
+
+With several chains on separate workers, use one BLAS thread per worker:
+
+```julia
+@everywhere using StochasticGene, LinearAlgebra
+@everywhere LinearAlgebra.BLAS.set_num_threads(1)
+```
+
+The batched MH path reuses forward buffers within each chain. For coupled
+reporters using `prob_Gaussian`, it also caches emission probabilities for
+distinct reporter-count combinations rather than every joint state. Changes
+to noise parameters, observations, or reporter definitions invalidate the
+affected entries. Custom emission functions are evaluated without this
+emission cache. Each chain owns its cache, released at the end of the chain;
+the transition solver and statistical model are unchanged.
+
+For repeated direct likelihood calls, the same cache can be scoped explicitly:
+
+```julia
+StochasticGene.with_batched_hmm_cache() do
+    loglikelihood(param, data, model; hmm_stack=:batched)
+    loglikelihood(next_param, data, model; hmm_stack=:batched)
+end
+```
+
+Without this scope, direct calls still work but do not retain a cache across
+evaluations. Performance depends on the model and hardware; see
+`test/benchmark_batched_cache.jl` for a comparison against uncached batching.
+
 ## Many Genes
 
 For scRNA/RNA histogram sweeps, generate one shared fitscript and one command

@@ -4,7 +4,7 @@ const SG = StochasticGene
 BLAS.set_num_threads(1)
 include("batched_forward_tests.jl")
 
-function benchmark_hidden(key, folder, root)
+function load_hidden_benchmark(key, folder, root)
     s = SG.read_run_spec(joinpath(folder, "info_$(key).jld2"))
     rates = SG.readrates(joinpath(folder, "rates_$(key).txt"), SG.get_row("median"))
     data = SG.load_data_trace(joinpath(root, s[:datapath]), s[:label], s[:gene],
@@ -13,6 +13,11 @@ function benchmark_hidden(key, folder, root)
         s[:transitions], s[:G], s[:R], s[:S], s[:insertstep], s[:splicetype],
         s[:nalleles], s[:priorcv], s[:onstates], s[:decayrate], 0.02, s[:probfn],
         s[:noisepriors], s[:method], s[:hierarchical], s[:coupling], s[:grid], s[:zeromedian])
+    return data, model
+end
+
+function benchmark_hidden(key, folder, root)
+    data, model = load_hidden_benchmark(key, folder, root)
     p = SG.get_param(model)
     println("MODEL ", key, " traces=", length(data.trace[1]), " params=", length(p)); flush(stdout)
     # Warm both dispatch paths before the measured likelihood evaluation.
@@ -39,8 +44,10 @@ function benchmark_hidden(key, folder, root)
     println("Perturbed-parameter agreement passed: ", key); flush(stdout)
 end
 
-root = ARGS[1]
-folder = joinpath(root, "results", "3Prime-hidden-multitarget-2026-10-16-restart")
-for key in ARGS[2:end]
-    benchmark_hidden(key, folder, root)
+if abspath(PROGRAM_FILE) == @__FILE__
+    root = ARGS[1]
+    folder = joinpath(root, "results", "3Prime-hidden-multitarget-2026-10-16-restart")
+    for key in ARGS[2:end]
+        benchmark_hidden(key, folder, root)
+    end
 end

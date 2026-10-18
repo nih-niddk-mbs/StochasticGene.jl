@@ -1335,7 +1335,10 @@ Evaluate the trace likelihood. The default `:fast` implementation is unchanged.
 Experimental `:batched` uses a likelihood-only, Float64 batched forward recursion
 for hierarchical traces sharing transition rates (`method[2] == true`). Other
 trace paths retain the reference forward recursion. It is an MH-only performance
-option, not an AD executor; emission probabilities are rebuilt each call.
+option, not an AD executor. MH scopes a compact Gaussian emission cache and
+reusable forward buffers to each chain; changed noise/data/reporters invalidate
+cached emissions. Other emission functions remain uncached. Direct evaluations
+can reuse a cache by enclosing them in `with_batched_hmm_cache() do ... end`.
 For fitting, opt in with `likelihood_executor=:batched`. Use `:fast` to revert.
 """
 function ll_hmm_trace(
