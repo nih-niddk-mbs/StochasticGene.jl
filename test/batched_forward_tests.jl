@@ -20,6 +20,50 @@ using Test, Random, LinearAlgebra, StochasticGene
     @test_throws ArgumentError StochasticGene._forward_batched_loglik(a, p0, [zeros(2, 0)])
 end
 
+@testset "Budgeted batch tuning" begin
+    SG = StochasticGene
+    cache = SG.BatchedHMMCache()
+    reference = (3.0, [1.0, 2.0])
+    @test SG._tune_hmm_batchsize!(() -> reference, cache, reference).status == :unsupported
+    cache.workspace.previous = zeros(2, 2)
+    clock_value = Ref(0.0)
+    clock() = clock_value[]
+    evaluate() = begin
+        clock_value[] += cache.batchsize == 32 ? 1.0 : 2.0
+        reference
+    end
+    report = SG._tune_hmm_batchsize!(evaluate, cache, reference; seconds=100.0, clock=clock)
+    @test report.batchsize == 32
+    @test report.rounds == 3
+    @test report.status == :selected
+    cache.batchsize = 16
+    report = SG._tune_hmm_batchsize!(evaluate, cache, reference; seconds=1.0, clock=clock)
+    @test report.status == :budget_exhausted
+    @test cache.batchsize == 16
+    @test_throws ArgumentError SG._tune_hmm_batchsize!(() -> (4.0, [2.0, 2.0]), cache, reference)
+    @test cache.batchsize == 16
+    @test_throws ErrorException SG._tune_hmm_batchsize!(() -> error("failure"), cache, reference)
+    @test cache.batchsize == 16
+    @test_throws ArgumentError SG.MHOptions(2, 0, 10.0, 1.0; hmm_batchsize=0)
+    @test_throws ArgumentError SG.MHOptions(2, 0, 10.0, 1.0; tune_hmm_batchsize=true)
+    @test_throws ArgumentError SG.MHOptions(2, 0, 10.0, 1.0; hmm_batch_tuning_seconds=Inf)
+    options = SG.load_options(Dict{Symbol,Any}(:likelihood_executor => :batched,
+        :tune_hmm_batchsize => true, :hmm_batchsize => 32, :hmm_batch_tuning_seconds => 12.0))
+    @test options.tune_hmm_batchsize
+    @test options.hmm_batchsize == 32
+    @test options.hmm_batch_tuning_seconds == 12.0
+    mktempdir() do folder
+        spec = SG.fit_default_spec()
+        merge!(spec, Dict(:likelihood_executor => :batched, :tune_hmm_batchsize => true,
+            :hmm_batchsize => 32, :hmm_batch_tuning_seconds => 12.0))
+        path = SG.write_fitfile_full(joinpath(folder, "fit.jl"), spec)
+        script = read(path, String)
+        @test occursin("tune_hmm_batchsize=true", script)
+        @test occursin("hmm_batchsize=32", script)
+        @test occursin("hmm_batch_tuning_seconds=12.0", script)
+    end
+end
+
 @testset "Batched emission cache invalidation and ownership" begin
     SG = StochasticGene
     rng = MersenneTwister(922)

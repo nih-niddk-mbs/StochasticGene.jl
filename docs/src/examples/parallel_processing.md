@@ -62,7 +62,40 @@ Without this scope, direct calls still work but do not retain a cache across
 evaluations. Performance depends on the model and hardware; see
 `test/benchmark_batched_cache.jl` for a comparison against uncached batching.
 
-### Experimental Startup Tuning
+### Optional Startup Tuning
+
+Add these keywords to an existing MH `fit` call:
+
+```julia
+likelihood_executor = :batched,
+hmm_batchsize = 16,
+tune_hmm_batchsize = true,
+hmm_batch_tuning_seconds = 120.0,
+```
+
+Each chain tunes independently at its initialized parameter vector, even with
+`warmupsteps=0`. It warms candidate sizes 8, 16, 32, 64 and the requested initial
+size, then collects up to three balanced timing rounds in alternating order.
+At least two complete rounds are required. The smallest size within 3% of the
+fastest median is selected and frozen before sampler warmup/sampling.
+The chosen size, elapsed time, completed rounds, and status are printed in the
+worker log. Requested settings are retained in the run spec and generated
+fitscripts; the per-chain selected sizes are reported in logs, not the run spec.
+
+Tuning is capped at the smaller of `hmm_batch_tuning_seconds` and 10% of
+`maxtime`; its elapsed time is deducted from the remaining MH budget. This is a
+soft deadline because an in-flight likelihood evaluation cannot be interrupted.
+With too little time, the original size is kept. Unsupported paths skip tuning.
+Likelihood disagreement aborts the fit rather than silently choosing a size.
+No sampler random numbers are used, and no proposal adaptation is introduced.
+
+The default is `tune_hmm_batchsize=false`. Set `hmm_batchsize` explicitly to
+reuse a known choice without tuning. Tuning requires `likelihood_executor=:batched`.
+Workers tune concurrently without a synchronization barrier, so noisy timing
+under contention can select different sizes across chains. Benchmark on the
+intended hardware; a Mac result is not a Biowulf performance guarantee.
+
+### Standalone Experiment
 
 The performance branch also provides a read-only batch-size experiment:
 
@@ -78,8 +111,8 @@ compares the selection with size 16 on three fresh parameter proposals,
 checking both total and per-trace likelihood agreement. It runs one process
 with one BLAS thread and does not sample or modify source results.
 
-This is computational tuning, not MCMC warmup or proposal adaptation. Normal
-fits still use size 16 and do not run this search automatically. A selection
+This is computational tuning, not MCMC warmup or proposal adaptation. Default
+fits still use size 16 and do not tune unless explicitly enabled. A selection
 on one machine is not a recommendation for a different CPU or for concurrent
 chains; benchmark under the intended workload before changing production runs.
 

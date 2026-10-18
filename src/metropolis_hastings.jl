@@ -310,6 +310,7 @@ Run the Metropolis-Hastings MCMC algorithm for a given model and data.
 function metropolis_hastings(data, model, options)
     if options.likelihood_executor === :batched
         return with_batched_hmm_cache() do
+            task_local_storage(:stochasticgene_batched_hmm_cache).batchsize = options.hmm_batchsize
             _metropolis_hastings_chain(data, model, options)
         end
     end
@@ -323,6 +324,15 @@ function _metropolis_hastings_chain(data, model, options)
     stack = options.likelihood_executor
     ll, logpredictions = _mh_loglikelihood(param, data, model, options)
     maxtime = options.maxtime
+    if options.tune_hmm_batchsize
+        cache = task_local_storage(:stochasticgene_batched_hmm_cache)
+        report = _tune_hmm_batchsize!(
+            () -> _mh_loglikelihood(param, data, model, options),
+            cache, (ll, logpredictions);
+            seconds=min(options.hmm_batch_tuning_seconds, 0.1 * options.maxtime))
+        maxtime = max(0.0, maxtime - report.elapsed)
+        @info "HMM batch tuning" batchsize=report.batchsize elapsed=report.elapsed rounds=report.rounds status=report.status
+    end
     totalsteps = options.warmupsteps + options.samplesteps
     parml = param
     llml = ll

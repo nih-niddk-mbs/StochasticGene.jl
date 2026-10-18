@@ -2145,6 +2145,71 @@ function with_batched_hmm_cache(f::Function)
 end
 
 """
+    _tune_hmm_batchsize!(evaluate, cache, reference; seconds=120.0)
+
+Time unchanged-parameter likelihood evaluations before MH sampling. Warm each
+candidate, then use only complete, balanced timing rounds (up to three).
+Choose the smallest size within 3% of the best median. No sampler RNG is used.
+The deadline is soft: an in-flight likelihood evaluation cannot be interrupted.
+On incomplete warmup/comparison keep the requested size; on disagreement throw
+and restore it. An unused batched workspace indicates an unsupported path.
+"""
+function _tune_hmm_batchsize!(evaluate, cache, reference; seconds=120.0,
+    candidates=(8, 16, 32, 64), clock=() -> time_ns() / 1e9)
+    isfinite(seconds) && seconds > 0 || throw(ArgumentError("tuning seconds must be finite and positive"))
+    original = cache.batchsize
+    sizes = sort!(unique!(Int[original, candidates...]))
+    all(>(0), sizes) || throw(ArgumentError("batch sizes must be positive"))
+    start = clock()
+    elapsed() = clock() - start
+    finish(status, rounds) = (batchsize=cache.batchsize, elapsed=elapsed(), rounds=rounds, status=status)
+    isempty(cache.workspace.previous) && return finish(:unsupported, 0)
+    times = Dict(size => Float64[] for size in sizes)
+    rounds = 0
+    function checked_evaluation(size)
+        cache.batchsize = size
+        t = clock()
+        value = evaluate()
+        duration = clock() - t
+        isapprox(value[1], reference[1]; atol=1e-7, rtol=1e-11) &&
+            isapprox(value[2], reference[2]; atol=1e-8, rtol=1e-11) ||
+            throw(ArgumentError("batch-size tuning changed the likelihood at batch size $size"))
+        duration
+    end
+    try
+        for size in sizes
+            if elapsed() >= seconds
+                cache.batchsize = original
+                return finish(:budget_exhausted, 0)
+            end
+            checked_evaluation(size)
+        end
+        for round in 1:3
+            trial = Dict{Int,Float64}()
+            for size in (isodd(round) ? sizes : reverse(sizes))
+                elapsed() >= seconds && break
+                trial[size] = checked_evaluation(size)
+            end
+            length(trial) == length(sizes) || break
+            for size in sizes
+                push!(times[size], trial[size])
+            end
+            rounds += 1
+        end
+        if rounds < 2
+            cache.batchsize = original
+            return finish(:budget_exhausted, rounds)
+        end
+        best = minimum(median(times[size]) for size in sizes)
+        cache.batchsize = first(size for size in sizes if median(times[size]) <= 1.03 * best)
+        return finish(:selected, rounds)
+    catch
+        cache.batchsize = original
+        rethrow()
+    end
+end
+
+"""
     _forward_batched_loglik(a, p0, emissions; state_map=nothing, workspace=...)
 
 Likelihood-only forward recursion, with reusable two-frame buffers. Optional

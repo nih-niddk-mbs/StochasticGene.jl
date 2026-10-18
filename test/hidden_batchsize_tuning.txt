@@ -31,3 +31,21 @@ chains and Biowulf hardware require their own measurements. Larger sizes than
 
 Reproduce from this branch:
 julia --project=. test/tune_hidden_batchsize.jl /Users/carsonc/OneDrive/Larson/nadya H2-targets135-free-h H3-targets135-free-h
+
+Integrated optional tuner validation
+------------------------------------
+fit now accepts hmm_batchsize=16, tune_hmm_batchsize=false, and
+hmm_batch_tuning_seconds=120.0. Opt-in is required. At least two complete rounds
+are required; up to three rounds are timed in alternating candidate order.
+The soft budget is capped at 10% of maxtime and elapsed tuning time is deducted
+from MH time. Initial reference likelihood evaluation is outside this tuner.
+
+Two distributed H2 chains, all 137 paired traces, two proposals each:
+both selected 64 after 3 rounds; elapsed 37.868 and 38.308 seconds.
+All 565 original end-to-end output checks passed. The saved TOML contains the
+requested batch size, enable flag, and budget. Source results were unchanged.
+The 405 standard checks passed, and final focused checks passed 14 forward,
+34 cache, and 19 tuning/options/script-generation assertions.
+
+Reproduce the opt-in distributed test (writes only temporary output):
+STOCHASTICGENE_TEST_BATCH_TUNING=1 julia --project=. -p 2 test/batched_fit_smoke.jl /Users/carsonc/OneDrive/Larson/nadya
