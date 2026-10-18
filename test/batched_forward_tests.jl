@@ -44,6 +44,14 @@ end
     check()
     @test all(cache.emissions[i] === stored[i] for i in eachindex(stored))
     @test cache.workspace.previous === buffer
+    for size in (1, 8, 32, 64)
+        cache.batchsize = size
+        check()
+    end
+    cache.batchsize = 0
+    @test_throws ArgumentError SG._ll_hmm_batched(noise, a, p0, reporter, traces; cache=cache)
+    @test SG._ll_hmm_batched(noise, a, p0, reporter, traces; cache=cache, batchsize=16)[2] ≈ original[2]
+    cache.batchsize = 16
     noise[2][1][2] *= 1.2
     check()
     @test cache.emissions[1] === stored[1]

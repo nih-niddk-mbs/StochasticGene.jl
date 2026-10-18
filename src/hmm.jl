@@ -2127,9 +2127,10 @@ mutable struct BatchedHMMCache
     noise::Vector{Any}
     emissions::Vector{Matrix{Float64}}
     workspace::BatchedForwardWorkspace
+    batchsize::Int
 end
 BatchedHMMCache() = BatchedHMMCache(nothing, Int[], Int[], Any[], Any[],
-    Matrix{Float64}[], BatchedForwardWorkspace())
+    Matrix{Float64}[], BatchedForwardWorkspace(), 16)
 
 """
     with_batched_hmm_cache(f)
@@ -2205,9 +2206,12 @@ invalidate stale entries, including in-place changes and rejected proposals.
 Other emission functions use the original uncached calculation. Mutable hidden
 state inside a user emission function is therefore never cached.
 The default `:fast` path remains the reference implementation.
+Batch size defaults to the active cache's setting (initially 16); an explicit
+`batchsize` overrides it. No automatic tuning is performed by production fits.
 """
-function _ll_hmm_batched(noiseparams, a, p0, reporter, traces; batchsize::Int=16,
-    cache=get(task_local_storage(), :stochasticgene_batched_hmm_cache, nothing))
+function _ll_hmm_batched(noiseparams, a, p0, reporter, traces;
+    cache=get(task_local_storage(), :stochasticgene_batched_hmm_cache, nothing),
+    batchsize::Int=cache === nothing ? 16 : cache.batchsize)
     batchsize > 0 || throw(ArgumentError("batchsize must be positive"))
     cache === nothing && (cache = BatchedHMMCache())
     compact = reporter isa Vector{HMMReporter} && !isempty(reporter) &&

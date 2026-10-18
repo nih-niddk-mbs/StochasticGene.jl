@@ -62,6 +62,27 @@ Without this scope, direct calls still work but do not retain a cache across
 evaluations. Performance depends on the model and hardware; see
 `test/benchmark_batched_cache.jl` for a comparison against uncached batching.
 
+### Experimental Startup Tuning
+
+The performance branch also provides a read-only batch-size experiment:
+
+```bash
+julia --project=. test/tune_hidden_batchsize.jl /path/to/nadya H2-targets135-free-h H3-targets135-free-h
+```
+
+This script reads the hidden-model fits from
+`results/3Prime-hidden-multitarget-2026-10-16-restart` under the supplied root.
+It warms sizes 8, 16, 32, and 64, compares three timings per size in randomized
+order, and selects the smallest size within 3% of the fastest median. It then
+compares the selection with size 16 on three fresh parameter proposals,
+checking both total and per-trace likelihood agreement. It runs one process
+with one BLAS thread and does not sample or modify source results.
+
+This is computational tuning, not MCMC warmup or proposal adaptation. Normal
+fits still use size 16 and do not run this search automatically. A selection
+on one machine is not a recommendation for a different CPU or for concurrent
+chains; benchmark under the intended workload before changing production runs.
+
 ## Many Genes
 
 For scRNA/RNA histogram sweeps, generate one shared fitscript and one command

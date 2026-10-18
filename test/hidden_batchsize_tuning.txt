@@ -1,0 +1,33 @@
+Read-only startup batch-size tuning, Mac, 2026-10-17
+===================================================
+Performance branch, with compact Gaussian emission caching enabled.
+One Julia process, one BLAS thread; all 137 paired traces.
+Model inputs: results/3Prime-hidden-multitarget-2026-10-16-restart.
+No sampling or writes to production results.
+
+Median full-likelihood time (seconds), three warmed repetitions:
+Batch size       H2-targets135-free-h     H3-targets135-free-h
+8                2.615325                5.896302
+16               2.192563                4.930323
+32               2.005910                4.494050
+64               1.930845                4.290177
+
+Both selected 64, using the smallest candidate within 3% of the fastest median.
+Selection timing cost: H2 54.30 s, H3 121.27 s. These costs include interleaved
+buffer warmups and GC, but exclude initial loading/compilation, initial candidate
+warmups, and subsequent holdout validation. This is not yet a budgeted production
+tuner and does not alter the normal fit default of 16.
+
+Holdout speed ratios (default 16 / selected 64), three fresh proposals:
+H2: 1.1342, 1.1361, 1.1437
+H3: 1.1402, 1.1458, 1.1593
+Maximum per-trace likelihood difference: 0.0 in every holdout comparison.
+All total/per-trace agreement assertions passed during tuning and validation.
+The included regression checks passed: 14 forward tests and 34 cache tests.
+
+This chooses among tested sizes on this Mac, not a universal optimum. Concurrent
+chains and Biowulf hardware require their own measurements. Larger sizes than
+64 were not tested.
+
+Reproduce from this branch:
+julia --project=. test/tune_hidden_batchsize.jl /Users/carsonc/OneDrive/Larson/nadya H2-targets135-free-h H3-targets135-free-h
