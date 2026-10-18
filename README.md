@@ -1,9 +1,11 @@
 # StochasticGene.jl
 
-Current release: **2.0.6**. See the [2.0 release notes](docs/src/release_notes.md)
+Current version: **2.0.7**. See the [2.0 release notes](docs/src/release_notes.md)
 for highlights and migration guidance.
 
-**Version 2.0.6**
+**Version 2.0.7** fixes hierarchical fits with no fitted individual parameters
+(including fixed per-trace noise) and includes an opt-in batched trace likelihood.
+See [parallel processing](docs/src/examples/parallel_processing.md) for usage.
 
 [![Documents](https://img.shields.io/badge/Documents-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.7
+
+- Fixed a crash in hierarchical fits with no fitted individual parameters,
+  including coupled models retaining fixed per-trace noise. The empty
+  hierarchical conditional log density now correctly contributes zero.
+- Added the opt-in `likelihood_executor=:batched` MH executor for supported
+  hierarchical trace models sharing a transition matrix. It batches forward
+  recursions across traces and uses two-frame buffers. The default remains
+  `:fast`; the model, priors, and transition solver are unchanged.
+- Added scalar-versus-batched regression checks and distributed fit validation.
+
+The newer per-chain emission caching and automatic batch-size tuning remain
+on the performance branch and are not included in this release.
+
 ## 2.0.6
 
 Correctness patch for the theoretical trace-centering postprocessor:

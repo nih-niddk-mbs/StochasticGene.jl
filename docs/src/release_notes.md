@@ -1,5 +1,22 @@
 # Version 2.0
 
+## Version 2.0.7
+
+Version 2.0.7 fixes a crash when a hierarchical model has no fitted individual
+parameters, such as a coupled fit retaining fixed per-trace noise. Summing the
+empty hierarchical conditional log density now returns zero. Existing rate
+files and model settings do not need to be changed for this fix.
+
+This version also includes the opt-in `likelihood_executor=:batched` MH path
+for supported hierarchical trace models sharing a transition matrix. It
+batches the forward recursion across traces using two-frame buffers, without
+changing the statistical model, priors, or transition solver. The default
+remains `:fast`. See [Parallel and batch processing](examples/parallel_processing.md)
+for configuration and validation details.
+
+Per-chain emission caching and automatic batch-size tuning are separate,
+unmerged performance work and are **not available in 2.0.7**.
+
 ## Version 2.0.6
 
 Version 2.0.6 is a correctness patch for the finite-trace theoretical
