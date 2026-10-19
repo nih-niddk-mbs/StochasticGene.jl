@@ -1233,6 +1233,9 @@ Options for Metropolis-Hastings MCMC.
 - `init_jitter_noise::Float64`: Initial jitter for noise parameters. `0.0` uses `init_jitter`.
 - `proposal_cv_rates::Float64`: Optional scalar proposal CV for rate parameters. `0.0` uses `propcv`.
 - `proposal_cv_noise::Float64`: Optional scalar proposal CV for noise parameters. `0.0` uses `proposal_cv_rates` / `propcv`.
+- `hmm_batchsize::Int`: Initial/manual trace batch size for `:batched` (default 16).
+- `tune_hmm_batchsize::Bool`: Opt-in per-chain computational tuning before MH warmup/sampling.
+- `hmm_batch_tuning_seconds::Float64`: Soft tuning budget, further capped at 10% of `maxtime`.
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
 - `gradient::Symbol`: Gradient type (:none, :finite, :ForwardDiff, :Zygote)
@@ -1261,6 +1264,9 @@ struct MHOptions <: Options
     gradient::Symbol
     likelihood_executor::Symbol
     gradient_checkpoint_length::Union{Nothing,Int}
+    hmm_batchsize::Int
+    tune_hmm_batchsize::Bool
+    hmm_batch_tuning_seconds::Float64
 end
 
 function MHOptions(
@@ -1275,7 +1281,15 @@ function MHOptions(
     device::Symbol=:cpu, parallel::Symbol=:single, gradient::Symbol=:none,
     likelihood_executor::Symbol=HMM_STACK_MH,
     gradient_checkpoint_length::Union{Nothing,Integer}=nothing,
+    hmm_batchsize::Integer=16,
+    tune_hmm_batchsize::Bool=false,
+    hmm_batch_tuning_seconds::Real=120.0,
 )
+    hmm_batchsize > 0 || throw(ArgumentError("hmm_batchsize must be positive"))
+    isfinite(hmm_batch_tuning_seconds) && hmm_batch_tuning_seconds > 0 ||
+        throw(ArgumentError("hmm_batch_tuning_seconds must be finite and positive"))
+    !tune_hmm_batchsize || likelihood_executor === :batched ||
+        throw(ArgumentError("tune_hmm_batchsize requires likelihood_executor=:batched"))
     samplesteps > 0 || throw(ArgumentError("samplesteps must be positive, got $(repr(samplesteps))"))
     warmupsteps >= 0 || throw(ArgumentError("warmupsteps must be nonnegative, got $(repr(warmupsteps))"))
     maxtime > 0 || throw(ArgumentError("maxtime must be positive, got $(repr(maxtime))"))
@@ -1301,6 +1315,7 @@ function MHOptions(
         Int64(samplesteps), Int64(warmupsteps), stride, Float64(maxtime), Float64(temp),
         merge_mem, jitter, jitter_individual, jitter_noise, pcv_rates, pcv_noise,
         device, parallel, gradient, likelihood_executor, gck,
+        Int(hmm_batchsize), tune_hmm_batchsize, Float64(hmm_batch_tuning_seconds),
     )
 end
 

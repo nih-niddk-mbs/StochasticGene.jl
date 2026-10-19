@@ -80,6 +80,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `samplesteps::Int=1000000`: MH — posterior samples to collect; ADVI — maps to `maxiter` unless `maxiter` is set explicitly. Ignored by NUTS; use `n_samples` for NUTS.
 - `sample_stride::Int=1`: MH only — store every `sample_stride`-th posterior sample from the `samplesteps` total MH steps. Aliases: `samplestep`, `thin`, `thin_interval`, `thinning`, `sample_interval`, `sample_every`.
+- `hmm_batchsize=16`, `tune_hmm_batchsize=false`, `hmm_batch_tuning_seconds=120.0`: optional per-chain startup batch tuning for `likelihood_executor=:batched`; independent of sampler warmup. The soft tuning budget is capped at 10% of `maxtime` and deducted from the remaining MH time. See [`load_options`](@ref).
 - `init_jitter::Real=0.0`: MH only — add per-chain Gaussian jitter in sampling coordinates before the initial likelihood evaluation. `init_jitter_individual` overrides this for hierarchical individual-level parameters, and `init_jitter_noise` overrides it for fitted noise parameters.
 - `merge_max_memory`: MH multi-chain merge/statistics memory budget in bytes. Alias `merge_max_gb` accepts GiB.
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
@@ -214,6 +215,9 @@ const _FIT_DEFAULTS = (
     samplesteps=1000000,
     warmupsteps=0,
     sample_stride=1,
+    hmm_batchsize=16,
+    tune_hmm_batchsize=false,
+    hmm_batch_tuning_seconds=120.0,
     init_jitter=0.0,
     init_jitter_individual=0.0,
     init_jitter_noise=0.0,
@@ -1024,6 +1028,7 @@ const _MAKE_STRUCTURES_OPTION_KW = (
     :time_limit, :advi_time_limit, :σ_floor, :advi_σ_floor, :init_s_raw, :advi_init_s_raw,
     :advi_verbose, :advi_n_mc, :zygote_trace,
     :likelihood_executor, :gradient_checkpoint_length, :hmm_stack, :hmm_checkpoint_steps,
+    :hmm_batchsize, :tune_hmm_batchsize, :hmm_batch_tuning_seconds,
     :init_jitter, :init_jitter_individual, :init_jitter_noise,
     :propcv_rate, :propcv_noise, :proposal_cv_rates, :proposal_cv_noise,
     :propcv_levels, :proposal_cv_levels, :shared_parameters, :recursive_hierarchy,
@@ -1312,6 +1317,8 @@ Shared keys:
 - `gradient`: method-specific (`:none`/`:finite`/`:ForwardDiff`/`:Zygote`, with `:forward` accepted as `:ForwardDiff`)
 - `likelihood_executor` (alias `hmm_stack`): `:fast` ([`HMM_STACK_MH`](@ref)) vs `:zygote` ([`HMM_STACK_AD`](@ref)) for modalities with dual likelihood implementations (trace HMM today; extensible).
 - Experimental MH option `likelihood_executor=:batched`: batch the forward likelihood for hierarchical traces with shared transition rates; see [`ll_hmm_trace`](@ref). Default remains `:fast`.
+- `hmm_batchsize=16`: manual/initial batch size. With `tune_hmm_batchsize=true`, each batched MH chain tunes before sampling, even when `warmupsteps=0`.
+- `hmm_batch_tuning_seconds=120.0`: soft computational tuning budget, capped at 10% of `maxtime` and deducted from the remaining MH time. An in-flight evaluation can overrun the budget. No proposal adaptation is added.
 - `gradient_checkpoint_length` (alias `hmm_checkpoint_steps`): optional positive `Int` frame chunk size for reverse-mode checkpointing on long time-series likelihoods (Zygote); `nothing` leaves globals unchanged except where inference wrappers set them.
 - NUTS: `progress` / `nuts_progress` (default **`true`**): AdvancedHMC ProgressMeter bar for single-chain runs; set **`nuts_progress=false`** when you prefer plain logs only.
 """
@@ -1416,6 +1423,9 @@ function load_options(run0::AbstractDict)
             device=device, parallel=parallel, gradient=gh,
             likelihood_executor=lik_mh,
             gradient_checkpoint_length=gck,
+            hmm_batchsize=get(run, :hmm_batchsize, 16),
+            tune_hmm_batchsize=get(run, :tune_hmm_batchsize, false),
+            hmm_batch_tuning_seconds=get(run, :hmm_batch_tuning_seconds, 120.0),
         )
     elseif inference_method == INFERENCE_NUTS || inference_method == :nuts
         nuts_defaults = NUTSOptions()
@@ -5205,6 +5215,10 @@ function print_inference_options_info(options::MHOptions)
     println("  init_jitter: ", options.init_jitter, ", init_jitter_individual: ", options.init_jitter_individual, ", init_jitter_noise: ", options.init_jitter_noise)
     println("  proposal_cv_rates: ", options.proposal_cv_rates, ", proposal_cv_noise: ", options.proposal_cv_noise)
     println("  merge_max_memory: ", round(options.merge_max_memory / 1024^3; digits=2), " GiB")
+    if options.likelihood_executor === :batched
+        println("  hmm_batchsize: ", options.hmm_batchsize, ", tune_hmm_batchsize: ", options.tune_hmm_batchsize,
+            ", hmm_batch_tuning_seconds: ", options.hmm_batch_tuning_seconds)
+    end
     println("  device: ", options.device, ", parallel: ", options.parallel, ", likelihood_executor: ", options.likelihood_executor,
         ", gradient_checkpoint_length: ", options.gradient_checkpoint_length === nothing ? "default" : options.gradient_checkpoint_length)
     return nothing

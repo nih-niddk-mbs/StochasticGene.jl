@@ -27,11 +27,15 @@ fit(;
 )
 ```
 
-## Batched Coupled Trace Likelihood (2.0.7)
+## Batched Coupled Trace Likelihood
 
-For supported hierarchical trace models sharing a transition matrix, add
-`likelihood_executor=:batched` to your existing MH `fit` call. For example,
-when continuing a keyed fit with its saved info and rate files:
+For supported hierarchical coupled trace models sharing a transition matrix,
+`fit(...; likelihood_executor=:batched)` batches the forward recursion over
+traces. This is separate from distributed chains and from Swarm job bundling.
+The default executor remains `:fast`.
+
+With several chains on separate workers, use one BLAS thread per worker.
+For example, when continuing a keyed fit with its saved info and rate files:
 
 ```julia
 @everywhere using StochasticGene, LinearAlgebra
@@ -56,8 +60,8 @@ request CPUs for all chains, as for your existing distributed fits.
 This executor batches 16 traces within each chain; it does not require 16 Julia
 threads and is unrelated to Swarm's `-b` job bundling. It reuses the shared
 transition matrix in a batched forward recursion and stores only two forward
-frames at a time. In 2.0.7, emissions are still rebuilt at each likelihood call;
-there is no persistent emission cache or automatic batch-size tuning.
+frames at a time. The cache described below is available in the current
+checkout; released 2.0.7 rebuilds emissions at each likelihood call.
 
 The default executor remains `:fast`, which can also be selected explicitly to
 return to the reference implementation. Scalar/batched likelihood agreement
@@ -66,6 +70,80 @@ speed depends on model size and hardware, and this is not a convergence
 guarantee. The regression tests live in `test/batched_forward_tests.jl`; the
 read-only real-data benchmark and temporary-output fit check are
 `test/benchmark_hidden_likelihood.jl` and `test/batched_fit_smoke.jl`.
+The batched MH path reuses forward buffers within each chain. For coupled
+reporters using `prob_Gaussian`, it also caches emission probabilities for
+distinct reporter-count combinations rather than every joint state. Changes
+to noise parameters, observations, or reporter definitions invalidate the
+affected entries. Custom emission functions are evaluated without this
+emission cache. Each chain owns its cache, released at the end of the chain;
+the transition solver and statistical model are unchanged.
+
+For repeated direct likelihood calls, the same cache can be scoped explicitly:
+
+```julia
+StochasticGene.with_batched_hmm_cache() do
+    loglikelihood(param, data, model; hmm_stack=:batched)
+    loglikelihood(next_param, data, model; hmm_stack=:batched)
+end
+```
+
+Without this scope, direct calls still work but do not retain a cache across
+evaluations. Performance depends on the model and hardware; see
+`test/benchmark_batched_cache.jl` for a comparison against uncached batching.
+
+### Optional Startup Tuning
+
+Add these keywords to an existing MH `fit` call:
+
+```julia
+likelihood_executor = :batched,
+hmm_batchsize = 16,
+tune_hmm_batchsize = true,
+hmm_batch_tuning_seconds = 120.0,
+```
+
+Each chain tunes independently at its initialized parameter vector, even with
+`warmupsteps=0`. It warms candidate sizes 8, 16, 32, 64 and the requested initial
+size, then collects up to three balanced timing rounds in alternating order.
+At least two complete rounds are required. The smallest size within 3% of the
+fastest median is selected and frozen before sampler warmup/sampling.
+The chosen size, elapsed time, completed rounds, and status are printed in the
+worker log. Requested settings are retained in the run spec and generated
+fitscripts; the per-chain selected sizes are reported in logs, not the run spec.
+
+Tuning is capped at the smaller of `hmm_batch_tuning_seconds` and 10% of
+`maxtime`; its elapsed time is deducted from the remaining MH budget. This is a
+soft deadline because an in-flight likelihood evaluation cannot be interrupted.
+With too little time, the original size is kept. Unsupported paths skip tuning.
+Likelihood disagreement aborts the fit rather than silently choosing a size.
+No sampler random numbers are used, and no proposal adaptation is introduced.
+
+The default is `tune_hmm_batchsize=false`. Set `hmm_batchsize` explicitly to
+reuse a known choice without tuning. Tuning requires `likelihood_executor=:batched`.
+Workers tune concurrently without a synchronization barrier, so noisy timing
+under contention can select different sizes across chains. Benchmark on the
+intended hardware; a Mac result is not a Biowulf performance guarantee.
+
+### Standalone Experiment
+
+The repository also provides a read-only batch-size experiment:
+
+```bash
+julia --project=. test/tune_hidden_batchsize.jl /path/to/nadya H2-targets135-free-h H3-targets135-free-h
+```
+
+This script reads the hidden-model fits from
+`results/3Prime-hidden-multitarget-2026-10-16-restart` under the supplied root.
+It warms sizes 8, 16, 32, and 64, compares three timings per size in randomized
+order, and selects the smallest size within 3% of the fastest median. It then
+compares the selection with size 16 on three fresh parameter proposals,
+checking both total and per-trace likelihood agreement. It runs one process
+with one BLAS thread and does not sample or modify source results.
+
+This is computational tuning, not MCMC warmup or proposal adaptation. Default
+fits still use size 16 and do not tune unless explicitly enabled. A selection
+on one machine is not a recommendation for a different CPU or for concurrent
+chains; benchmark under the intended workload before changing production runs.
 
 ## Many Genes
 

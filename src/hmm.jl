@@ -2113,25 +2113,131 @@ function _ll_hmm(noiseparams::Vector, a, p0::Vector, reporter, traces; hmm_stack
     sum(logpredictions), logpredictions
 end
 
-"""
-    _forward_batched_loglik(a, p0, emissions)
+mutable struct BatchedForwardWorkspace
+    previous::Matrix{Float64}
+    next::Matrix{Float64}
+end
+BatchedForwardWorkspace() = BatchedForwardWorkspace(zeros(0, 0), zeros(0, 0))
 
-Experimental likelihood-only forward recursion. Each emission matrix has states
-in rows and frames in columns. Traces may have different lengths. Uses the same
-epsilon floor as `forward`; no transition approximation or precision change.
+mutable struct BatchedHMMCache
+    signature::Any
+    state_map::Vector{Int}
+    representatives::Vector{Int}
+    observations::Vector{Any}
+    noise::Vector{Any}
+    emissions::Vector{Matrix{Float64}}
+    workspace::BatchedForwardWorkspace
+    batchsize::Int
+end
+BatchedHMMCache() = BatchedHMMCache(nothing, Int[], Int[], Any[], Any[],
+    Matrix{Float64}[], BatchedForwardWorkspace(), 16)
+
 """
-function _forward_batched_loglik(a::Matrix{Float64}, p0, emissions)
+    with_batched_hmm_cache(f)
+
+Run `f()` with a fresh task-local emission cache and forward workspace. MH uses
+one scope per chain; no cache is shared between workers or threaded chains.
+The previous scope is restored even on error. Outside this scope the batched
+likelihood remains usable, but its workspace/cache lasts only one evaluation.
+"""
+function with_batched_hmm_cache(f::Function)
+    task_local_storage(f, :stochasticgene_batched_hmm_cache, BatchedHMMCache())
+end
+
+"""
+    _tune_hmm_batchsize!(evaluate, cache, reference; seconds=120.0)
+
+Time unchanged-parameter likelihood evaluations before MH sampling. Warm each
+candidate, then use only complete, balanced timing rounds (up to three).
+Choose the smallest size within 3% of the best median. No sampler RNG is used.
+The deadline is soft: an in-flight likelihood evaluation cannot be interrupted.
+On incomplete warmup/comparison keep the requested size; on disagreement throw
+and restore it. An unused batched workspace indicates an unsupported path.
+"""
+function _tune_hmm_batchsize!(evaluate, cache, reference; seconds=120.0,
+    candidates=(8, 16, 32, 64), clock=() -> time_ns() / 1e9)
+    isfinite(seconds) && seconds > 0 || throw(ArgumentError("tuning seconds must be finite and positive"))
+    original = cache.batchsize
+    sizes = sort!(unique!(Int[original, candidates...]))
+    all(>(0), sizes) || throw(ArgumentError("batch sizes must be positive"))
+    start = clock()
+    elapsed() = clock() - start
+    finish(status, rounds) = (batchsize=cache.batchsize, elapsed=elapsed(), rounds=rounds, status=status)
+    isempty(cache.workspace.previous) && return finish(:unsupported, 0)
+    times = Dict(size => Float64[] for size in sizes)
+    rounds = 0
+    function checked_evaluation(size)
+        cache.batchsize = size
+        t = clock()
+        value = evaluate()
+        duration = clock() - t
+        isapprox(value[1], reference[1]; atol=1e-7, rtol=1e-11) &&
+            isapprox(value[2], reference[2]; atol=1e-8, rtol=1e-11) ||
+            throw(ArgumentError("batch-size tuning changed the likelihood at batch size $size"))
+        duration
+    end
+    try
+        for size in sizes
+            if elapsed() >= seconds
+                cache.batchsize = original
+                return finish(:budget_exhausted, 0)
+            end
+            checked_evaluation(size)
+        end
+        for round in 1:3
+            trial = Dict{Int,Float64}()
+            for size in (isodd(round) ? sizes : reverse(sizes))
+                elapsed() >= seconds && break
+                trial[size] = checked_evaluation(size)
+            end
+            length(trial) == length(sizes) || break
+            for size in sizes
+                push!(times[size], trial[size])
+            end
+            rounds += 1
+        end
+        if rounds < 2
+            cache.batchsize = original
+            return finish(:budget_exhausted, rounds)
+        end
+        best = minimum(median(times[size]) for size in sizes)
+        cache.batchsize = first(size for size in sizes if median(times[size]) <= 1.03 * best)
+        return finish(:selected, rounds)
+    catch
+        cache.batchsize = original
+        rethrow()
+    end
+end
+
+"""
+    _forward_batched_loglik(a, p0, emissions; state_map=nothing, workspace=...)
+
+Likelihood-only forward recursion, with reusable two-frame buffers. Optional
+`state_map` expands compact reporter-count emissions to joint states on demand.
+Traces may differ in length. The epsilon floor matches `forward`.
+"""
+function _forward_batched_loglik(a::Matrix{Float64}, p0, emissions;
+    state_map=nothing, workspace=BatchedForwardWorkspace())
     n = size(a, 1)
     k = length(emissions)
     k == 0 && return Float64[]
     lengths = [size(b, 2) for b in emissions]
     all(>(0), lengths) || throw(ArgumentError("traces must contain at least one frame"))
-    all(b -> size(b, 1) == n, emissions) || throw(DimensionMismatch("emission state count"))
-    previous = zeros(n, k)
-    next = similar(previous)
+    states = state_map === nothing ? Base.OneTo(n) : state_map
+    length(states) == n || throw(DimensionMismatch("emission state map"))
+    all(b -> all(i -> 1 <= i <= size(b, 1), states), emissions) ||
+        throw(DimensionMismatch("emission state count"))
+    if size(workspace.previous, 1) != n || size(workspace.previous, 2) < k
+        workspace.previous = zeros(n, k)
+        workspace.next = similar(workspace.previous)
+    end
+    previous = @view workspace.previous[:, 1:k]
+    next = @view workspace.next[:, 1:k]
     ll = zeros(k)
     for j in 1:k
-        @views previous[:, j] .= p0 .* emissions[j][:, 1]
+        @inbounds for i in 1:n
+            previous[i, j] = p0[i] * emissions[j][states[i], 1]
+        end
         c = 1 / max(sum(@view previous[:, j]), eps(Float64))
         @views previous[:, j] .*= c
         ll[j] = -log(c)
@@ -2139,8 +2245,13 @@ function _forward_batched_loglik(a::Matrix{Float64}, p0, emissions)
     for t in 2:maximum(lengths)
         mul!(next, transpose(a), previous)
         for j in 1:k
-            t > lengths[j] && continue
-            @views next[:, j] .*= emissions[j][:, t]
+            if t > lengths[j]
+                @views next[:, j] .= 0.0
+                continue
+            end
+            @inbounds for i in 1:n
+                next[i, j] *= emissions[j][states[i], t]
+            end
             c = 1 / max(sum(@view next[:, j]), eps(Float64))
             @views next[:, j] .*= c
             ll[j] -= log(c)
@@ -2154,19 +2265,81 @@ end
     _ll_hmm_batched(noiseparams, a, p0, reporter, traces; batchsize=16)
 
 Opt-in MH path (`hmm_stack=:batched`) for traces sharing a transition matrix.
-Bound emission storage by processing small batches. Emissions are rebuilt on
-every call so fitted noise cannot accidentally reuse stale probabilities.
+For Gaussian coupled reporters, cache compact emission probabilities indexed by
+distinct reporter-count combinations. Exact noise/data/reporter comparisons
+invalidate stale entries, including in-place changes and rejected proposals.
+Other emission functions use the original uncached calculation. Mutable hidden
+state inside a user emission function is therefore never cached.
 The default `:fast` path remains the reference implementation.
+Batch size defaults to the active cache's setting (initially 16); an explicit
+`batchsize` overrides it. No automatic tuning is performed by production fits.
 """
-function _ll_hmm_batched(noiseparams, a, p0, reporter, traces; batchsize::Int=16)
+function _ll_hmm_batched(noiseparams, a, p0, reporter, traces;
+    cache=get(task_local_storage(), :stochasticgene_batched_hmm_cache, nothing),
+    batchsize::Int=cache === nothing ? 16 : cache.batchsize)
     batchsize > 0 || throw(ArgumentError("batchsize must be positive"))
+    cache === nothing && (cache = BatchedHMMCache())
+    compact = reporter isa Vector{HMMReporter} && !isempty(reporter) &&
+        all(r -> r.probfn === prob_Gaussian, reporter)
+    if compact
+        _prepare_compact_emissions!(cache, noiseparams, reporter, traces, size(a, 1))
+    else
+        # Do not retain an old data set when switching to an unsupported reporter.
+        cache.signature = nothing
+        empty!(cache.observations); empty!(cache.noise); empty!(cache.emissions)
+    end
     ll = zeros(length(traces))
     for first in 1:batchsize:length(traces)
         indices = first:min(first + batchsize - 1, length(traces))
-        emissions = [set_b(traces[i], set_d(noiseparams[i], reporter)) for i in indices]
-        ll[indices] = _forward_batched_loglik(a, p0, emissions)
+        emissions = compact ? view(cache.emissions, indices) :
+            [set_b(traces[i], set_d(noiseparams[i], reporter)) for i in indices]
+        ll[indices] = _forward_batched_loglik(a, p0, emissions;
+            state_map=compact ? cache.state_map : nothing, workspace=cache.workspace)
     end
     return sum(ll), ll
+end
+
+function _prepare_compact_emissions!(cache, noiseparams, reporter, traces, n)
+    length(noiseparams) == length(traces) || throw(DimensionMismatch("noise/trace count"))
+    signature = [(r.probfn, r.per_state) for r in reporter]
+    if !isequal(signature, cache.signature)
+        all(r -> length(r.per_state) == n, reporter) || throw(DimensionMismatch("reporter states"))
+        # Assign each joint state to its unique observed reporter-count tuple.
+        groups = Dict{Tuple,Int}()
+        representatives = Int[]
+        state_map = Int[]
+        for i in 1:n
+            counts = Tuple(r.per_state[i] for r in reporter)
+            group = get!(groups, counts) do
+                push!(representatives, i)
+                length(representatives)
+            end
+            push!(state_map, group)
+        end
+        cache.signature = [(r.probfn, copy(r.per_state)) for r in reporter]
+        cache.representatives = representatives
+        cache.state_map = state_map
+        empty!(cache.observations); empty!(cache.noise); empty!(cache.emissions)
+    end
+    length(cache.state_map) == n || throw(DimensionMismatch("cached reporter states"))
+    if length(cache.emissions) != length(traces)
+        cache.observations = Any[nothing for _ in traces]
+        cache.noise = Any[nothing for _ in traces]
+        cache.emissions = [zeros(0, 0) for _ in traces]
+    end
+    counts = nothing
+    functions = [r.probfn for r in reporter]
+    for i in eachindex(traces)
+        if !isequal(noiseparams[i], cache.noise[i]) || !isequal(traces[i], cache.observations[i])
+            counts === nothing && (counts = [r.per_state[cache.representatives] for r in reporter])
+            d = set_d(noiseparams[i], counts, functions)
+            # Commit the snapshots only after emission construction succeeds.
+            cache.emissions[i] = set_b(traces[i], d)
+            cache.noise[i] = deepcopy(noiseparams[i])
+            cache.observations[i] = copy(traces[i])
+        end
+    end
+    nothing
 end
 
 function _ll_hmm_forced(noiseparams::Vector, a, p0::Vector, reporter, traces; hmm_stack::Symbol=HMM_STACK_MH)

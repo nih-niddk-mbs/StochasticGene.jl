@@ -20,10 +20,22 @@ merge!(kwargs, Dict{Symbol,Any}(
     :warmupsteps => 0, :maxtime => 180.0, :sample_stride => 1,
     :propcv => 0.02, :writesamples => false,
 ))
+if get(ENV, "STOCHASTICGENE_TEST_BATCH_TUNING", "0") == "1"
+    kwargs[:tune_hmm_batchsize] = true
+    kwargs[:hmm_batch_tuning_seconds] = 90.0
+    kwargs[:maxtime] = 1800.0
+end
 println("SMOKE OUTPUT: ", out); flush(stdout)
 fit, stats, measures, data, model, options = StochasticGene.fit(; kwargs...)
 @testset "Batched end-to-end fit" begin
     @test options.likelihood_executor == :batched
+    if get(ENV, "STOCHASTICGENE_TEST_BATCH_TUNING", "0") == "1"
+        @test options.tune_hmm_batchsize
+        @test options.hmm_batch_tuning_seconds == 90.0
+        saved = StochasticGene.read_run_spec(joinpath(out, "info_$(key).jld2"))
+        @test saved[:tune_hmm_batchsize] === true
+        @test saved[:hmm_batch_tuning_seconds] == 90.0
+    end
     @test fit.total > 0
     @test isfinite(fit.llml)
     rates, _ = StochasticGene.read_rates_table(joinpath(out, "rates_$(key).txt"))
