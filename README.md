@@ -7,6 +7,11 @@ for highlights and migration guidance.
 (including fixed per-trace noise) and includes an opt-in batched trace likelihood.
 See [parallel processing](docs/src/examples/parallel_processing.md) for usage.
 
+The experimental `feature/joint-residence-regularizer` branch adds optional
+coupled-MH stationary ON/OFF occupancy penalties via `regularizers=()`;
+see [joint residence regularization](docs/src/examples/parallel_processing.md#optional-joint-residence-regularization).
+They are disabled by default and kept separate from reported likelihoods.
+
 [![Documents](https://img.shields.io/badge/Documents-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 
 Julia package for **stochastic models of gene transcription**, **Bayesian inference** (Metropolis–Hastings, NUTS, and mean-field ADVI on the same transformed parameters), and **analysis** of smFISH, scRNA-seq, live-cell traces, and dwell-time data.

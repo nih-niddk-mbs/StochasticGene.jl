@@ -972,6 +972,7 @@ const _STAGE_DEFAULT_SCRIPT_OVERRIDE_KEYS = (
     :maxiter, :n_mc, :σ_floor, :init_s_raw, :advi_verbose, :advi_time_limit, :zygote_trace,
     :likelihood_executor, :gradient_checkpoint_length,
     :hmm_batchsize, :tune_hmm_batchsize, :hmm_batch_tuning_seconds,
+    :regularizers,
 )
 
 function _stage_script_overrides_from_spec(spec::Dict{Symbol,Any}, keys)

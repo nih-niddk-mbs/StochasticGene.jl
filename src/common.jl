@@ -1236,6 +1236,7 @@ Options for Metropolis-Hastings MCMC.
 - `hmm_batchsize::Int`: Initial/manual trace batch size for `:batched` (default 16).
 - `tune_hmm_batchsize::Bool`: Opt-in per-chain computational tuning before MH warmup/sampling.
 - `hmm_batch_tuning_seconds::Float64`: Soft tuning budget, further capped at 10% of `maxtime`.
+- `regularizers::Tuple`: Optional MH objective penalties, separate from the raw data likelihood and prior.
 - `device::Symbol`: :cpu, :gpu
 - `parallel::Symbol`: :single, :threaded, :distributed
 - `gradient::Symbol`: Gradient type (:none, :finite, :ForwardDiff, :Zygote)
@@ -1267,6 +1268,7 @@ struct MHOptions <: Options
     hmm_batchsize::Int
     tune_hmm_batchsize::Bool
     hmm_batch_tuning_seconds::Float64
+    regularizers::Tuple
 end
 
 function MHOptions(
@@ -1284,6 +1286,7 @@ function MHOptions(
     hmm_batchsize::Integer=16,
     tune_hmm_batchsize::Bool=false,
     hmm_batch_tuning_seconds::Real=120.0,
+    regularizers=(),
 )
     hmm_batchsize > 0 || throw(ArgumentError("hmm_batchsize must be positive"))
     isfinite(hmm_batch_tuning_seconds) && hmm_batch_tuning_seconds > 0 ||
@@ -1316,6 +1319,7 @@ function MHOptions(
         merge_mem, jitter, jitter_individual, jitter_noise, pcv_rates, pcv_noise,
         device, parallel, gradient, likelihood_executor, gck,
         Int(hmm_batchsize), tune_hmm_batchsize, Float64(hmm_batch_tuning_seconds),
+        _normalize_regularizers(regularizers),
     )
 end
 

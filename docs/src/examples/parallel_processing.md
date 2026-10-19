@@ -145,6 +145,48 @@ fits still use size 16 and do not tune unless explicitly enabled. A selection
 on one machine is not a recommendation for a different CPU or for concurrent
 chains; benchmark under the intended workload before changing production runs.
 
+## Optional Joint Residence Regularization
+
+On the experimental `feature/joint-residence-regularizer` branch, coupled MH
+trace fits can use an additional stationary ON/OFF occupancy penalty. The
+default `regularizers=()` leaves the objective unchanged. This currently
+requires one shared stationary distribution (including hierarchical models
+with shared kinetics); grid, shared-dataset, and varying-kinetics paths are
+not supported. NUTS, ADVI and `optimize=true` reject active regularizers.
+
+```julia
+# Rows/columns: ON_ON, ON_OFF, OFF_ON, OFF_OFF; enhancer is unit 2 here.
+target = [0.041509, 0.210105, 0.108163, 0.640223]
+# Example scale only: replace with the paired-trace bootstrap covariance.
+covariance = 0.001 .* (Matrix{Float64}(I, 4, 4) .- 0.25)
+occupancy = JointResidenceRegularizer(target;
+    covariance=covariance, strength=1.0, units=(2, 1))
+
+# Add to the existing fully specified fit call:
+# regularizers=(occupancy,)
+```
+
+The four fractions sum to one, so they are not independent. The penalty uses
+a covariance pseudoinverse, computed once per chain. ON means reporter count
+greater than zero. State masks are also cached, and the HMM supplies its
+already-computed stationary vector; no second stationary solve is performed
+for each proposal. Regularizers and caches are scoped separately per chain.
+
+MH samples `loglikelihood + logprior - penalty` (subject to the existing
+temperature). The sampled `ll`, ML selection, AIC inputs and pointwise WAIC
+inputs remain unpenalized. WAIC is nevertheless computed under a regularized
+sampling distribution, not the original posterior. `regularization_<key>.csv`
+reports fractions, individual/total penalties and the composite objective at
+the raw-ML and coordinate-median points. Settings are retained in the run info
+and fully generated fitscripts.
+
+Use `regularization_report(param, data, model; regularizers=(occupancy,))`
+for a read-only evaluation before fitting. Zero strength disables a term.
+Targets derived from the same traces deliberately reuse information; they
+are not independent FISH data. Stationary occupancy is not trace-centered
+covariance. Hard-Viterbi target fractions may be biased relative to latent
+occupancy; validate strengths using simulated decoding and held-out traces.
+
 ## Many Genes
 
 For scRNA/RNA histogram sweeps, generate one shared fitscript and one command

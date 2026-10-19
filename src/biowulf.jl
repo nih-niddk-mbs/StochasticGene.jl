@@ -521,6 +521,7 @@ const _FITFILE_FULL_KEY_ORDER = Symbol[
     :advi_verbose, :advi_time_limit, :zygote_trace,
     :likelihood_executor, :gradient_checkpoint_length,
     :hmm_batchsize, :tune_hmm_batchsize, :hmm_batch_tuning_seconds,
+    :regularizers,
     :init_jitter, :init_jitter_individual, :init_jitter_noise,
     :propcv_rate, :propcv_noise, :propcv_levels,
     :proposal_cv_rates, :proposal_cv_noise, :proposal_cv_levels,

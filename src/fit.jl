@@ -81,6 +81,7 @@ Posterior / variational inference is selected by **`inference_method`** (default
 - `samplesteps::Int=1000000`: MH — posterior samples to collect; ADVI — maps to `maxiter` unless `maxiter` is set explicitly. Ignored by NUTS; use `n_samples` for NUTS.
 - `sample_stride::Int=1`: MH only — store every `sample_stride`-th posterior sample from the `samplesteps` total MH steps. Aliases: `samplestep`, `thin`, `thin_interval`, `thinning`, `sample_interval`, `sample_every`.
 - `hmm_batchsize=16`, `tune_hmm_batchsize=false`, `hmm_batch_tuning_seconds=120.0`: optional per-chain startup batch tuning for `likelihood_executor=:batched`; independent of sampler warmup. The soft tuning budget is capped at 10% of `maxtime` and deducted from the remaining MH time. See [`load_options`](@ref).
+- `regularizers=()`: optional MH penalties, such as [`JointResidenceRegularizer`](@ref). Requires supported coupled trace paths; raw likelihood/ML/AIC and pointwise WAIC inputs stay unpenalized. The resulting sampling distribution is regularized. NUTS/ADVI and `optimize=true` do not support active regularizers.
 - `init_jitter::Real=0.0`: MH only — add per-chain Gaussian jitter in sampling coordinates before the initial likelihood evaluation. `init_jitter_individual` overrides this for hierarchical individual-level parameters, and `init_jitter_noise` overrides it for fitted noise parameters.
 - `merge_max_memory`: MH multi-chain merge/statistics memory budget in bytes. Alias `merge_max_gb` accepts GiB.
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
@@ -218,6 +219,7 @@ const _FIT_DEFAULTS = (
     hmm_batchsize=16,
     tune_hmm_batchsize=false,
     hmm_batch_tuning_seconds=120.0,
+    regularizers=(),
     init_jitter=0.0,
     init_jitter_individual=0.0,
     init_jitter_noise=0.0,
@@ -504,6 +506,9 @@ end
 
 """
 function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
+    if options isa MHOptions && !isempty(options.regularizers) && optimize
+        throw(ArgumentError("optimize=true is not yet supported with regularizers; use MH or disable the penalty explicitly"))
+    end
     print_ll(data, model)
     inference_info = nothing
     if options isa ADVIOptions && nchains == 1
@@ -531,6 +536,9 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
         bs = 0
     end
     finalize(data, model, fits, stats, measures, _inference_temp(options), resultfolder, optimized, bs, writesamples; inference_info=inference_info)
+    if options isa MHOptions && !isempty(options.regularizers)
+        _write_regularization_report(resultfolder, data, model, fits, stats, options)
+    end
     println(now())
     # get_rates(stats.medparam, model, false)
     return fits, stats, measures, data, model, options
@@ -1029,6 +1037,7 @@ const _MAKE_STRUCTURES_OPTION_KW = (
     :advi_verbose, :advi_n_mc, :zygote_trace,
     :likelihood_executor, :gradient_checkpoint_length, :hmm_stack, :hmm_checkpoint_steps,
     :hmm_batchsize, :tune_hmm_batchsize, :hmm_batch_tuning_seconds,
+    :regularizers,
     :init_jitter, :init_jitter_individual, :init_jitter_noise,
     :propcv_rate, :propcv_noise, :proposal_cv_rates, :proposal_cv_noise,
     :propcv_levels, :proposal_cv_levels, :shared_parameters, :recursive_hierarchy,
@@ -1344,6 +1353,9 @@ function load_options(run0::AbstractDict)
     if inference_method === :metropolis || inference_method === :metropolis_hastings
         inference_method = INFERENCE_MH
     end
+    if inference_method != INFERENCE_MH && !isempty(_normalize_regularizers(get(run, :regularizers, ())))
+        throw(ArgumentError("regularizers are currently supported only with inference_method=:mh"))
+    end
 
     device = get(run, :device, :cpu)
     device === nothing && (device = :cpu)
@@ -1426,6 +1438,7 @@ function load_options(run0::AbstractDict)
             hmm_batchsize=get(run, :hmm_batchsize, 16),
             tune_hmm_batchsize=get(run, :tune_hmm_batchsize, false),
             hmm_batch_tuning_seconds=get(run, :hmm_batch_tuning_seconds, 120.0),
+            regularizers=get(run, :regularizers, ()),
         )
     elseif inference_method == INFERENCE_NUTS || inference_method == :nuts
         nuts_defaults = NUTSOptions()

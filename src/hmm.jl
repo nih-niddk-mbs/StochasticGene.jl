@@ -2070,6 +2070,7 @@ end
 
 """
 function _ll_hmm(a, p0, d, traces; hmm_stack::Symbol=HMM_STACK_MH)
+    _record_regularizer_stationary!(p0)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
     if hmm_stack === HMM_STACK_AD
@@ -2092,6 +2093,7 @@ end
 
 """
 function _ll_hmm(noiseparams::Vector, a, p0::Vector, reporter, traces; hmm_stack::Symbol=HMM_STACK_MH)
+    _record_regularizer_stationary!(p0)
     if hmm_stack === :batched
         return _ll_hmm_batched(noiseparams, a, p0, reporter, traces)
     end

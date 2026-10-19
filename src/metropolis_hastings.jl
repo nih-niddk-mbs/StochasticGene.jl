@@ -59,6 +59,23 @@ end
 @inline _mh_likelihood_options(options::Union{Nothing,MHOptions}, stack::Symbol) =
     options === nothing ? stack : options
 
+function _mh_evaluate(param, data, model, options)
+    terms = options isa MHOptions ? options.regularizers : ()
+    _evaluate_with_regularizers(terms) do
+        _mh_loglikelihood(param, data, model, options)
+    end
+end
+
+function _mh_sampling_prior(param, data, model, options)
+    # The MH acceptance state carries prior minus penalty; saved Fit.prior stays raw.
+    prior = logprior(param, model)
+    if options isa MHOptions && !isempty(options.regularizers)
+        _, _, penalty = _mh_evaluate(param, data, model, options)
+        prior -= penalty
+    end
+    prior
+end
+
 """
 struct Stats
 
@@ -308,6 +325,12 @@ Run the Metropolis-Hastings MCMC algorithm for a given model and data.
 - `waic`: Watanabe-Akaike Information Criterion tuple
 """
 function metropolis_hastings(data, model, options)
+    _with_regularizers(options.regularizers, data, model) do
+        _metropolis_hastings_scoped(data, model, options)
+    end
+end
+
+function _metropolis_hastings_scoped(data, model, options)
     if options.likelihood_executor === :batched
         return with_batched_hmm_cache() do
             task_local_storage(:stochasticgene_batched_hmm_cache).batchsize = options.hmm_batchsize
@@ -528,7 +551,7 @@ individual_propcv(proposalcv) = 0.001
 
 function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime; hmm_stack::Symbol=HMM_STACK_MH, mh_options::Union{Nothing,MHOptions}=nothing)
     parout = Array{Float64,2}(undef, length(param), samplesteps)
-    prior = logprior(param, model)
+    prior = _mh_sampling_prior(param, data, model, _mh_likelihood_options(mh_options, hmm_stack))
     step = 0
     accepttotal = 0
     
@@ -633,7 +656,7 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     pwaic = (0, zeros(length(logpredictions)), zeros(length(logpredictions)))
     lppd = fill(-Inf, length(logpredictions))
     accepttotal = 0
-    prior = logprior(param, model)
+    prior = _mh_sampling_prior(param, data, model, _mh_likelihood_options(mh_options, hmm_stack))
     stored = 0
     total_step = 0
     diag_done = false
@@ -648,7 +671,8 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
             paramt_d, dt_d = proposal(param, d, proposalcv, model)
             if !instant_reject(paramt_d, model)
                 priort_d = logprior(paramt_d, model)
-                llt_d, _ = _mh_loglikelihood(paramt_d, data, model, _mh_likelihood_options(mh_options, hmm_stack))
+                llt_d, _, penalty_d = _mh_evaluate(paramt_d, data, model, _mh_likelihood_options(mh_options, hmm_stack))
+                priort_d -= penalty_d
                 log_ratio_d = mh_log_acceptance_ratio(
                     ll, llt_d, prior, priort_d, param, paramt_d, d, dt_d, temp)
                 Δ = isempty(param) ? 0.0 : maximum(abs.(paramt_d .- param))
@@ -680,7 +704,7 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     pwaic = stored > 1 ? pwaic[3] / (stored - 1) : pwaic[3]
     lppd .-= log(stored)
     Fit(parout[:, 1:stored], llout[1:stored], parml, llml, lppd, pwaic,
-        waic_mean, stored, prior, accepttotal, total_step)
+        waic_mean, stored, logprior(param, model), accepttotal, total_step)
 end
 
 
@@ -759,7 +783,8 @@ function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, te
 
     local llt, logpredictionst
     try
-        llt, logpredictionst = _mh_loglikelihood(paramt, data, model, _mh_likelihood_options(mh_options, hmm_stack))
+        llt, logpredictionst, penalty = _mh_evaluate(paramt, data, model, _mh_likelihood_options(mh_options, hmm_stack))
+        priort -= penalty
     catch err
         if err isa InterruptException ||
            err isa OutOfMemoryError ||

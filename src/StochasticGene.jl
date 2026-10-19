@@ -154,6 +154,7 @@ export CSV, DataFrame, Tsit5, lsoda, mean, norm, sparse
 export fit, fit_default_spec, fit_coupled_default_spec, run_inference, load_options
 export metropolis_hastings, run_mh, run_nuts_fit, logposterior
 export GenePosteriorLogDensity, NUTSOptions, ADVIOptions
+export AbstractRegularizer, JointResidenceRegularizer, regularization_report
 export INFERENCE_ADVI, INFERENCE_CHOICES, INFERENCE_MH, INFERENCE_NUTS
 export maxtime_seconds
 
@@ -280,6 +281,7 @@ export benchmark_inference_print_summary
 
 # Type system and common functions
 include("common.jl")
+include("regularizers.jl")
 
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_structures.jl")
