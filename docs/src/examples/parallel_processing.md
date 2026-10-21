@@ -29,10 +29,15 @@ fit(;
 
 ## Batched Coupled Trace Likelihood
 
-For supported hierarchical coupled trace models sharing a transition matrix,
+For ordinary and supported hierarchical coupled trace models sharing a transition matrix,
 `fit(...; likelihood_executor=:batched)` batches the forward recursion over
 traces. This is separate from distributed chains and from Swarm job bundling.
 The default executor remains `:fast`.
+
+Ordinary models use `hierarchical=()` and one complete rate vector; no dummy
+hierarchical blocks are required for batching. Their shared emission distributions
+are evaluated afresh for each likelihood call, including custom discrete emissions.
+This changes execution only, not the observation model or likelihood objective.
 
 With several chains on separate workers, use one BLAS thread per worker.
 For example, when continuing a keyed fit with its saved info and rate files:
@@ -70,7 +75,7 @@ speed depends on model size and hardware, and this is not a convergence
 guarantee. The regression tests live in `test/batched_forward_tests.jl`; the
 read-only real-data benchmark and temporary-output fit check are
 `test/benchmark_hidden_likelihood.jl` and `test/batched_fit_smoke.jl`.
-The batched MH path reuses forward buffers within each chain. For coupled
+The batched MH path reuses forward buffers within each chain. For hierarchical coupled
 reporters using `prob_Gaussian`, it also caches emission probabilities for
 distinct reporter-count combinations rather than every joint state. Changes
 to noise parameters, observations, or reporter definitions invalidate the

@@ -2071,6 +2071,9 @@ end
 """
 function _ll_hmm(a, p0, d, traces; hmm_stack::Symbol=HMM_STACK_MH)
     _record_regularizer_stationary!(p0)
+    if hmm_stack === :batched
+        return _ll_hmm_batched(a, p0, d, traces)
+    end
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
     if hmm_stack === HMM_STACK_AD
@@ -2261,6 +2264,28 @@ function _forward_batched_loglik(a::Matrix{Float64}, p0, emissions;
         previous, next = next, previous
     end
     return ll
+end
+
+"""
+    _ll_hmm_batched(a, p0, d, traces; cache, batchsize)
+
+Batched forward evaluation for ordinary, non-hierarchical models whose traces
+share emission distributions `d`. Uses the existing task-local workspace and
+batch-size setting. Emissions are rebuilt on every call, so changed distributions
+and observations cannot leave stale probabilities behind.
+"""
+function _ll_hmm_batched(a, p0, d, traces;
+    cache=get(task_local_storage(), :stochasticgene_batched_hmm_cache, nothing),
+    batchsize::Int=cache === nothing ? 16 : cache.batchsize)
+    batchsize > 0 || throw(ArgumentError("batchsize must be positive"))
+    cache === nothing && (cache = BatchedHMMCache())
+    ll = zeros(length(traces))
+    for first in 1:batchsize:length(traces)
+        indices = first:min(first + batchsize - 1, length(traces))
+        emissions = [set_b(traces[i], d) for i in indices]
+        ll[indices] = _forward_batched_loglik(a, p0, emissions; workspace=cache.workspace)
+    end
+    return sum(ll), ll
 end
 
 """

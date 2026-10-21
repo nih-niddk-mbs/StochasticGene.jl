@@ -1,5 +1,30 @@
 using Test, Random, LinearAlgebra, StochasticGene
 
+@testset "Non-hierarchical batched emissions" begin
+    SG = StochasticGene
+    a = [0.85 0.15; 0.3 0.7]
+    p0 = [2/3, 1/3]
+    for d in ([SG.Bernoulli(0.0), SG.Bernoulli(1.0)],
+              [SG.Normal(-0.1, 0.3), SG.Normal(1.0, 0.5)])
+        for traces in ([Float64[0]], [Float64[0,1,1], Float64[1,0], Float64[0,1,0,1]])
+            reference = SG._ll_hmm(a, p0, d, traces; hmm_stack=:fast)
+            cache = SG.BatchedHMMCache()
+            for batchsize in (1, 2, 16)
+                actual = SG._ll_hmm_batched(a, p0, d, traces; cache, batchsize)
+                @test isapprox(actual[1], reference[1]; atol=1e-10, rtol=1e-12)
+                @test isapprox(actual[2], reference[2]; atol=1e-10, rtol=1e-12)
+            end
+            routed = SG._ll_hmm(a, p0, d, traces; hmm_stack=:batched)
+            @test routed[2] ≈ reference[2]
+            traces[1][1] = 1 - traces[1][1]
+            @test SG._ll_hmm_batched(a, p0, d, traces; cache)[2] ≈
+                  SG._ll_hmm(a, p0, d, traces; hmm_stack=:fast)[2]
+        end
+    end
+    @test isempty(SG._ll_hmm_batched(a, p0, [SG.Bernoulli(0.0), SG.Bernoulli(1.0)], Vector{Float64}[])[2])
+    @test_throws ArgumentError SG._ll_hmm_batched(a, p0, [], []; batchsize=0)
+end
+
 @testset "Experimental batched forward vs reference" begin
     rng = MersenneTwister(524)
     for n in (1, 4, 24), lengths in ([1], [1, 3, 7], fill(15, 19))
