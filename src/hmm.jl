@@ -227,6 +227,80 @@ Create a Gaussian distribution for a single reporter count.
 function prob_Gaussian(par, reporters::Int)
     Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
 end
+
+"""
+    ExGaussianNoise(mu, sigma, tau)
+
+Gaussian location `mu`, Gaussian SD `sigma`, and exponential scale `tau`.
+The mean is `mu + tau`. Used by `prob_ExGaussian`; `tau=0` is exactly Gaussian.
+"""
+struct ExGaussianNoise{T<:Real} <: ContinuousUnivariateDistribution
+    mu::T
+    sigma::T
+    tau::T
+    function ExGaussianNoise(mu::Real, sigma::Real, tau::Real)
+        sigma > 0 || throw(DomainError(sigma, "Gaussian SD must be positive"))
+        tau >= 0 || throw(DomainError(tau, "exponential scale must be nonnegative"))
+        values = promote(float(mu), float(sigma), float(tau))
+        new{typeof(values[1])}(values...)
+    end
+end
+
+function Distributions.logpdf(d::ExGaussianNoise, x::Real)
+    iszero(d.tau) && return logpdf(Normal(d.mu, d.sigma), x)
+    isinf(x) && return oftype(x + d.mu, -Inf)
+    q = (x - d.mu) / d.sigma
+    a = d.sigma / d.tau
+    z = q - a
+    # erfcx avoids both exponential overflow and cancellation in the left tail
+    # and as tau approaches zero. The other branch avoids erfcx of large negatives.
+    if z <= 0
+        return -log(2 * d.tau) - q*q/2 + log(erfcx(-z / sqrt(2)))
+    end
+    -log(d.tau) + a*(a/2 - q) + logcdf(Normal(), z)
+end
+Distributions.pdf(d::ExGaussianNoise, x::Real) = exp(logpdf(d, x))
+Statistics.mean(d::ExGaussianNoise) = d.mu + d.tau
+Statistics.var(d::ExGaussianNoise) = d.sigma^2 + d.tau^2
+Statistics.std(d::ExGaussianNoise) = sqrt(var(d))
+Random.rand(rng::AbstractRNG, d::ExGaussianNoise) =
+    d.mu + d.sigma * randn(rng) + d.tau * randexp(rng)
+Base.minimum(::ExGaussianNoise) = -Inf
+Base.maximum(::ExGaussianNoise) = Inf
+Distributions.insupport(::ExGaussianNoise, x::Real) = !isnan(x)
+
+function Distributions.logcdf(d::ExGaussianNoise, x::Real)
+    iszero(d.tau) && return logcdf(Normal(d.mu, d.sigma), x)
+    isinf(x) && return x > 0 ? zero(x + d.mu) : oftype(x + d.mu, -Inf)
+    first = logcdf(Normal(d.mu, d.sigma), x)
+    second = log(d.tau) + logpdf(d, x)
+    first + log(-expm1(min(zero(first), second - first)))
+end
+Distributions.cdf(d::ExGaussianNoise, x::Real) = exp(logcdf(d, x))
+
+"""
+    prob_ExGaussian(par, reporters)
+
+Gaussian reporter signal plus right-skewed exGaussian background. Five noise
+parameters: `[background_mean, background_gaussian_sd, reporter_mean,
+reporter_sd, background_tail_scale]`. The exponential contribution is centered:
+`I = background_mean + n*reporter_mean + Normal(0, sqrt(sigma_bg^2+n*sigma_r^2))
+     + Exponential(tau) - tau`.
+
+Mean = `par[1] + n*par[3]`; variance = `par[2]^2 + n*par[4]^2 + par[5]^2`.
+`par[2]` is the Gaussian component SD, not the total background SD. `tau=0`
+recovers Gaussian emissions; if fitting tau, initialize it strictly positive.
+Omit its rate index from both `fittedparam` and individual hierarchy indices to
+hold an independently calibrated tail fixed. This does not model temporal noise.
+"""
+function prob_ExGaussian(par, reporters::Int)
+    length(par) == 5 || throw(ArgumentError("exGaussian emissions require five noise parameters"))
+    ExGaussianNoise(par[1] + reporters * par[3] - par[5],
+        sqrt(par[2]^2 + reporters * par[4]^2), par[5])
+end
+prob_ExGaussian(par, reporters::AbstractVector) = [prob_ExGaussian(par, n) for n in reporters]
+prob_ExGaussian(par, reporters::AbstractVector, N::Integer) =
+    [prob_ExGaussian(par, reporters[i]) for i in 1:N]
 """
     prob_Gaussian(par, reporters_per_state, N)
 

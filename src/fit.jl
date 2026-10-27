@@ -2942,7 +2942,9 @@ function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::I
             # Handle both Bool and Vector{Bool} for zeromedian
             should_zero = zeromedian isa Bool ? zeromedian :
                           (zeromedian isa Vector{Bool} && length(zeromedian) > 0 ? zeromedian[2] : false)
-            if isodd(i) && should_zero
+            # The exGaussian fifth entry is a positive tail scale, not a mean.
+            positive_tail = reporter.probfn === prob_ExGaussian && i == 5
+            if isodd(i) && should_zero && !positive_tail
                 push!(ftransforms, identity)
                 push!(invtransforms, identity)
                 push!(sigmatransforms, sigmanormal)

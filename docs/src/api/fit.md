@@ -198,6 +198,29 @@ fits, stats, measures, data, model, options = fit(
 
 Trace observation likelihoods use Gaussian **densities** (`prob_Gaussian`) for the observed fluorescence values. Because a continuous density has units of inverse fluorescence and can be greater than `1` when the noise scale is small, trace log-likelihood contributions can be positive. This is expected and does not imply a probability greater than `1`; it only means the density per fluorescence unit is high near the observed value. If a future workflow needs likelihoods interpreted as finite-bin probability masses, a measurement-resolution correction can be applied after the HMM likelihood, e.g. `logL + n_observations * log(delta_y)`, with `delta_y = 1.0` preserving the current behavior.
 
+### ExGaussian Background
+
+`probfn=prob_ExGaussian` opts into Gaussian reporter noise plus a right-skewed
+exGaussian background. Existing Gaussian and mixture models remain unchanged.
+Supply five `noisepriors` entries:
+`[background_mean, background_gaussian_sd, reporter_mean, reporter_sd, tail_scale]`.
+An independent exponential contribution with mean `tail_scale` is added and
+centered by subtracting that same mean. Thus background_mean retains its meaning.
+For reporter count `n`, the mean is `background_mean+n*reporter_mean` and variance
+is `background_gaussian_sd^2+n*reporter_sd^2+tail_scale^2`. Do not use total
+background SD as the Gaussian component SD or the tail variance is counted twice.
+The model changes the marginal distribution, not temporal noise correlations.
+
+For a 3301 model with nine kinetic rates, the five noise slots are `10:14`.
+To hold a calibrated tail fixed, omit slot `14` from both `fittedparam` and the
+individual-noise indices in `hierarchical`; for example,
+`fittedparam=vcat(1:8,10:13), hierarchical=(2,collect(10:13),())` fits kinetics
+(except decay) and the original four noise quantities, with tail_scale fixed.
+Zero tail_scale gives exactly Gaussian emissions. When fitting tail_scale,
+initialize it strictly positive: its sampling transform is logarithmic.
+Use complete rate vectors of the new size: do not append parameters to an old
+hierarchical file without rebuilding each complete block.
+
 ## Notes
 
 1. **Rate order** — G transitions, R transitions, S if present, decay, noise parameters (see package overview).

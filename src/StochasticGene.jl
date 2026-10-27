@@ -140,6 +140,7 @@ using SciMLSensitivity  # reverse-mode AD through `solve` (Zygote + trace HMM / 
 using Printf
 using Profile
 using SparseArrays
+using SpecialFunctions: erfcx
 using Statistics
 using StatsBase
 using TOML
@@ -189,6 +190,7 @@ export recursive_assignment_rates, recursive_transition_group_rates, recursive_e
 
 # Probability, simulation, and transient solvers.
 export prob_Gaussian, prob_Gaussian_grid, predictedarray, predictedfn
+export prob_ExGaussian
 export simulate_trace, simulate_trace_data, simulate_trace_vector, simulate_trials
 export get_3unit_model_params, simulator, simulator_dwell_specs
 export transient_master_problem, transient_master_initial, transient_master_strang
