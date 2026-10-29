@@ -2381,7 +2381,7 @@ function _ll_hmm_batched(noiseparams, a, p0, reporter, traces;
     batchsize > 0 || throw(ArgumentError("batchsize must be positive"))
     cache === nothing && (cache = BatchedHMMCache())
     compact = reporter isa Vector{HMMReporter} && !isempty(reporter) &&
-        all(r -> r.probfn === prob_Gaussian, reporter)
+        all(r -> r.probfn === prob_Gaussian || r.probfn === prob_ExGaussian, reporter)
     if compact
         _prepare_compact_emissions!(cache, noiseparams, reporter, traces, size(a, 1))
     else
