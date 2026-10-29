@@ -549,6 +549,17 @@ individual_propcv(proposalcv::Tuple) = abs(Float64(proposalcv[2]))
 individual_propcv(proposalcv::Real) = abs(Float64(proposalcv))
 individual_propcv(proposalcv) = 0.001
 
+_scale_adaptive_proposal(proposalcv::Real, factor::Real) = proposalcv * factor
+_scale_adaptive_proposal(proposalcv::AbstractMatrix, factor::Real) = proposalcv .* factor^2
+_scale_adaptive_proposal(proposalcv::Tuple, factor::Real) =
+    (_scale_adaptive_proposal(proposalcv[1], factor), proposalcv[2])
+
+function _adaptive_scale_factor(accepted::Integer, attempted::Integer, target::Real)
+    attempted > 0 || return 1.0
+    observed = accepted / attempted
+    clamp(sqrt(max(observed, inv(attempted)) / target), 0.5, 1.5)
+end
+
 function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime; hmm_stack::Symbol=HMM_STACK_MH, mh_options::Union{Nothing,MHOptions}=nothing)
     parout = Array{Float64,2}(undef, length(param), samplesteps)
     prior = _mh_sampling_prior(param, data, model, _mh_likelihood_options(mh_options, hmm_stack))
@@ -558,10 +569,16 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     # Periodic adaptation tracking
     # Adapt ~3 times during warmup phase (not too frequently with small warmup)
     last_adapt_step = 0
+    last_adapt_accept = 0
     adapt_interval = max(500, samplesteps ÷ 5)  # Every ~1/5 of warmup steps (more frequent)
     _, d_cov = adaptation_covariance_samples(parout, 1, model)
     min_accepts = 2 * d_cov
     d_accept = length(param)
+    # Only a covariance supplied by the caller disables warmup adaptation.
+    # A covariance learned here must remain eligible for later updates.
+    user_proposal = proposalcv isa Tuple ||
+                    proposalcv isa AbstractMatrix ||
+                    proposalcv isa AbstractVector
     
     while step < samplesteps && time() - t1 < maxtime
         step += 1
@@ -572,53 +589,50 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
         parout[:, step] = param
         accepttotal += accept
         
-        # Compute covariance for proposal adaptation
-        # Minimum accepts = 2*n so cov is not rank-deficient; isposdef + cond() reject degenerate cov.
-        keep_user_cov = proposalcv isa Tuple ||
-                        proposalcv isa AbstractMatrix ||
-                        proposalcv isa AbstractVector
-        
-        # Periodic re-adaptation: every adapt_interval steps after initial 1000 steps
-        if !keep_user_cov && step >= 1000 && accepttotal >= min_accepts && (step - last_adapt_step) >= adapt_interval
+        # Periodically tune the proposal even if too few accepted moves exist to
+        # estimate a full-rank covariance; otherwise a poor starting scale can
+        # prevent warmup from ever reaching covariance adaptation.
+        if !user_proposal && step >= 1000 && (step - last_adapt_step) >= adapt_interval
+            window_steps = step - last_adapt_step
+            window_accepts = accepttotal - last_adapt_accept
             last_adapt_step = step
-            
-            cov_samples, d_cov = adaptation_covariance_samples(parout, step, model)
-            covparam = cov(cov_samples')
+
             # Optimal acceptance rate scales with dimensionality (Roberts & Rosenthal)
             # d=1: 0.44, d=5: ~0.30, d>>1: 0.234
             # Use: target ≈ min(0.44, 0.234 + 0.206/sqrt(d))
             acceptance_target = min(0.44, 0.234 + 0.206 / sqrt(max(1, d_accept)))
-            current_rate = accepttotal / step
-            
-            # Compute base scaling
-            scaling = (2.38^2) / d_cov
-            
-            # Adaptive scaling moves proposal size toward the target acceptance.
-            # If current_rate > target: increase scaling to reduce acceptance
-            # If current_rate < target: decrease scaling to increase acceptance
-            rate_ratio = current_rate / acceptance_target
-            scaling *= rate_ratio^1.5
-            
-            if isposdef(covparam)
-                # Stricter conditioning check (1e6 instead of 1e10)
-                cond_ok = (cond(covparam) < 1e6)
-                
-                if cond_ok
-                    # Try full covariance if well-conditioned
-                    cov_new = covparam * scaling
-                    proposalcv_new = hastrait(model, :hierarchical) ? (cov_new, individual_propcv(proposalcv)) : cov_new
-                    d_new = proposal_dist(param, proposalcv_new, model)
-                    @info "Updated proposal covariance (scaled)" adapt_step=step curr_acceptance=current_rate covariance_params=d_cov sampled_params=length(param)
-                    proposalcv = proposalcv_new
-                    d = d_new
-                else
-                    # Fallback: use scaled diagonal covariance if full cov is ill-conditioned
-                    diag_cov = Diagonal(diag(covparam) * scaling)
-                    proposalcv = hastrait(model, :hierarchical) ? (diag_cov, individual_propcv(proposalcv)) : diag_cov
+            current_rate = window_accepts / window_steps
+            adapted = false
+
+            if window_accepts >= min_accepts
+                cov_samples, d_cov = adaptation_covariance_samples(parout, step, model)
+                covparam = cov(cov_samples')
+                if isposdef(covparam)
+                    cond_number = cond(covparam)
+                    scaling = (2.38^2 / d_cov) * (current_rate / acceptance_target)^1.5
+                    if cond_number < 1e6
+                        cov_new = covparam * scaling
+                        proposalcv = hastrait(model, :hierarchical) ?
+                            (cov_new, individual_propcv(proposalcv)) : cov_new
+                        @info "Updated proposal covariance (scaled)" adapt_step=step curr_acceptance=current_rate covariance_params=d_cov sampled_params=length(param)
+                    else
+                        cov_new = Diagonal(diag(covparam) .* scaling)
+                        proposalcv = hastrait(model, :hierarchical) ?
+                            (cov_new, individual_propcv(proposalcv)) : cov_new
+                        @info "Updated proposal covariance (scaled diagonal)" adapt_step=step cond_number=cond_number covariance_params=d_cov sampled_params=length(param)
+                    end
                     d = proposal_dist(param, proposalcv, model)
-                    @info "Updated proposal covariance (scaled diagonal)" adapt_step=step cond_number=cond(covparam) covariance_params=d_cov sampled_params=length(param)
+                    adapted = true
                 end
             end
+
+            if !adapted
+                factor = _adaptive_scale_factor(window_accepts, window_steps, acceptance_target)
+                proposalcv = _scale_adaptive_proposal(proposalcv, factor)
+                d = proposal_dist(param, proposalcv, model)
+                @info "Adjusted proposal scale during warmup" adapt_step=step curr_acceptance=current_rate scale_factor=factor
+            end
+            last_adapt_accept = accepttotal
         end
     end
     

@@ -649,6 +649,25 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test size(StochasticGene.thin_columns(zeros(1, 10); maxcols=4), 2) <= 4
     end
 
+    @testset "MH warmup rescales when covariance is unavailable" begin
+        target = 0.27
+        shrink = StochasticGene._adaptive_scale_factor(0, 8_000, target)
+        @test shrink == 0.5
+        @test StochasticGene._scale_adaptive_proposal(0.02, shrink) == 0.01
+
+        grow = StochasticGene._adaptive_scale_factor(4_000, 8_000, target)
+        @test 1.0 < grow <= 1.5
+        @test StochasticGene._scale_adaptive_proposal(0.005, grow) > 0.005
+
+        covariance = [1.0 0.0; 0.0 1.0]
+        @test StochasticGene._scale_adaptive_proposal(covariance, shrink) ≈
+              [1.0 0.0; 0.0 1.0] .* shrink^2
+        hierarchical = (covariance, 0.001)
+        scaled_hierarchical = StochasticGene._scale_adaptive_proposal(hierarchical, shrink)
+        @test scaled_hierarchical[1] ≈ covariance .* shrink^2
+        @test scaled_hierarchical[2] == 0.001
+    end
+
     @testset "MH acceptance includes asymmetric proposal correction" begin
         param = [2.0]
         paramt = [1.0]
