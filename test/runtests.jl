@@ -1092,6 +1092,19 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
 
     end
 
+    @testset "ON/OFF probabilities respect binary-trace offsets" begin
+        binary = [1.0 1.0; 1.0 0.0; 0.0 1.0; 0.0 0.0]
+        expected = StochasticGene._onoff_probs_from_binary_traces([binary], 2)
+
+        for offset in (0.35, -0.35)
+            shifted = binary .+ offset
+            observed = StochasticGene._onoff_probs_from_binary_traces(
+                [shifted], 2; threshold=offset,
+            )
+            @test observed == expected
+        end
+    end
+
     @testset "repeated finite-experiment ON correlations" begin
         algorithm = StochasticGene.CorrelationTrait(centering=:global_mean)
         result = StochasticGene.test_simulate_trials(

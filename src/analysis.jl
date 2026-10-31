@@ -3764,7 +3764,7 @@ split_conditions("ctrl", false)          # Returns: ["ctrl"]
 """
 split_conditions(cond::AbstractString, multicond::Bool) = multicond ? split(cond, "-") : [cond]
 
-function _onoff_probs_from_binary_traces(on_traces::Vector{<:AbstractMatrix}, n_observed::Int)
+function _onoff_probs_from_binary_traces(on_traces::Vector{<:AbstractMatrix}, n_observed::Int; threshold::Real=0.0)
     if n_observed < 2 || isempty(on_traces)
         return (ON_ON=NaN, ON_OFF=NaN, OFF_ON=NaN, OFF_OFF=NaN)
     end
@@ -3775,8 +3775,8 @@ function _onoff_probs_from_binary_traces(on_traces::Vector{<:AbstractMatrix}, n_
     total = 0
     for M in on_traces
         size(M, 2) >= 2 || continue
-        x = M[:, 1] .> 0.0
-        y = M[:, 2] .> 0.0
+        x = M[:, 1] .> threshold
+        y = M[:, 2] .> threshold
         c11 += count(x .& y)
         c10 += count(x .& .!y)
         c01 += count((.!x) .& y)
@@ -4026,7 +4026,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     intensity_result = isempty(intensity_traces) ? nothing : compute_correlation_functions(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
     on_result = compute_correlation_functions(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
     reporter_result = compute_correlation_functions(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
-    onoff_empirical = _onoff_probs_from_binary_traces(on_traces, n_observed)
+    onoff_empirical = _onoff_probs_from_binary_traces(on_traces, n_observed; threshold=offset)
 
     # Extract results
     empirical = (
