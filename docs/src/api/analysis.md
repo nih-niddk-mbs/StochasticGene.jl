@@ -162,6 +162,21 @@ generalized correlation CSV. The generalized path can evaluate arbitrary
 observable pairs supported by `correlation_observable`, including ON indicators
 and reporter counts.
 
+The file and folder writers share one observable engine. Each model builds its
+transition matrix once, caching propagated observables rather than dense matrix
+powers at every lag. `write_correlation_functions(folder; ...)` also accepts
+modern key-based results; its model defaults apply only to legacy files without
+metadata. For a single rate file, use
+`write_correlation_functions_file(file; lags=collect(0:200))`.
+
+Model computation and folder postprocessing are threaded by default. Start
+Julia with `julia -t 8 --project=.` and optionally set `max_concurrent_jobs=2`
+to limit peak memory. Set `threaded=false` for serial execution. To avoid nested
+BLAS oversubscription, consider `LinearAlgebra.BLAS.set_num_threads(1)` before
+processing multiple models. The writers do not change global BLAS settings.
+`validate=true` explicitly runs the preserved independent legacy computation;
+the default is `false` to avoid doing the expensive calculation twice.
+
 To predict what the theoretical curve should look like after subtracting each
 finite trace's own sample mean, request finite-trace centering. Lengths are in
 frames and the interval is in minutes:
@@ -213,7 +228,7 @@ write_correlation_functions_centered_folder(
 )
 ```
 
-Each base theoretical CSV is processed independently with `Threads.@threads`.
+Each base theoretical CSV is processed independently by bounded threaded workers.
 The returned output paths are in deterministic filename order. Existing
 trace-centered and empirical correlation files are excluded from the scan.
 Existing global-centered files are valid inputs and produce distinct
@@ -250,12 +265,27 @@ moment curve.
 For repeated correlation calculations, use:
 
 ```julia
+lags = collect(0:5/3:(216-1)*5/3)
 ctx = build_correlation_context(r, transitions, G, R, S, insertstep, probfn, coupling, lags)
-res = correlate_observables(ctx, :ON1, :ON2)
+res = correlate_observables(ctx, (:ON, 1), (:ON, 2))
+centered = correlate_observables(ctx, (:ON, 1), (:ON, 2);
+    trace_center=true, window_lengths=216)
 ```
 
 That avoids rebuilding the expensive model/correlation context for every
 observable pair.
+
+The core also accepts a list of observable pairs with `threaded=true` and
+`max_concurrent_jobs`; returned results retain input order and caches are
+protected against concurrent access. Folder writers parallelize models instead
+of nesting pair-level parallelism. Build a new context when rates change.
+
+Trace centering predicts the expected unnormalized covariance after whole-trace
+mean subtraction. It does not reproduce the expectation of an empirical ratio
+normalized separately by each trace's sample means, nor IDL multi-tau/window
+processing. Match the estimator, lag convention and normalization when comparing
+theory with data. The empirical CSV writer uses `traceinfo[1]` as the frame
+interval, including for predicted ON and reporter traces.
 
 ### Validate theory against simulation
 

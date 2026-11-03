@@ -3554,3 +3554,163 @@ function _aggregate_per_trace_matrices(per_trace)
     ac2 = vec(sum(per_trace.R_YY, dims=1)) ./ n_traces
     return (cc=cc, ac1=ac1, ac2=ac2)
 end
+"""
+    finite_trace_center_correlation(moment, window_lengths)
+
+Apply the expected finite-record, per-trace mean-subtraction operator to a
+stationary theoretical moment curve. `moment` must contain uniformly spaced
+symmetric lags ordered from negative to positive, with zero lag at its center.
+`window_lengths` is either one trace length or a collection of trace lengths,
+expressed in frames.
+
+The result is the expectation of the usual lagged product after subtracting
+each finite trace's own sample mean. Traces are weighted equally at every lag
+where they contain an overlapping pair, matching the per-trace aggregation
+used by the empirical correlation stack. This operation can create negative
+side lobes even when the infinite-record stationary covariance is positive.
+"""
+function finite_trace_center_correlation(moment::AbstractVector, window_lengths)
+    isodd(length(moment)) || throw(ArgumentError("moment must have odd length with zero lag at its center"))
+    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
+    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
+    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
+    nmax = (length(moment) + 1) ÷ 2
+    maximum(lengths) <= nmax || throw(ArgumentError(
+        "moment supports at most $nmax frames, but window_lengths contains $(maximum(lengths)); " *
+        "compute theory through at least (maximum(window_lengths)-1)*window_interval",
+    ))
+
+    values = Float64.(moment)
+    total = zeros(Float64, length(values))
+    weights = zeros(Int, length(values))
+    center = nmax
+
+    length_counts = Dict{Int,Int}()
+    for n in lengths
+        length_counts[n] = get(length_counts, n, 0) + 1
+    end
+    for (n, multiplicity) in length_counts
+        rowmean = zeros(Float64, n)
+        colmean = zeros(Float64, n)
+        grand = 0.0
+        @inbounds for i in 1:n, j in 1:n
+            value = values[center + j - i]
+            rowmean[i] += value / n
+            colmean[j] += value / n
+            grand += value / n^2
+        end
+        @inbounds for lag in -(n - 1):(n - 1)
+            overlap = n - abs(lag)
+            adjusted = 0.0
+            if lag >= 0
+                for i in 1:overlap
+                    j = i + lag
+                    adjusted += values[center + lag] - rowmean[i] - colmean[j] + grand
+                end
+            else
+                for j in 1:overlap
+                    i = j - lag
+                    adjusted += values[center + lag] - rowmean[i] - colmean[j] + grand
+                end
+            end
+            index = center + lag
+            total[index] += multiplicity * adjusted / overlap
+            weights[index] += multiplicity
+        end
+    end
+
+    result = fill(NaN, length(values))
+    used = weights .> 0
+    result[used] .= total[used] ./ weights[used]
+    return result
+end
+
+function _correlation_window_plan(lags, window_lengths, window_interval)
+    requested = Float64.(collect(lags))
+    isempty(requested) && throw(ArgumentError("lags cannot be empty"))
+    all(isfinite, requested) || throw(ArgumentError("lags must be finite"))
+    iszero(requested[1]) || throw(ArgumentError("lags must begin at zero"))
+    all(diff(requested) .> 0) || throw(ArgumentError("lags must be strictly increasing"))
+    if window_lengths === nothing
+        return (lags=requested, lengths=nothing, interval=nothing)
+    end
+
+    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
+    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
+    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
+    interval = if window_interval === nothing
+        length(requested) > 1 || throw(ArgumentError("window_interval is required when lags contains only zero"))
+        requested[2] - requested[1]
+    else
+        Float64(window_interval)
+    end
+    isfinite(interval) && interval > 0 || throw(ArgumentError("window_interval must be finite and positive"))
+    requested_steps = round.(Int, requested ./ interval)
+    all(isapprox.(requested, requested_steps .* interval; atol=1e-8, rtol=1e-8)) ||
+        throw(ArgumentError("every requested lag must be an integer multiple of window_interval=$interval"))
+    maximum(requested_steps) < maximum(lengths) || throw(ArgumentError(
+        "requested lags must be shorter than at least one trace window",
+    ))
+
+    internal_lags = collect(0.0:interval:(maximum(lengths) - 1) * interval)
+    return (lags=internal_lags, lengths=lengths, interval=interval)
+end
+
+
+function _validate_correlation_tau(tau; window_interval=nothing)
+    length(tau) > 1 || throw(ArgumentError("correlation file must contain more than one lag"))
+    isodd(length(tau)) || throw(ArgumentError("correlation lag grid must have odd length"))
+    all(diff(tau) .> 0) || throw(ArgumentError("correlation lags must be strictly increasing"))
+    center = (length(tau) + 1) ÷ 2
+    isapprox(tau[center], 0.0; atol=1e-8) || throw(ArgumentError("correlation lag grid must be centered at zero"))
+    interval = tau[center + 1] - tau[center]
+    all(isapprox.(diff(tau), interval; atol=1e-8, rtol=1e-8)) ||
+        throw(ArgumentError("finite-trace centering requires a uniformly spaced lag grid"))
+    if window_interval !== nothing && !isapprox(interval, Float64(window_interval); atol=1e-8, rtol=1e-8)
+        throw(ArgumentError("CSV lag interval $interval does not match window_interval=$(Float64(window_interval))"))
+    end
+    return interval
+end
+
+function _trace_centering_lengths(window_lengths)
+    window_lengths === nothing && throw(ArgumentError("window_lengths is required for trace centering"))
+    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
+    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
+    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
+    return lengths
+end
+
+"""Run independent correlation jobs with bounded concurrency and stable output order."""
+function _run_correlation_jobs(f, jobs; threaded::Bool=true,
+    max_concurrent_jobs::Integer=Threads.nthreads())
+    max_concurrent_jobs > 0 || throw(ArgumentError("max_concurrent_jobs must be positive"))
+    results = Vector{Any}(undef, length(jobs))
+    workers = threaded ? min(Threads.nthreads(), max_concurrent_jobs, length(jobs)) : 1
+    if workers <= 1
+        for i in eachindex(jobs)
+            results[i] = f(jobs[i])
+        end
+    else
+        queue = Channel{Int}(length(jobs))
+        for i in eachindex(jobs)
+            put!(queue, i)
+        end
+        close(queue)
+        @sync for _ in 1:workers
+            Threads.@spawn for i in queue
+                results[i] = f(jobs[i])
+            end
+        end
+    end
+    return results
+end
+
+function _center_correlation_result(result, window_lengths)
+    window_lengths === nothing && throw(ArgumentError("window_lengths is required for trace centering"))
+    _validate_correlation_tau(result.tau)
+    return merge(result, (
+        cc_centered=finite_trace_center_correlation(result.cc, window_lengths),
+        ac_x_centered=finite_trace_center_correlation(result.ac_x, window_lengths),
+        ac_y_centered=finite_trace_center_correlation(result.ac_y, window_lengths),
+    ))
+end

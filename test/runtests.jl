@@ -23,6 +23,7 @@ using StochasticGene
 using Test
 
 include("batched_forward_tests.jl")
+include("correlation_stack_tests.jl")
 
 const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
 
@@ -205,7 +206,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             )
             general_df = CSV.read(general_output, DataFrame)
             @test propertynames(general_df) == propertynames(general)
-            @test general_df.cc .- general_df.mean_x .* general_df.mean_y ≈ calculated
+            @test general_df.cc ≈ moment
             @test general_df.cc_centered ≈ calculated
         end
     end
