@@ -177,6 +177,7 @@ write_correlation_functions_key(
     trace_center=true,
     window_lengths=216,
     window_interval=5/3,
+    max_concurrent_jobs=2, # Bound memory when processing large coupled models.
 )
 ```
 

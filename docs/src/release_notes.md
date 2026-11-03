@@ -1,5 +1,24 @@
 # Version 2.0
 
+## Unreleased
+
+- Consolidated theoretical correlation writers onto one cached observable
+  engine, retaining the independent historical calculation for explicit
+  `validate=true` checks. Validation is now opt-in rather than repeated by default.
+- Replaced dense per-lag matrix-power storage with propagated observable
+  caches. Model and postprocessing folders use bounded threading through
+  `threaded` and `max_concurrent_jobs`.
+- Made trace centering available directly in `correlate_observables`. Both CSV
+  layouts preserve raw moments and replace only their `_centered` columns.
+  Earlier generalized trace-centered files could contain centered-plus-mean
+  hybrids in raw columns; regenerate those files before relying on raw moments.
+- Single-file trace-centered output no longer writes an unwanted global
+  companion. File naming uses saved model dimensions, and frame intervals can
+  be inferred from saved trace specifications.
+- Fixed the empirical correlation writer to pass `traceinfo[1]` to ON,
+  reporter and intensity correlation calculations instead of assuming one
+  minute per frame.
+
 ## Version 2.0.7
 
 Version 2.0.7 fixes a crash when a hierarchical model has no fitted individual

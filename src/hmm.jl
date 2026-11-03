@@ -3540,7 +3540,7 @@ to be handled via eigendecomposition.
 - **Lag convention**: Positive τ in input `lags` means first unit leads second unit
 - **Cross-covariance symmetry**: `cc` is computed as `cc12` (unit 1 leads) for positive lags and `cc21` (unit 2 leads) for negative lags, then symmetrized
 """
-function correlation_functions(
+function _correlation_functions_reference(
     rin,
     transitions,
     G::Tuple,
@@ -3737,7 +3737,9 @@ struct HMMCorrelationContext
     lags::Vector{Float64}
     tau::Vector{Float64}
     step_indices::Vector{Int}
-    transition_powers::Vector
+    propagated_observables::Dict{Vector{Float64},Matrix{Float64}}
+    cross_moments::Dict{Tuple{Vector{Float64},Vector{Float64}},Vector{Float64}}
+    cache_lock::ReentrantLock
     observed_units::Vector{Int}
     unit_model::Vector{Int}
     unit_reporters::Dict{Int,Vector{Float64}}
@@ -3749,6 +3751,10 @@ end
 
 function _correlation_lag_steps(lags::Vector)
     lf = Float64.(lags)
+    isempty(lf) && throw(ArgumentError("lags cannot be empty"))
+    all(isfinite, lf) || throw(ArgumentError("lags must be finite"))
+    iszero(first(lf)) || throw(ArgumentError("lags must begin at zero"))
+    all(diff(lf) .> 0) || throw(ArgumentError("lags must be strictly increasing"))
     if length(lf) < 2
         lag_interval = lf[1] > 0 ? lf[1] : 1.0
     else
@@ -3783,10 +3789,11 @@ end
     build_correlation_context(rates, transitions, G, R, S, insertstep,
                               probfn, coupling, lags; kwargs...)
 
-Precompute the coupled HMM stationary distribution, lagged transition powers,
-reporter observables, and emission moments used by repeated correlation
-calculations. Reuse the returned `HMMCorrelationContext` when evaluating many
-observable pairs for the same model and rates.
+Prepare one coupled HMM transition matrix, stationary distribution, reporter
+observables, and emission moments. Propagated observable vectors and cross-moment
+series are cached lazily; dense matrix powers are not stored for every lag.
+Reuse the context for many pairs at the same rates. Cache access is synchronized
+when pairs are evaluated concurrently.
 """
 function build_correlation_context(
     rin,
@@ -3808,10 +3815,13 @@ function build_correlation_context(
     components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
     unit_model = collect(coupling[1])
     if isnothing(observed_units)
-        observed_units = length(unit_model) >= 2 ? unit_model[1:2] : unit_model
+        observed_units = [u for u in unit_model if R[u] > 0]
     else
         observed_units = Int.(collect(observed_units))
     end
+    all(u -> u in unit_model && R[u] > 0, observed_units) ||
+        throw(ArgumentError("observed_units must identify units with reporters in coupling[1]"))
+    allunique(observed_units) || throw(ArgumentError("observed_units must be distinct"))
 
     if isnothing(noise_per_unit)
         n_units = length(R)
@@ -3857,7 +3867,6 @@ function build_correlation_context(
     second_moment_intensity = Dict{Int,Vector{Float64}}()
     for unit in observed_units
         haskey(unit_reporters, unit) || continue
-        idx = findfirst(==(unit), observed_units)
         dists = if typeof(probfn) <: Tuple
             probfn[unit](noiseparams[unit], Int.(round.(unit_reporters[unit] .- offset)), components.N)
         else
@@ -3873,7 +3882,6 @@ function build_correlation_context(
     coupling_rates = [couplingStrength[k] * r[components.targets[k][1]][components.targets[k][2]]
                       for k in eachindex(components.targets)]
     a, p0 = make_ap(r, coupling_rates, lag_interval, components)
-    transition_powers = [a^step for step in step_indices]
     tau = vcat(-reverse(lf), lf[2:end])
 
     HMMCorrelationContext(
@@ -3886,7 +3894,9 @@ function build_correlation_context(
         lf,
         tau,
         step_indices,
-        transition_powers,
+        Dict{Vector{Float64},Matrix{Float64}}(),
+        Dict{Tuple{Vector{Float64},Vector{Float64}},Vector{Float64}}(),
+        ReentrantLock(),
         observed_units,
         unit_model,
         unit_reporters,
@@ -3979,13 +3989,35 @@ function correlation_observable(ctx::HMMCorrelationContext, spec)
     end
 end
 
-function crosscorfn_hmm_cached(ctx::HMMCorrelationContext, x::AbstractVector, y::AbstractVector)
-    cc = zeros(Float64, length(ctx.transition_powers))
-    left = Float64.(x) .* ctx.p0
-    @inbounds for i in eachindex(ctx.transition_powers)
-        cc[i] = dot(left, ctx.transition_powers[i] * y)
+function _propagated_correlation_observable(ctx::HMMCorrelationContext, values::Vector{Float64})
+    get!(ctx.propagated_observables, values) do
+        propagated = Matrix{Float64}(undef, length(values), length(ctx.step_indices))
+        current = copy(values)
+        next = similar(current)
+        step = 0
+        for (i, requested_step) in enumerate(ctx.step_indices)
+            while step < requested_step
+                mul!(next, ctx.a, current)
+                current, next = next, current
+                step += 1
+            end
+            propagated[:, i] = current
+        end
+        propagated
     end
-    return cc
+end
+
+function crosscorfn_hmm_cached(ctx::HMMCorrelationContext, x::AbstractVector, y::AbstractVector)
+    # Content-based, privately owned keys also distinguish custom observables
+    # that happen to share a display label.
+    key = (Float64.(x), Float64.(y))
+    lock(ctx.cache_lock) do
+        moments = get!(ctx.cross_moments, key) do
+            propagated = _propagated_correlation_observable(ctx, key[2])
+            vec(transpose(key[1] .* ctx.p0) * propagated)
+        end
+        copy(moments)
+    end
 end
 
 function autocorfn_hmm_cached(ctx::HMMCorrelationContext, x::AbstractVector, second_moment::AbstractVector)
@@ -4002,12 +4034,19 @@ end
 _symmetrize_positive_lag(ac) = vcat(reverse(ac), ac[2:end])
 
 """
-    correlate_observables(context, xspec, yspec)
+    correlate_observables(context, xspec, yspec; trace_center=false, window_lengths=nothing)
+    correlate_observables(context, pairs; threaded=false, max_concurrent_jobs=Threads.nthreads(), kwargs...)
 
 Compute cross-correlation, both autocorrelations, means, and variances for two
-observables using a cached [`HMMCorrelationContext`](@ref).
+observables using a cached [`HMMCorrelationContext`](@ref). Positive lag means
+`x(t)` against `y(t+lag)`. Raw moments remain unchanged; `trace_center=true`
+replaces only the `*_centered` covariances with expected finite-record
+mean-subtracted covariances. The context must cover the complete longest window
+on a uniform lag grid. Lengths are in frames. The pair-list method can evaluate
+pairs concurrently, retaining their input order.
 """
-function correlate_observables(ctx::HMMCorrelationContext, xspec, yspec)
+function correlate_observables(ctx::HMMCorrelationContext, xspec, yspec;
+    trace_center::Bool=false, window_lengths=nothing)
     x = correlation_observable(ctx, xspec)
     y = correlation_observable(ctx, yspec)
     cc12 = crosscorfn_hmm_cached(ctx, x.values, y.values)
@@ -4021,7 +4060,7 @@ function correlate_observables(ctx::HMMCorrelationContext, xspec, yspec)
     cc = vcat(reverse(cc21), cc12[2:end])
     ac_x = _symmetrize_positive_lag(acx)
     ac_y = _symmetrize_positive_lag(acy)
-    return (
+    result = (
         x=x.label,
         y=y.label,
         tau=ctx.tau,
@@ -4036,6 +4075,45 @@ function correlate_observables(ctx::HMMCorrelationContext, xspec, yspec)
         var_x=acx[zero_idx] - mx^2,
         var_y=acy[zero_idx] - my^2,
     )
+    return trace_center ? _center_correlation_result(result, window_lengths) : result
+end
+
+function correlate_observables(ctx::HMMCorrelationContext, pairs;
+    threaded::Bool=false, max_concurrent_jobs::Integer=Threads.nthreads(), kwargs...)
+    _run_correlation_jobs(collect(pairs); threaded=threaded, max_concurrent_jobs=max_concurrent_jobs) do pair
+        correlate_observables(ctx, pair[1], pair[2]; kwargs...)
+    end
+end
+
+function _correlation_legacy_tuple(ctx::HMMCorrelationContext)
+    length(ctx.observed_units) >= 2 || throw(ArgumentError("legacy correlations require two observed units"))
+    u, v = ctx.observed_units[1:2]
+    intensity = correlate_observables(ctx, (:intensity, u), (:intensity, v))
+    on = correlate_observables(ctx, (:ON, u), (:ON, v))
+    reporters = correlate_observables(ctx, (:reporters, u), (:reporters, v))
+    center = (length(ctx.tau) + 1) ÷ 2
+    pos(a) = a[center:end]
+    return (ctx.tau, intensity.cc, pos(intensity.ac_x), pos(intensity.ac_y),
+        intensity.mean_x, intensity.mean_y, intensity.var_x, intensity.var_y,
+        on.cc, pos(on.ac_x), pos(on.ac_y), on.mean_x, on.mean_y, on.var_x, on.var_y,
+        reporters.cc, pos(reporters.ac_x), pos(reporters.ac_y),
+        reporters.mean_x, reporters.mean_y, reporters.var_x, reporters.var_y)
+end
+
+"""
+    correlation_functions(rates, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags; kwargs...)
+
+Compute stationary intensity, ON and reporter moments through the shared
+observable engine. Returns the historical 22-element tuple, including raw
+moments and stationary means. Use `correlate_observables` for arbitrary pairs
+and finite-trace centering, or `correlation_functions_centered` for the historical
+global mean-centered tuple. Lag values are in minutes and must begin at zero.
+"""
+function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep,
+    probfn, coupling, lags::Vector; kwargs...)
+    ctx = build_correlation_context(rin, transitions, G, R, S, insertstep,
+        probfn, coupling, lags; kwargs...)
+    _correlation_legacy_tuple(ctx)
 end
 
 """
