@@ -880,14 +880,19 @@ end
     simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; kwargs...)
 
 Coupled multi-unit trace simulation. Keyword `noiseparams` should be a `Vector{Int}` with one count per unit
-(use `0` for hidden units with no reporter noise); a scalar (broadcast by `R[i] > 0`); or `nothing` for the
-default `[R[i] > 0 ? 4 : 0 for i in eachindex(R)]`. Pass `observed_units` to restrict trace output to
+(use `0` for hidden units with no reporter noise); a scalar (broadcast by `R[i] > 0`); or `nothing` for
+counts inferred from each emission function (Gaussian 4, exGaussian 5;
+hidden units 0). Pass `observed_units` to restrict trace output to
 observed units (e.g. exclude a hidden master unit). By default, recording begins after an automatic
 physical-time burn-in of ten slowest-rate time constants; override with `warmuptime` or
 `equilibration_timescales`.
 """
 # function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
 function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, probfn=prob_Gaussian, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Integer=0, warmuptime=nothing, equilibration_timescales::Real=10.0, trace_specs=nothing, noiseparams=nothing, splicetype="", observed_units=nothing)
+    if noiseparams === nothing
+        noiseparams = [R[i] > 0 ? _emission_noise_count(
+            probfn isa Union{Tuple,AbstractVector} ? probfn[i] : probfn) : 0 for i in eachindex(R)]
+    end
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
     if verbose

@@ -220,6 +220,11 @@ Zero tail_scale gives exactly Gaussian emissions. When fitting tail_scale,
 initialize it strictly positive: its sampling transform is logarithmic.
 Use complete rate vectors of the new size: do not append parameters to an old
 hierarchical file without rebuilding each complete block.
+Correlation contexts and coupled `simulate_trace_vector`/`simulate_trials`
+infer these five noise parameters when counts are omitted, including mixed
+Gaussian/exGaussian units. Saved per-unit noise priors take precedence in the
+correlation file writers. Low-level `simulator` calls still require the
+appropriate explicit `noiseparams` count for non-Gaussian emission families.
 
 ## Notes
 

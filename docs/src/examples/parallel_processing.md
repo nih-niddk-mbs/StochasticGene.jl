@@ -152,8 +152,7 @@ chains; benchmark under the intended workload before changing production runs.
 
 ## Optional Joint Residence Regularization
 
-On the experimental `feature/joint-residence-regularizer` branch, coupled MH
-trace fits can use an additional stationary ON/OFF occupancy penalty. The
+Coupled MH trace fits can use an additional stationary ON/OFF occupancy penalty. The
 default `regularizers=()` leaves the objective unchanged. This currently
 requires one shared stationary distribution (including hierarchical models
 with shared kinetics); grid, shared-dataset, and varying-kinetics paths are

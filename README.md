@@ -7,7 +7,7 @@ for highlights and migration guidance.
 (including fixed per-trace noise) and includes an opt-in batched trace likelihood.
 See [parallel processing](docs/src/examples/parallel_processing.md) for usage.
 
-The experimental `feature/joint-residence-regularizer` branch adds optional
+Development `main` also includes optional
 coupled-MH stationary ON/OFF occupancy penalties via `regularizers=()`;
 see [joint residence regularization](docs/src/examples/parallel_processing.md#optional-joint-residence-regularization).
 They are disabled by default and kept separate from reported likelihoods.

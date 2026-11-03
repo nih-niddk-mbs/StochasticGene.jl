@@ -33,6 +33,10 @@ using Test, Random, LinearAlgebra, StochasticGene
     delta = only(report.fractions) .- target
     @test report.penalty ≈ dot(delta, pinv(covariance) * delta) / 2
     @test report.objective ≈ raw[1] + report.logprior - report.penalty
+    batched = regularization_report(param, data, model; regularizers=(term,), likelihood_executor=:batched)
+    @test batched.loglikelihood ≈ report.loglikelihood
+    @test batched.pointwise ≈ report.pointwise
+    @test batched.penalty ≈ report.penalty
     doubled = regularization_report(param, data, model; regularizers=(term, term))
     @test doubled.penalty ≈ 2report.penalty
     SG._with_regularizers((term,), data, model) do

@@ -3673,7 +3673,7 @@ function _correlation_functions_reference(
         noise_per_unit = fill(0, n_units)
         for i in observed_units
             if 1 <= i <= n_units && R[i] > 0
-                noise_per_unit[i] = 4
+                noise_per_unit[i] = _emission_noise_count(probfn isa Union{Tuple,AbstractVector} ? probfn[i] : probfn)
             end
         end
     else
@@ -3736,7 +3736,7 @@ function _correlation_functions_reference(
     reporters = Vector[]
     # Only compute statistics for observed units
     for (idx, i) in enumerate(observed_units)
-        if typeof(probfn) <: Tuple
+        if probfn isa Union{Tuple,AbstractVector}
             dists = probfn[i](noiseparams[i], num_per_state[idx], components.N)
         else
             dists = probfn(noiseparams[i], num_per_state[idx], components.N)
@@ -3828,6 +3828,15 @@ function _correlation_functions_reference(
     return vcat(-reverse(lags), lags[2:end]), cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 
+# Preserve four-parameter custom emission defaults; explicit counts/metadata
+# take precedence. The mixture named `_6` also carries a seventh mixing weight.
+function _emission_noise_count(probfn)
+    probfn === prob_ExGaussian && return 5
+    probfn === prob_GaussianMixture && return 5
+    probfn === prob_GaussianMixture_6 && return 7
+    return 4
+end
+
 struct HMMCorrelationContext
     components
     rates
@@ -3895,6 +3904,8 @@ observables, and emission moments. Propagated observable vectors and cross-momen
 series are cached lazily; dense matrix powers are not stored for every lag.
 Reuse the context for many pairs at the same rates. Cache access is synchronized
 when pairs are evaluated concurrently.
+`noise_per_unit` overrides the inferred built-in emission sizes (Gaussian 4,
+exGaussian 5, mixtures 5 or 7); hidden units have zero noise parameters.
 """
 function build_correlation_context(
     rin,
@@ -3929,7 +3940,7 @@ function build_correlation_context(
         noise_per_unit = fill(0, n_units)
         for i in observed_units
             if 1 <= i <= n_units && R[i] > 0
-                noise_per_unit[i] = 4
+                noise_per_unit[i] = _emission_noise_count(probfn isa Union{Tuple,AbstractVector} ? probfn[i] : probfn)
             end
         end
     else
@@ -3968,7 +3979,7 @@ function build_correlation_context(
     second_moment_intensity = Dict{Int,Vector{Float64}}()
     for unit in observed_units
         haskey(unit_reporters, unit) || continue
-        dists = if typeof(probfn) <: Tuple
+        dists = if probfn isa Union{Tuple,AbstractVector}
             probfn[unit](noiseparams[unit], Int.(round.(unit_reporters[unit] .- offset)), components.N)
         else
             probfn(noiseparams[unit], Int.(round.(unit_reporters[unit] .- offset)), components.N)

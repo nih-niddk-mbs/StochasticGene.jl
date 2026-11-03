@@ -3835,7 +3835,7 @@ binary reporter-occupancy process without Gaussian observation noise.
 - `splicetype::String=""`: Splicing type for model (default: empty for no splicing)
 - `dwell_specs::Vector=nothing`: Reserved for dwell-histogram workflows; not used for intensity-trace simulation here.
 - `observed_units::Vector{Int}=nothing`: Observed units (hidden units have `R[i]=0`); defaults to all units with `R[i] > 0`.
-- `noiseparams::Vector=nothing`: Noise-parameter counts per unit (`0` for hidden units); defaults to `[R[i] > 0 ? 4 : 0 for i in eachindex(R)]`.
+- `noiseparams::Vector=nothing`: Noise-parameter counts per unit (`0` for hidden units); inferred from built-in emission functions when omitted (Gaussian 4, exGaussian 5).
 - `trace_specs::Vector=nothing`: Per-unit trace specs (`unit`, `interval`, `start`, `t_end`, `zeromedian`) for coupled models; if `nothing` and `coupling` is non-empty, built via [`default_trace_specs_for_coupled`](@ref) from `interval`, `trial_time`, and `observed_units`.
 - `interval::Float64=1.0`: Frame interval (minutes) for simulation and default `trace_specs` (matches `simulate_trace_vector` / `TraceData`).
 - `zeromedian::Bool=false`: Passed into default `trace_specs` for coupled runs.
@@ -3981,7 +3981,8 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     n_observed >= 1 || throw(ArgumentError("simulate_trials: no observed units (check R and observed_units)"))
 
     if isnothing(noiseparams)
-        noiseparams = [R[i] > 0 ? 4 : 0 for i in eachindex(R)]
+        noiseparams = [R[i] > 0 ? _emission_noise_count(
+            probfn isa Union{Tuple,AbstractVector} ? probfn[i] : probfn) : 0 for i in eachindex(R)]
     end
 
     # Coupled tracejoint-style specs (unit, interval, start, t_end, zeromedian) — not dwell histogram specs
@@ -4611,7 +4612,8 @@ function correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], 
     spec = _correlation_file_spec(file, transitions, G, R, S, insertstep, pattern, probfn, splicetype)
     r = readrates(file, get_row(ratetype))
     correlation_functions(r, spec[:transitions], spec[:G], spec[:R], spec[:S],
-        spec[:insertstep], spec[:probfn], spec[:coupling], lags; splicetype=spec[:splicetype])
+        spec[:insertstep], spec[:probfn], spec[:coupling], lags;
+        splicetype=spec[:splicetype], noise_per_unit=_correlation_noise_counts(spec))
 end
 
 function _correlation_file_spec(file, transitions, G, R, S, insertstep, pattern, probfn, splicetype)
@@ -5076,12 +5078,33 @@ function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3
     return nothing
 end
 
+function _correlation_noise_counts(info)
+    priors = get(info, :noisepriors, nothing)
+    (priors === nothing || (!(priors isa Number) && isempty(priors))) && return nothing
+    R = info[:R]
+    if priors isa Number
+        return [r > 0 ? Int(priors) : 0 for r in R]
+    elseif all(p -> p isa Union{Tuple,AbstractVector}, priors)
+        units = length(priors) == length(R) ? collect(eachindex(R)) : findall(>(0), R)
+        length(priors) == length(units) || throw(ArgumentError(
+            "coupled noisepriors must have one entry per model unit or observed unit"))
+        counts = zeros(Int, length(R))
+        for (unit, prior) in zip(units, priors)
+            R[unit] > 0 && (counts[unit] = length(prior))
+        end
+        return counts
+    end
+    return [r > 0 ? length(priors) : 0 for r in R]
+end
+
 function _write_correlation_job(job, lags, pair_specs; write_legacy, write_general, validate,
     validation_atol, validation_rtol, trace_center)
     (; root, info, r, ratefile, suffix, splicetype, insertstep, plan) = job
     @info "computing correlations for $ratefile with insertstep=$(insertstep)"
+    noise_counts = _correlation_noise_counts(info)
     ctx = build_correlation_context(r, info[:transitions], info[:G], info[:R], info[:S],
-        insertstep, info[:probfn], info[:coupling], plan.lags; splicetype=splicetype)
+        insertstep, info[:probfn], info[:coupling], plan.lags;
+        splicetype=splicetype, noise_per_unit=noise_counts)
     token = "_insertstep" * _analysis_insertstep_token(insertstep)
     maxlag = maximum(Float64.(collect(lags)))
     if write_legacy
@@ -5100,7 +5123,7 @@ function _write_correlation_job(job, lags, pair_specs; write_legacy, write_gener
         if validate
             reference = _correlation_functions_reference(r, info[:transitions], info[:G], info[:R],
                 info[:S], insertstep, info[:probfn], info[:coupling], plan.lags;
-                splicetype=splicetype, observed_units=ctx.observed_units)
+                splicetype=splicetype, observed_units=ctx.observed_units, noise_per_unit=noise_counts)
             _validate_general_correlations(full_results, reference[9], reference[16];
                 atol=validation_atol, rtol=validation_rtol, observed_units=ctx.observed_units)
         end

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Integrated opt-in joint-residence regularization, non-hierarchical batched
+  likelihoods, and centered exGaussian emissions with compact emission caching.
+  Gaussian emissions and the unregularized objective remain the defaults.
+- Fixed warmup adaptation stopping after its first learned covariance update;
+  warmup can also rescale proposals when covariance estimation is unavailable.
+- Correlation contexts infer built-in emission sizes (including five-parameter
+  exGaussian emissions), while file writers respect saved per-unit noise priors.
+  Mixed emission families and hidden units are supported. Coupled trace
+  simulation wrappers infer the same counts when not supplied explicitly.
 - Consolidated theoretical correlation writers onto one cached observable
   engine, retaining the independent historical calculation for explicit
   `validate=true` checks. Validation is now opt-in rather than repeated by default.

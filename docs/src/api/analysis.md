@@ -169,6 +169,14 @@ modern key-based results; its model defaults apply only to legacy files without
 metadata. For a single rate file, use
 `write_correlation_functions_file(file; lags=collect(0:200))`.
 
+Built-in emission functions determine the default noise-parameter count per
+observed unit: Gaussian uses four and exGaussian uses five. Mixed emission
+families can be supplied as a tuple or vector; hidden units have zero noise
+parameters. File writers use saved `noisepriors` lengths when present, including
+per-unit priors with hidden-unit entries omitted. Custom emission functions
+retain the historical four-parameter fallback; pass `noise_per_unit` explicitly
+to the core context or save the appropriate noise priors for file-based analysis.
+
 Model computation and folder postprocessing are threaded by default. Start
 Julia with `julia -t 8 --project=.` and optionally set `max_concurrent_jobs=2`
 to limit peak memory. Set `threaded=false` for serial execution. To avoid nested
