@@ -3764,7 +3764,7 @@ split_conditions("ctrl", false)          # Returns: ["ctrl"]
 """
 split_conditions(cond::AbstractString, multicond::Bool) = multicond ? split(cond, "-") : [cond]
 
-function _onoff_probs_from_binary_traces(on_traces::Vector{<:AbstractMatrix}, n_observed::Int)
+function _onoff_probs_from_binary_traces(on_traces::Vector{<:AbstractMatrix}, n_observed::Int; threshold::Real=0.0)
     if n_observed < 2 || isempty(on_traces)
         return (ON_ON=NaN, ON_OFF=NaN, OFF_ON=NaN, OFF_OFF=NaN)
     end
@@ -3775,8 +3775,8 @@ function _onoff_probs_from_binary_traces(on_traces::Vector{<:AbstractMatrix}, n_
     total = 0
     for M in on_traces
         size(M, 2) >= 2 || continue
-        x = M[:, 1] .> 0.0
-        y = M[:, 2] .> 0.0
+        x = M[:, 1] .> threshold
+        y = M[:, 2] .> threshold
         c11 += count(x .& y)
         c10 += count(x .& .!y)
         c01 += count((.!x) .& y)
@@ -4026,7 +4026,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     intensity_result = isempty(intensity_traces) ? nothing : compute_correlation_functions(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
     on_result = compute_correlation_functions(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
     reporter_result = compute_correlation_functions(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=interval)
-    onoff_empirical = _onoff_probs_from_binary_traces(on_traces, n_observed)
+    onoff_empirical = _onoff_probs_from_binary_traces(on_traces, n_observed; threshold=offset)
 
     # Extract results
     empirical = (
@@ -4608,163 +4608,76 @@ Compute theoretical correlation functions for a single rate file and return the 
 - ON states are binary (1 if reporter count > 0, 0 otherwise)
 """
 function correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml"; splicetype::String="")
+    spec = _correlation_file_spec(file, transitions, G, R, S, insertstep, pattern, probfn, splicetype)
     r = readrates(file, get_row(ratetype))
+    correlation_functions(r, spec[:transitions], spec[:G], spec[:R], spec[:S],
+        spec[:insertstep], spec[:probfn], spec[:coupling], lags; splicetype=spec[:splicetype])
+end
+
+function _correlation_file_spec(file, transitions, G, R, S, insertstep, pattern, probfn, splicetype)
     run_spec = read_run_spec_for_rates_file(file)
-
-    if !isnothing(run_spec)
-        transitions = get(run_spec, :transitions, transitions)
-        G = get(run_spec, :G, G)
-        R = get(run_spec, :R, R)
-        S = get(run_spec, :S, S)
-        insertstep = get(run_spec, :insertstep, insertstep)
-        probfn = get(run_spec, :probfn, probfn)
-        coupling = get(run_spec, :coupling, tuple())
-        sp = String(get(run_spec, :splicetype, ""))
-    else
+    spec = Dict{Symbol,Any}(:transitions=>transitions, :G=>G, :R=>R, :S=>S,
+        :insertstep=>insertstep, :probfn=>probfn, :splicetype=>splicetype, :coupling=>())
+    if isnothing(run_spec)
         coupling_field = extract_source_target(pattern, file)
-        coupling = isnothing(coupling_field) ? tuple() : make_coupling(coupling_field, G, R)
-        sp = splicetype
+        spec[:coupling] = isnothing(coupling_field) ? tuple() : make_coupling(coupling_field, G, R)
+    else
+        merge!(spec, run_spec)
     end
-
-    correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype=sp)
+    return spec
 end
 
 """
-    write_correlation_functions_file(file, transitions=..., G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
+    write_correlation_functions_file(file, transitions=..., G=(3,3), R=(3,3),
+        S=(1,0), insertstep=(1,1), pattern="gene", lag_values=0:200,
+        probfn=prob_Gaussian, ratetype="median"; lags=lag_values,
+        trace_center=false, window_lengths=nothing, window_interval=nothing)
 
-Write correlation functions to a CSV file.
+Write the historical ON/reporter CSV for one rate file through the common
+observable engine. Positional calls are preserved; `lags` can also be supplied
+as a keyword. Saved run metadata takes precedence over positional model defaults.
+Without metadata, the legacy filename supplies the coupling pattern.
 
-# Arguments
-- `file::String`: Path to the rate file (typically a `.txt` file containing rate parameters)
-- `transitions::Tuple`: Tuple of transition definitions for each unit (default: 3-state model transitions)
-- `G::Tuple`: Number of gene states for each unit (default: (3, 3))
-- `R::Tuple`: Number of RNA states for each unit (default: (3, 3))
-- `S::Tuple`: Initial state definitions (default: (1, 0))
-- `insertstep::Tuple`: Insert step definitions (default: (1, 1))
-- `pattern::String`: Pattern to extract coupling information from filename (default: "gene")
-- `lags::Vector{Int}`: Time lags for correlation function computation (default: 0:1:200)
-- `probfn`: Probability function for observation model (default: prob_Gaussian)
-- `ratetype::String`: Which row of rates to use from file (default: "ml" for maximum likelihood)
-
-# Returns
-- `nothing`: Returns nothing
+Global mean centering is the default. With `trace_center=true`, require window
+lengths in frames and write only the trace-centered file. The frame interval is
+in minutes and defaults to the common saved trace interval, then the lag spacing.
+The engine computes the full longest-window support before trimming the output.
+Raw moment columns remain unchanged; `_centered` columns hold the selected
+covariance. Existing CSV headings and legacy filename layouts are preserved.
+Returns `nothing`.
 """
-function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern::String="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype::String="median"; splicetype::String="", trace_center::Bool=false, window_lengths=nothing, window_interval=nothing)
+function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern::String="gene", lag_values=collect(0:1:200), probfn=prob_Gaussian, ratetype::String="median"; lags=lag_values, splicetype::String="", trace_center::Bool=false, window_lengths=nothing, window_interval=nothing)
 
     trace_center && window_lengths === nothing &&
         throw(ArgumentError("window_lengths is required when trace_center=true"))
-    plan = _correlation_window_plan(lags, trace_center ? window_lengths : nothing, window_interval)
-    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, plan.lags, probfn, ratetype; splicetype=splicetype)
-    parts = fields(basename(file))
-    new_model = create_modelstring(G, R, S, insertstep)
-    out = joinpath(dirname(file), "crosscorrelation_" * parts.label * "_" * parts.cond * "_" * parts.gene * "_" * new_model * "_" * parts.nalleles * ".csv")
-    write_correlation_csv(out, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
-    trace_center && write_correlation_functions_centered(out;
-        window_lengths=plan.lengths, window_interval=plan.interval,
-        maxlag=maximum(Float64.(collect(lags))))
+    info = _correlation_file_spec(file, transitions, G, R, S, insertstep, pattern, probfn, splicetype)
+    plan = _correlation_window_plan(lags, trace_center ? window_lengths : nothing,
+        _correlation_frame_interval(info, window_interval, trace_center))
+    parts = isempty(string(get(info, :key, ""))) ? fields(basename(file)) : nothing
+    out = if parts isa Result_Fields
+        new_model = create_modelstring(info[:G], info[:R], info[:S], info[:insertstep])
+        joinpath(dirname(file), "crosscorrelation_" * parts.label * "_" * parts.cond * "_" * parts.gene * "_" * new_model * "_" * parts.nalleles * ".csv")
+    else
+        joinpath(dirname(file), "crosscorrelation_" * get_key(basename(file)) *
+            "_insertstep" * _analysis_insertstep_token(info[:insertstep]) * ".csv")
+    end
+    job = (root=dirname(file), info=info, r=readrates(file, get_row(ratetype)),
+        ratefile=file, suffix="", splicetype=String(info[:splicetype]),
+        insertstep=info[:insertstep], plan=plan, legacy_output=out)
+    _write_correlation_job(job, lags, []; write_legacy=true, write_general=false,
+        validate=false, validation_atol=1e-8, validation_rtol=1e-6, trace_center=trace_center)
     return nothing
 end
 
-"""
-    finite_trace_center_correlation(moment, window_lengths)
-
-Apply the expected finite-record, per-trace mean-subtraction operator to a
-stationary theoretical moment curve. `moment` must contain uniformly spaced
-symmetric lags ordered from negative to positive, with zero lag at its center.
-`window_lengths` is either one trace length or a collection of trace lengths,
-expressed in frames.
-
-The result is the expectation of the usual lagged product after subtracting
-each finite trace's own sample mean. Traces are weighted equally at every lag
-where they contain an overlapping pair, matching the per-trace aggregation
-used by the empirical correlation stack. This operation can create negative
-side lobes even when the infinite-record stationary covariance is positive.
-"""
-function finite_trace_center_correlation(moment::AbstractVector, window_lengths)
-    isodd(length(moment)) || throw(ArgumentError("moment must have odd length with zero lag at its center"))
-    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
-    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
-    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
-    nmax = (length(moment) + 1) ÷ 2
-    maximum(lengths) <= nmax || throw(ArgumentError(
-        "moment supports at most $nmax frames, but window_lengths contains $(maximum(lengths)); " *
-        "compute theory through at least (maximum(window_lengths)-1)*window_interval",
-    ))
-
-    values = Float64.(moment)
-    total = zeros(Float64, length(values))
-    weights = zeros(Int, length(values))
-    center = nmax
-
-    length_counts = Dict{Int,Int}()
-    for n in lengths
-        length_counts[n] = get(length_counts, n, 0) + 1
-    end
-    for (n, multiplicity) in length_counts
-        rowmean = zeros(Float64, n)
-        colmean = zeros(Float64, n)
-        grand = 0.0
-        @inbounds for i in 1:n, j in 1:n
-            value = values[center + j - i]
-            rowmean[i] += value / n
-            colmean[j] += value / n
-            grand += value / n^2
-        end
-        @inbounds for lag in -(n - 1):(n - 1)
-            overlap = n - abs(lag)
-            adjusted = 0.0
-            if lag >= 0
-                for i in 1:overlap
-                    j = i + lag
-                    adjusted += values[center + lag] - rowmean[i] - colmean[j] + grand
-                end
-            else
-                for j in 1:overlap
-                    i = j - lag
-                    adjusted += values[center + lag] - rowmean[i] - colmean[j] + grand
-                end
-            end
-            index = center + lag
-            total[index] += multiplicity * adjusted / overlap
-            weights[index] += multiplicity
-        end
-    end
-
-    result = fill(NaN, length(values))
-    used = weights .> 0
-    result[used] .= total[used] ./ weights[used]
-    return result
+function _correlation_frame_interval(info, interval, trace_center)
+    (!trace_center || interval !== nothing) && return interval
+    intervals = unique(Float64(get(spec, :interval, NaN)) for spec in get(info, :trace_specs, []))
+    filter!(isfinite, intervals)
+    length(intervals) > 1 && throw(ArgumentError(
+        "trace_specs contains multiple frame intervals; pass window_interval explicitly"))
+    return isempty(intervals) ? nothing : only(intervals)
 end
 
-function _correlation_window_plan(lags, window_lengths, window_interval)
-    requested = Float64.(collect(lags))
-    isempty(requested) && throw(ArgumentError("lags cannot be empty"))
-    iszero(requested[1]) || throw(ArgumentError("lags must begin at zero"))
-    issorted(requested) || throw(ArgumentError("lags must be sorted"))
-    if window_lengths === nothing
-        return (lags=requested, lengths=nothing, interval=nothing)
-    end
-
-    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
-    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
-    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
-    interval = if window_interval === nothing
-        length(requested) > 1 || throw(ArgumentError("window_interval is required when lags contains only zero"))
-        requested[2] - requested[1]
-    else
-        Float64(window_interval)
-    end
-    interval > 0 || throw(ArgumentError("window_interval must be positive"))
-    requested_steps = round.(Int, requested ./ interval)
-    all(isapprox.(requested, requested_steps .* interval; atol=1e-8, rtol=1e-8)) ||
-        throw(ArgumentError("every requested lag must be an integer multiple of window_interval=$interval"))
-    maximum(requested_steps) < maximum(lengths) || throw(ArgumentError(
-        "requested lags must be shorter than at least one trace window",
-    ))
-
-    internal_lags = collect(0.0:interval:(maximum(lengths) - 1) * interval)
-    return (lags=internal_lags, lengths=lengths, interval=interval)
-end
 
 function _correlation_legacy_dataframe(tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
     n_lags = length(tau)
@@ -4803,11 +4716,23 @@ function write_correlation_csv(outfile::String, tau, ccON, ac1ON, ac2ON, mON1, m
     CSV.write(outfile, df)
 end
 
-function _correlation_default_pairs(observables, pairs)
+function _correlation_legacy_dataframe(on, reporters)
+    center = (length(on.tau) + 1) ÷ 2
+    return _correlation_legacy_dataframe(on.tau, on.cc,
+        on.ac_x[center:end], on.ac_y[center:end], on.mean_x, on.mean_y,
+        reporters.cc, reporters.ac_x[center:end], reporters.ac_y[center:end],
+        reporters.mean_x, reporters.mean_y)
+end
+
+function _correlation_default_pairs(observables, pairs, observed_units=(1, 2))
+    default_obs = [(:ON, u) for u in observed_units[1:min(2, length(observed_units))]]
+    append!(default_obs, [(:reporters, u) for u in observed_units[1:min(2, length(observed_units))]])
+    default_pairs = length(default_obs) == 4 ?
+        [(default_obs[1], default_obs[2]), (default_obs[3], default_obs[4])] : Tuple[]
     if pairs !== nothing
-        pairs === :default && return [((:ON, 1), (:ON, 2)), ((:reporters, 1), (:reporters, 2))]
+        pairs === :default && return default_pairs
         if pairs === :all
-            obs = observables === nothing ? [(:ON, 1), (:ON, 2), (:reporters, 1), (:reporters, 2)] : collect(observables)
+            obs = observables === nothing ? default_obs : collect(observables)
             out = Tuple[]
             for i in 1:length(obs)-1
                 for j in i+1:length(obs)
@@ -4818,8 +4743,8 @@ function _correlation_default_pairs(observables, pairs)
         end
         return collect(pairs)
     end
-    observables === nothing && return [((:ON, 1), (:ON, 2)), ((:reporters, 1), (:reporters, 2))]
-    return _correlation_default_pairs(observables, :all)
+    observables === nothing && return default_pairs
+    return _correlation_default_pairs(observables, :all, observed_units)
 end
 
 """
@@ -4908,28 +4833,6 @@ function _correlation_trace_centered_output_path(file::String, output)
     return joinpath(dirname(file), name)
 end
 
-function _validate_correlation_tau(tau; window_interval=nothing)
-    length(tau) > 1 || throw(ArgumentError("correlation file must contain more than one lag"))
-    isodd(length(tau)) || throw(ArgumentError("correlation lag grid must have odd length"))
-    all(diff(tau) .> 0) || throw(ArgumentError("correlation lags must be strictly increasing"))
-    center = (length(tau) + 1) ÷ 2
-    isapprox(tau[center], 0.0; atol=1e-8) || throw(ArgumentError("correlation lag grid must be centered at zero"))
-    interval = tau[center + 1] - tau[center]
-    all(isapprox.(diff(tau), interval; atol=1e-8, rtol=1e-8)) ||
-        throw(ArgumentError("finite-trace centering requires a uniformly spaced lag grid"))
-    if window_interval !== nothing && !isapprox(interval, Float64(window_interval); atol=1e-8, rtol=1e-8)
-        throw(ArgumentError("CSV lag interval $interval does not match window_interval=$(Float64(window_interval))"))
-    end
-    return interval
-end
-
-function _trace_centering_lengths(window_lengths)
-    window_lengths === nothing && throw(ArgumentError("window_lengths is required for trace centering"))
-    lengths = window_lengths isa Integer ? [Int(window_lengths)] : Int.(collect(window_lengths))
-    isempty(lengths) && throw(ArgumentError("window_lengths cannot be empty"))
-    any(n -> n < 2, lengths) && throw(ArgumentError("every window length must be at least 2 frames"))
-    return lengths
-end
 
 function _preflight_trace_centering_lags(tau, lengths, file; window_interval=nothing, pair=nothing)
     interval = _validate_correlation_tau(Float64.(tau); window_interval=window_interval)
@@ -4972,11 +4875,7 @@ function _trace_center_general_correlation!(df::DataFrame, window_lengths, windo
         cc = finite_trace_center_correlation(df.cc[rows], window_lengths)
         ac_x = finite_trace_center_correlation(df.ac_x[rows], window_lengths)
         ac_y = finite_trace_center_correlation(df.ac_y[rows], window_lengths)
-        # Preserve the historical raw-moment fields. Downstream code obtains
-        # covariance by subtracting these repeated stationary mean products.
-        df.cc[rows] .= cc .+ df.mean_x[rows] .* df.mean_y[rows]
-        df.ac_x[rows] .= ac_x .+ df.mean_x[rows] .^ 2
-        df.ac_y[rows] .= ac_y .+ df.mean_y[rows] .^ 2
+        # Raw moments have the same meaning in both CSV layouts.
         df.cc_centered[rows] .= cc
         df.ac_x_centered[rows] .= ac_x
         df.ac_y_centered[rows] .= ac_y
@@ -5014,11 +4913,21 @@ function _write_trace_centered_correlation!(df::DataFrame, path::String, lengths
     return outfile
 end
 
+function _write_correlation_output(df, path, plan, maxlag, trace_center)
+    if trace_center
+        return _write_trace_centered_correlation!(df, path, plan.lengths, plan.interval,
+            maxlag, _correlation_trace_centered_output_path(path, nothing))
+    end
+    CSV.write(path, df)
+    return path
+end
+
 """
     write_correlation_functions_centered(path; window_lengths,
                                          window_interval=nothing,
                                          maxlag=nothing, output=nothing,
-                                         threaded=true)
+                                         threaded=true,
+                                         max_concurrent_jobs=Threads.nthreads())
 
 Post-process previously written theoretical correlation CSV files without
 rebuilding the HMM. `window_lengths`, in frames, specifies the finite-record
@@ -5031,8 +4940,9 @@ headings as the input. `maxlag` optionally trims the output. The input CSV must
 contain a uniform symmetric lag grid extending through at least
 `(maximum(window_lengths)-1) * window_interval`.
 
-When `path` is a folder, source CSVs are processed in parallel with
-`Threads.@threads` by default. Start Julia with multiple threads (for example,
+When `path` is a folder, source CSVs are processed by bounded threaded workers
+by default. `max_concurrent_jobs` limits simultaneous files to control memory.
+Start Julia with multiple threads (for example,
 `julia -t 10`) to enable parallel execution. Set `threaded=false` for serial
 processing. Existing trace-centered and empirical files are excluded from the
 source scan. Global-centered files are accepted and retain their own
@@ -5045,6 +4955,7 @@ function write_correlation_functions_centered(
     maxlag=nothing,
     output=nothing,
     threaded::Bool=true,
+    max_concurrent_jobs::Integer=Threads.nthreads(),
 )
     lengths = _trace_centering_lengths(window_lengths)
     if isdir(path)
@@ -5063,20 +4974,11 @@ function write_correlation_functions_centered(
             # Validate all inputs before parallel writers can create a partial output set.
             _preflight_trace_centering!(inputs[i], files[i], lengths, window_interval)
         end
-        outputs = Vector{String}(undef, length(files))
         process_file(i) = _write_trace_centered_correlation!(
             inputs[i], files[i], lengths, window_interval, maxlag, nothing,
         )
-        if threaded && Threads.nthreads() > 1 && length(files) > 1
-            Threads.@threads for i in eachindex(files)
-                outputs[i] = process_file(i)
-            end
-        else
-            for i in eachindex(files)
-                outputs[i] = process_file(i)
-            end
-        end
-        return outputs
+        return String.(_run_correlation_jobs(process_file, eachindex(files);
+            threaded=threaded, max_concurrent_jobs=max_concurrent_jobs))
     end
 
     isfile(path) || throw(ArgumentError("correlation CSV does not exist: $path"))
@@ -5105,10 +5007,11 @@ function _find_correlation_result(results, x::String, y::String)
     return nothing
 end
 
-function _validate_general_correlations(results, ccON, ccReporters; atol::Float64=1e-8, rtol::Float64=1e-6)
+function _validate_general_correlations(results, ccON, ccReporters; atol::Float64=1e-8, rtol::Float64=1e-6, observed_units=(1, 2))
+    u, v = observed_units[1:2]
     checks = [
-        ("ON_unit1", "ON_unit2", ccON),
-        ("reporters_unit1", "reporters_unit2", ccReporters),
+        ("ON_unit$u", "ON_unit$v", ccON),
+        ("reporters_unit$u", "reporters_unit$v", ccReporters),
     ]
     for (x, y, reference) in checks
         result = _find_correlation_result(results, x, y)
@@ -5127,143 +5030,92 @@ function _validate_general_correlations(results, ccON, ccReporters; atol::Float6
 end
 
 """
-    write_correlation_functions(folder, transitions=..., G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
+    write_correlation_functions(folder; lags=0:200, ratetype="median",
+        trace_center=false, window_lengths=nothing, window_interval=nothing,
+        threaded=true, max_concurrent_jobs=Threads.nthreads())
 
-Compute theoretical correlation functions for all rate files in a folder and write results to CSV files.
+Write theoretical correlations recursively. Modern `info_<key>.jld2` results
+use [`write_correlation_functions_key`](@ref), including its generalized output.
+Legacy `rates_*tracejoint*.txt` files without saved metadata use the positional
+model defaults and [`write_correlation_functions_file`](@ref). Both adapters
+use the same observable engine and bounded threaded executor.
 
-This is the main function for batch-processing rate parameter files to generate theoretical cross-correlation
-and auto-correlation predictions. It recursively searches a folder for files matching the pattern
-`*rates*tracejoint*`, computes theoretical correlation functions for each using the HMM framework,
-and writes comprehensive results to CSV files that can be used for model scoring against empirical data.
+For modern results, saved metadata determines the model. Legacy model keywords
+apply only to files without metadata. Use the key frontend to override insertion
+steps or select arbitrary observable pairs.
 
-# Arguments
-- `folder::String`: Path to folder containing rate files. The function recursively searches all subdirectories.
-- `transitions::Tuple`: Tuple of transition definitions for each unit. Each element specifies allowed
-  state transitions as a vector of pairs `[from, to]`. Default: `(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]))`
-  for a 3-state model with forward/backward transitions for both units.
-- `G::Tuple{Int, Int}`: Number of gene states for each unit (default: `(3, 3)`).
-- `R::Tuple{Int, Int}`: Number of RNA states for each unit (default: `(3, 3)`).
-- `S::Tuple{Int, Int}`: Initial state definitions (default: `(0, 0)`).
-- `insertstep::Tuple{Int, Int}`: Insert step definitions (default: `(1, 1)`).
-- `interval::Float64`: Time interval for transitions in the same units as the rate parameters (default: `1.0`).
-- `pattern::String`: Pattern to extract coupling information from filename (default: `"gene"`). Used by
-  `extract_source_target` to determine which states are coupled.
-- `lags::Vector{Int}`: Time lags for correlation function computation. The function computes correlations at these
-  lags and also includes negative lags (symmetric). Default: `collect(0:1:200)` which gives lags from -200 to 200.
-- `probfn`: Probability function for the observation model (default: `prob_Gaussian`). Determines how
-  reporter counts are generated from hidden states.
-- `ratetype::String`: Which row of rates to use from the rate file (default: `"median"`). Other options
-  include `"ml"` (maximum likelihood), `"mean"`, etc. This selects which parameter estimate to use when
-  multiple estimates are stored in the file.
-
-# Output Files
-
-For each input file matching `*rates*tracejoint*.txt`, creates a corresponding output file
-`*crosscorrelation*tracejoint*.csv` in the same directory. The CSV file contains the following columns:
-
-## Time Lags
-- `tau::Vector{Int}`: Time lags from `-max_lag` to `+max_lag` (symmetric around zero)
-
-## ON State Correlation Functions (Binary: 1 if reporter > 0, 0 otherwise)
-- `cc_ON::Vector{Float64}`: Raw cross-moment between enhancer and gene ON states, E[xy].
-  Positive τ means enhancer leads: E[enhancer(t) × gene(t+τ)]. For a centered
-  cross-covariance use `cc_ON - mON1*mON2`; for a mean-normalized curve divide
-  that centered value by `mON1*mON2`.
-- `ac1_ON::Vector{Float64}`: Raw auto-moment E[x²] for enhancer ON states (symmetric: includes negative lags).
-- `ac2_ON::Vector{Float64}`: Raw auto-moment E[y²] for gene ON states (symmetric: includes negative lags).
-- `mON1::Vector{Float64}`: Mean ON state probability for enhancer (repeated for each lag, scalar value).
-- `mON2::Vector{Float64}`: Mean ON state probability for gene (repeated for each lag, scalar value).
-
-## Reporter Count Correlation Functions (Raw integer counts)
-- `cc_Reporters::Vector{Float64}`: Raw cross-moment E[xy] between enhancer and gene reporter counts.
-  Same lag convention as `cc_ON`; center with `cc_Reporters - mR1*mR2`.
-- `ac1_Reporters::Vector{Float64}`: Raw auto-moment E[x²] for enhancer reporter counts (symmetric).
-- `ac2_Reporters::Vector{Float64}`: Raw auto-moment E[y²] for gene reporter counts (symmetric).
-- `mR1::Vector{Float64}`: Mean reporter count for enhancer (repeated for each lag, scalar value).
-- `mR2::Vector{Float64}`: Mean reporter count for gene (repeated for each lag, scalar value).
-
-# Workflow
-
-1. **File Discovery**: Recursively walks through `folder` and identifies all files containing both
-   `"rates"` and `"tracejoint"` in the filename.
-
-2. **Rate Loading**: For each matching file, loads rate parameters using `readrates(file, get_row(ratetype))`.
-
-3. **Coupling Extraction**: Extracts coupling information from the filename using `extract_source_target(pattern, file)`
-   to determine which states are coupled (e.g., gene state 1 to gene state 3, or RNA states).
-
-4. **Correlation Function Computation**: Calls `correlation_functions` (via `write_correlation_functions_file`) to compute all theoretical
-   correlation functions using the HMM framework.
-
-5. **File Writing**: Writes results to CSV with filename pattern: `rates_*.txt` → `crosscorrelation_*.csv`.
-
-6. **Trace Centering Postprocess**: Set `trace_center=true` with
-   `window_lengths` in frames to write a separate trace-centered set after the
-   normal correlation CSV has been created.
-
-# Usage Example
-
-```julia
-# Process all rate files in a results folder
-write_correlation_functions(
-    "results/5Prime-coupled-2025-11-27/",
-    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
-    G=(3, 3),
-    R=(3, 3),
-    lags=collect(0:1:200),  # Lags from -200 to 200
-    ratetype="median"
-)
-```
-
-# Notes
-
-- **Legacy raw output**: `crosscorrelation_*.csv` contains uncentered moments
-  (`E[xy]` and `E[x²]`) for backward compatibility. Use the means in the same
-  file to center them. The key-based writer also emits
-  `crosscorrelation-general_*.csv`, whose `*_centered` columns are already
-  centered; divide those by the relevant mean product for FCS-style
-  mean-normalized curves.
-
-- **Lag Convention**: Positive τ means the first unit (enhancer) leads the second unit (gene). This matches
-  the convention used in `StatsBase.crosscov(enhancer, gene, lags)`.
-
-- **Symmetric Auto-correlations**: Auto-correlation functions are symmetric (ac(τ) = ac(-τ)), so negative lags are
-  included by reversing the positive lag values.
-
-- **File Matching**: Only files containing both `"rates"` and `"tracejoint"` in the filename are processed.
-  This pattern identifies files containing joint trace fitting results.
-
-- **Batch Processing**: This function is designed for batch processing of multiple model fits. Each rate
-  file typically corresponds to a different coupling model (e.g., gene state 1→3 coupling vs. gene state 2→3).
-
-- **Model Scoring**: The output CSV files are designed to be read by `score_models_from_traces`, which
-  compares these theoretical predictions against empirical correlation functions computed from experimental
-  or simulated trace data.
-
-# See Also
-- `write_correlation_functions_file`: Processes a single rate file (called internally by this function)
-- `correlation_functions`: Core HMM function that computes theoretical correlation functions
-- `score_models_from_traces`: Scores theoretical predictions against empirical data
-- `readrates`: Loads rate parameters from text files
+Lags and frame intervals are in minutes; window lengths are in frames.
+Global centering is the default. Trace centering writes only trace-centered
+outputs and requires the full longest-window theory, computed internally
+before trimming to the requested lags. Set `threaded=false` for serial execution,
+or bound simultaneous models with `max_concurrent_jobs`. Returns `nothing`.
 """
-function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", splicetype::String="", trace_center::Bool=false, window_lengths=nothing, window_interval=nothing)
+function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", splicetype::String="", trace_center::Bool=false, window_lengths=nothing, window_interval=nothing, threaded::Bool=true, max_concurrent_jobs::Integer=Threads.nthreads())
+    legacy_files = String[]
+    has_key_info = false
     for (root, _, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f) && occursin("tracejoint", f)
+            has_key_info |= startswith(f, "info_") && endswith(f, ".jld2")
+            if startswith(f, "rates_") && endswith(f, ".txt") && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype;
-                    splicetype=splicetype, trace_center=trace_center,
-                    window_lengths=window_lengths, window_interval=window_interval)
+                read_run_spec_for_rates_file(file) === nothing && push!(legacy_files, file)
             end
         end
     end
+    if has_key_info
+        write_correlation_functions_key(folder; lags=lags, ratetype=ratetype,
+            trace_center=trace_center, window_lengths=window_lengths, window_interval=window_interval,
+            threaded=threaded, max_concurrent_jobs=max_concurrent_jobs)
+    end
+    _run_correlation_jobs(sort!(legacy_files); threaded=threaded,
+        max_concurrent_jobs=max_concurrent_jobs) do file
+        write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype;
+            splicetype=splicetype, trace_center=trace_center,
+            window_lengths=window_lengths, window_interval=window_interval)
+    end
+    return nothing
+end
+
+function _write_correlation_job(job, lags, pair_specs; write_legacy, write_general, validate,
+    validation_atol, validation_rtol, trace_center)
+    (; root, info, r, ratefile, suffix, splicetype, insertstep, plan) = job
+    @info "computing correlations for $ratefile with insertstep=$(insertstep)"
+    ctx = build_correlation_context(r, info[:transitions], info[:G], info[:R], info[:S],
+        insertstep, info[:probfn], info[:coupling], plan.lags; splicetype=splicetype)
+    token = "_insertstep" * _analysis_insertstep_token(insertstep)
+    maxlag = maximum(Float64.(collect(lags)))
+    if write_legacy
+        length(ctx.observed_units) >= 2 || throw(ArgumentError("legacy correlations require two observed units"))
+        u, v = ctx.observed_units[1:2]
+        on = correlate_observables(ctx, (:ON, u), (:ON, v))
+        reporters = correlate_observables(ctx, (:reporters, u), (:reporters, v))
+        outname = hasproperty(job, :legacy_output) ? job.legacy_output :
+            joinpath(root, "crosscorrelation_" * suffix * token * ".csv")
+        _write_correlation_output(_correlation_legacy_dataframe(on, reporters),
+            outname, plan, maxlag, trace_center)
+    end
+    if write_general
+        selected_pairs = _correlation_default_pairs(pair_specs.observables, pair_specs.pairs, ctx.observed_units)
+        full_results = correlate_observables(ctx, selected_pairs)
+        if validate
+            reference = _correlation_functions_reference(r, info[:transitions], info[:G], info[:R],
+                info[:S], insertstep, info[:probfn], info[:coupling], plan.lags;
+                splicetype=splicetype, observed_units=ctx.observed_units)
+            _validate_general_correlations(full_results, reference[9], reference[16];
+                atol=validation_atol, rtol=validation_rtol, observed_units=ctx.observed_units)
+        end
+        outname_general = joinpath(root, "crosscorrelation-general_" * suffix * token * ".csv")
+        _write_correlation_output(_correlation_general_dataframe(full_results),
+            outname_general, plan, maxlag, trace_center)
+    end
+    return nothing
 end
 
 """
     write_correlation_functions_key(folder::String; lags=0:200, ratetype="median",
                                     insertstep=nothing, observables=nothing,
                                     pairs=nothing, write_legacy=true,
-                                    write_general=true, validate=true,
+                                    write_general=true, validate=false,
                                     trace_center=false, window_lengths=nothing)
 
 Compute theoretical correlation functions for key-based result folders.
@@ -5284,8 +5136,8 @@ processes each complete group-specific rate file separately.
 - `write_legacy`: write the historical `crosscorrelation_*.csv` file.
 - `write_general`: write `crosscorrelation-general_*.csv` with the generalized
   observable-pair outputs.
-- `validate`: compare generalized ON/reporter outputs against the legacy
-  computation as a regression check.
+- `validate`: opt-in comparison against the preserved independent legacy
+  calculation. Disabled by default to avoid repeating expensive computations.
 - `trace_center`: when `true`, write only trace-centered legacy and/or
   generalized correlation CSVs, according to `write_legacy` and
   `write_general`.
@@ -5299,6 +5151,11 @@ processes each complete group-specific rate file separately.
   the spacing in `lags` when trace metadata is unavailable. Requested lags must
   be integer multiples of this interval.
 
+- `threaded`: process rate files in parallel with bounded workers when Julia
+  has more than one thread (for example `julia -t 8`); `false` runs serially.
+- `max_concurrent_jobs`: limit simultaneous models to control peak memory;
+  defaults to the Julia thread count. Each job builds one reusable context.
+
 Returns the number of usable rate/info jobs processed.
 """
 function write_correlation_functions_key(
@@ -5310,19 +5167,21 @@ function write_correlation_functions_key(
     pairs=nothing,
     write_legacy::Bool=true,
     write_general::Bool=true,
-    validate::Bool=true,
+    validate::Bool=false,
     validation_atol::Float64=1e-8,
     validation_rtol::Float64=1e-6,
     trace_center::Bool=false,
     window_lengths=nothing,
     window_interval=nothing,
+    threaded::Bool=true,
+    max_concurrent_jobs::Integer=Threads.nthreads(),
 )
     trace_center && window_lengths === nothing &&
         throw(ArgumentError("window_lengths is required when trace_center=true"))
-    n = 0
+    jobs = NamedTuple[]
     nrates = 0
     skipped = String[]
-    pair_specs = _correlation_default_pairs(observables, pairs)
+    pair_specs = (observables=observables, pairs=pairs)
     for (root, _, files) in walkdir(folder)
         for f in files
             if startswith(f, "info_") && endswith(f, ".jld2")
@@ -5353,52 +5212,12 @@ function write_correlation_functions_key(
                         @warn "write_correlation_functions_key: skipping empty rate vector" ratefile
                         continue
                     end
-                    n += 1
                     splicetype = String(get(info, :splicetype, ""))
                     this_insertstep = isnothing(insertstep) ? info[:insertstep] : insertstep
-                    this_window_interval = window_interval
-                    if trace_center && this_window_interval === nothing
-                        trace_specs = get(info, :trace_specs, [])
-                        intervals = unique(Float64(get(spec, :interval, NaN)) for spec in trace_specs)
-                        filter!(x -> !isnan(x), intervals)
-                        if length(intervals) == 1
-                            this_window_interval = only(intervals)
-                        elseif length(intervals) > 1
-                            throw(ArgumentError("trace_specs contains multiple frame intervals; pass window_interval explicitly"))
-                        end
-                    end
+                    this_window_interval = _correlation_frame_interval(info, window_interval, trace_center)
                     plan = _correlation_window_plan(lags, trace_center ? window_lengths : nothing, this_window_interval)
-                    @info "computing correlations for $ratefile with insertstep=$(this_insertstep)"
-                    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
-                        correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], plan.lags; splicetype=splicetype)
-                    token = "_insertstep" * _analysis_insertstep_token(this_insertstep)
-                    if write_legacy
-                        outname = joinpath(root, "crosscorrelation_" * suffix * token * ".csv")
-                        if trace_center
-                            df = _correlation_legacy_dataframe(tau, ccON, ac1ON, ac2ON, mON1, mON2,
-                                ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
-                            _write_trace_centered_correlation!(df, outname, plan.lengths,
-                                plan.interval, maximum(Float64.(collect(lags))),
-                                _correlation_trace_centered_output_path(outname, nothing))
-                        else
-                            write_correlation_csv(outname, tau, ccON, ac1ON, ac2ON, mON1, mON2,
-                                ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
-                        end
-                    end
-                    if write_general
-                        ctx = build_correlation_context(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], plan.lags; splicetype=splicetype)
-                        full_results = [correlate_observables(ctx, p[1], p[2]) for p in pair_specs]
-                        validate && _validate_general_correlations(full_results, ccON, ccReporters; atol=validation_atol, rtol=validation_rtol)
-                        outname_general = joinpath(root, "crosscorrelation-general_" * suffix * token * ".csv")
-                        if trace_center
-                            df = _correlation_general_dataframe(full_results)
-                            _write_trace_centered_correlation!(df, outname_general, plan.lengths,
-                                plan.interval, maximum(Float64.(collect(lags))),
-                                _correlation_trace_centered_output_path(outname_general, nothing))
-                        else
-                            write_correlation_general_csv(outname_general, full_results)
-                        end
-                    end
+                    push!(jobs, (root=root, info=info, r=r, ratefile=ratefile, suffix=suffix,
+                        splicetype=splicetype, insertstep=this_insertstep, plan=plan))
                 end
             elseif startswith(f, "rates_") && endswith(f, ".txt")
                 # Legacy folders may have rates without key info files; keep the old warning behavior.
@@ -5413,6 +5232,12 @@ function write_correlation_functions_key(
             end
         end
     end
+    n = length(jobs)
+    run_job(job) = _write_correlation_job(job, lags, pair_specs;
+        write_legacy=write_legacy, write_general=write_general, validate=validate,
+        validation_atol=validation_atol, validation_rtol=validation_rtol, trace_center=trace_center)
+    _run_correlation_jobs(run_job, jobs; threaded=threaded,
+        max_concurrent_jobs=max_concurrent_jobs)
     nrates == 0 && @warn "write_correlation_functions_key: no info/rates files found under $(abspath(folder))"
     nrates > 0 && n == 0 && @warn "write_correlation_functions_key: no usable rate/info pairs found for $(nrates) rate files under $(abspath(folder))"
     !isempty(skipped) && @warn "write_correlation_functions_key: skipped $(length(skipped)) rate files without usable info/rate data"
@@ -5669,15 +5494,19 @@ function write_correlation_functions_empirical(trace_folder::String, unit1_filen
 
     # Compute empirical cross-correlation functions with symmetric lags
     # Use method that computes means from traces (most common case)
+    correlation_options = (bootstrap=bootstrap, n_bootstrap=n_bootstrap,
+        correlation_algorithm=correlation_algorithm, frame_interval=Float64(traceinfo[1]))
     if !isnothing(mON1_theory) && !isnothing(mON2_theory)
-        on_result_full = compute_correlation_functions(on_traces, lags_symmetric; mean1=mON1_theory, mean2=mON2_theory, bootstrap=bootstrap, n_bootstrap=n_bootstrap, correlation_algorithm=correlation_algorithm)
+        on_result_full = compute_correlation_functions(on_traces, lags_symmetric;
+            mean1=mON1_theory, mean2=mON2_theory, correlation_options...)
     else
-        on_result_full = compute_correlation_functions(on_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap, correlation_algorithm=correlation_algorithm)
+        on_result_full = compute_correlation_functions(on_traces, lags_symmetric; correlation_options...)
     end
     if !isnothing(mR1_theory) && !isnothing(mR2_theory)
-        reporter_result_full = compute_correlation_functions(reporter_traces, lags_symmetric; mean1=mR1_theory, mean2=mR2_theory, bootstrap=bootstrap, n_bootstrap=n_bootstrap, correlation_algorithm=correlation_algorithm)
+        reporter_result_full = compute_correlation_functions(reporter_traces, lags_symmetric;
+            mean1=mR1_theory, mean2=mR2_theory, correlation_options...)
     else
-        reporter_result_full = compute_correlation_functions(reporter_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap, correlation_algorithm=correlation_algorithm)
+        reporter_result_full = compute_correlation_functions(reporter_traces, lags_symmetric; correlation_options...)
     end
 
     # Results already have both positive and negative lags from crosscorrelation_function
@@ -5710,7 +5539,7 @@ function write_correlation_functions_empirical(trace_folder::String, unit1_filen
     # Add intensity correlation functions if available (after base columns, same order as write_correlation_functions would if it had intensity)
     if has_intensity
         # Compute intensity with symmetric lags as well (already includes both positive and negative lags)
-        intensity_result_full = compute_correlation_functions(intensity_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap, correlation_algorithm=correlation_algorithm)
+        intensity_result_full = compute_correlation_functions(intensity_traces, lags_symmetric; correlation_options...)
         cc_intensity_full = intensity_result_full.cc
         ac1_intensity_sym = intensity_result_full.ac1  # Already includes both positive and negative lags
         ac2_intensity_sym = intensity_result_full.ac2  # Already includes both positive and negative lags

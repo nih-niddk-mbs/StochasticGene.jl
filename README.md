@@ -201,6 +201,10 @@ transformation can be applied later with
 [analysis API](docs/src/api/analysis.md#Correlation-Functions) for lag-range and
 frame-interval requirements. For many existing files, launch Julia with
 multiple threads and use `write_correlation_functions_centered_folder`.
+Both model computation and folder postprocessing are threaded by default;
+`max_concurrent_jobs` limits concurrent work for large models. One HMM context
+is reused across all observable pairs. The historical calculation is retained
+as an opt-in regression check with `validate=true`.
 
 ---
 

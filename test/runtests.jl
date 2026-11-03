@@ -25,6 +25,7 @@ using Test
 include("batched_forward_tests.jl")
 include("regularizer_tests.jl")
 include("exgaussian_tests.jl")
+include("correlation_stack_tests.jl")
 
 const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
 
@@ -207,7 +208,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             )
             general_df = CSV.read(general_output, DataFrame)
             @test propertynames(general_df) == propertynames(general)
-            @test general_df.cc .- general_df.mean_x .* general_df.mean_y ≈ calculated
+            @test general_df.cc ≈ moment
             @test general_df.cc_centered ≈ calculated
         end
     end
@@ -1111,6 +1112,19 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
             seed=11,
         ) < 0.02
 
+    end
+
+    @testset "ON/OFF probabilities respect binary-trace offsets" begin
+        binary = [1.0 1.0; 1.0 0.0; 0.0 1.0; 0.0 0.0]
+        expected = StochasticGene._onoff_probs_from_binary_traces([binary], 2)
+
+        for offset in (0.35, -0.35)
+            shifted = binary .+ offset
+            observed = StochasticGene._onoff_probs_from_binary_traces(
+                [shifted], 2; threshold=offset,
+            )
+            @test observed == expected
+        end
     end
 
     @testset "repeated finite-experiment ON correlations" begin
