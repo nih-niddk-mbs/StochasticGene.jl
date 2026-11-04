@@ -52,6 +52,7 @@ makedocs(
                 "CombinedData API" => "api/combined_data.md",
                 "Model Simulation" => "api/simulator.md",
                 "Data Loading" => "api/load_data.md",
+                "Master-Equation Solvers" => "api/master_equations.md",
             ],
             "Function Libraries" => [
                 "Utility Functions" => "api/utilities.md",

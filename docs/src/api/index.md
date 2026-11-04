@@ -2,6 +2,11 @@
 
 ## Core Functions
 
+### Numerical Master Equations
+- [Master-equation solvers](master_equations.md): transient RNA propagation,
+  marked GR/GRSM ejection, state-dependent decay, and the optional capped
+  steady-state block-Thomas method. Existing inference defaults are unchanged.
+
 ### Model Fitting
 - [`fit`](fit.md): Main function for fitting models to data (MH, NUTS, ADVI via `inference_method`)
 - [CombinedData API](combined_data.md): Tuple/vector `datatype`, modality-keyed `datapath`, and migration notes for retired legacy input keywords

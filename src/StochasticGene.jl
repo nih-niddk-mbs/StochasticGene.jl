@@ -195,6 +195,10 @@ export simulate_trace, simulate_trace_data, simulate_trace_vector, simulate_tria
 export get_3unit_model_params, simulator, simulator_dwell_specs
 export transient_master_problem, transient_master_initial, transient_master_strang
 export transient_master_marginal, transient_A_flow!, transient_B_flow!
+export TransientMasterProblemAB, TransientMasterProblemStateMu
+export transient_master_problem_general, transient_master_strang_richardson
+export transient_master_strang_purebd, transient_master_strang_statewise, transient_master_strang_shifted
+export transient_master_closure, transient_master_closure_taylor, transient_master_closure_exp_taylor
 export normalize_histogram, datapdf
 
 # Correlation and burst-prediction analysis.

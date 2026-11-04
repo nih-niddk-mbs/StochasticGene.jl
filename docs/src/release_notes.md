@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Integrated optional transient composition/multiplier solvers, higher-order
+  splitting variants, state-dependent RNA decay, and a layout-checked steady-state
+  block-Thomas solver from the earlier numerical-methods work. Existing solver
+  defaults are unchanged. See [Master-equation solvers](api/master_equations.md)
+  for distinct boundary conventions and numerical convergence checks.
+
 - Integrated opt-in joint-residence regularization, non-hierarchical batched
   likelihoods, and centered exGaussian emissions with compact emission caching.
   Gaussian emissions and the unregularized objective remain the defaults.

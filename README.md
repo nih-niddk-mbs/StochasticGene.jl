@@ -25,6 +25,7 @@ Julia package for **stochastic models of gene transcription**, **Bayesian infere
 | **Manual (hosted)** | [Documents](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/) |
 | **Cluster & batch workflows** | [Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/cluster_batch_workflows.html) — scheduler commands, `makeswarm`, `makeswarm_genes`, combined rate files, key-based `fit` |
 | **Package overview** | [Repository layout, nomenclature, data types](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/package_overview.html) |
+| **Master-equation solvers (development)** | [Transient RNA propagation, boundary conventions, and optional steady-state block solver](docs/src/api/master_equations.md) |
 | **Issues** | [GitHub Issues](https://github.com/nih-niddk-mbs/StochasticGene.jl/issues) |
 
 ---
