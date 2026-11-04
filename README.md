@@ -18,25 +18,6 @@ Julia package for **stochastic models of gene transcription**, **Bayesian infere
 
 ---
 
-## Try it in two minutes
-
-```julia
-using StochasticGene
-demo()   # short two-state fit of the bundled MYC smFISH histogram, prints a rate table
-```
-
-Fit your own smFISH data (a histogram, per-cell counts via `rna_histogram`, or a file path):
-
-```julia
-result = fit_rna(rna_histogram(counts); G = 2, name = "MYC", halflife = 600.0)  # halflife in minutes
-describe_fit(result)
-result.rates    # DataFrame of fitted rates per minute
-```
-
-For other data types (traces, dwell times, coupled units) and clusters, see the sections below.
-
----
-
 ## Documentation
 
 | Resource | URL |
