@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0
+
+- Added `demo()`, `fit_rna`, `rna_histogram`, `describe_fit` and `fit_summary`
+  for quick-start RNA histogram fits; `fit` is unchanged.
+- Integrated optional transient master-equation solvers (closure, Taylor and
+  exponential-Taylor variants, Richardson and pure-BD Strang splitting,
+  state-dependent decay) and a layout-checked block-Thomas steady-state solver.
+  Defaults are unchanged.
+- Included the optional joint-residence regularizers, non-hierarchical batched
+  likelihoods, centered exGaussian emissions and the correlation-stack
+  consolidation previously on `main`. See `docs/src/release_notes.md` for details.
+
 ## 2.0.7
 
 - Fixed a crash in hierarchical fits with no fitted individual parameters,

@@ -1,16 +1,14 @@
 # StochasticGene.jl
 
-Current version: **2.0.7**. See the [2.0 release notes](docs/src/release_notes.md)
+Current version: **2.1.0**. See the [release notes](docs/src/release_notes.md)
 for highlights and migration guidance.
 
-**Version 2.0.7** fixes hierarchical fits with no fitted individual parameters
-(including fixed per-trace noise) and includes an opt-in batched trace likelihood.
-See [parallel processing](docs/src/examples/parallel_processing.md) for usage.
-
-Development `main` also includes optional
-coupled-MH stationary ON/OFF occupancy penalties via `regularizers=()`;
-see [joint residence regularization](docs/src/examples/parallel_processing.md#optional-joint-residence-regularization).
-They are disabled by default and kept separate from reported likelihoods.
+**Version 2.1.0** adds a quick-start path for RNA histogram fits (`demo`, `fit_rna`,
+`describe_fit`), optional master-equation solvers, opt-in batched trace likelihoods,
+and optional coupled-MH stationary ON/OFF occupancy penalties via `regularizers=()`;
+see [parallel processing](docs/src/examples/parallel_processing.md) and
+[joint residence regularization](docs/src/examples/parallel_processing.md#optional-joint-residence-regularization).
+All new options are disabled by default and kept separate from reported likelihoods.
 
 [![Documents](https://img.shields.io/badge/Documents-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
 

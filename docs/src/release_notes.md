@@ -1,7 +1,12 @@
 # Version 2.0
 
-## Unreleased
+## Version 2.1.0
 
+- Added a quick-start API for steady-state RNA histograms: `demo()` runs a short
+  fit of the bundled MYC data, `fit_rna` stages data and fits a G-state model with
+  defaults (`halflife` in minutes), `rna_histogram` converts per-cell counts, and
+  `describe_fit`/`fit_summary` report rates per minute. See
+  [Getting Started](getting_started.md). `fit` is unchanged.
 - Integrated optional transient composition/multiplier solvers, higher-order
   splitting variants, state-dependent RNA decay, and a layout-checked steady-state
   block-Thomas solver from the earlier numerical-methods work. Existing solver

@@ -1,5 +1,25 @@
 # Getting Started
 
+## Quick start
+
+```julia
+using StochasticGene
+demo()   # short two-state fit of the bundled MYC smFISH histogram
+```
+
+Fit your own smFISH data from a histogram, per-cell counts, or a file whose first
+column is the histogram:
+
+```julia
+result = fit_rna(rna_histogram(counts); G=2, name="MYC", halflife=600.0)  # minutes
+describe_fit(result)
+result.rates   # DataFrame, rates per minute
+```
+
+The default 100,000 samples is a starting point; check R-hat and ESS in the output and
+increase `samplesteps` if needed. For traces, dwell times, coupled models and clusters,
+use `fit` directly (see the examples).
+
 ## Folder Structure
 
 StochasticGene expects a specific directory structure for data and results. For **naming conventions**, **rate ordering**, and why **`results/`** is typically git-ignored, see [Package overview](package_overview.md).

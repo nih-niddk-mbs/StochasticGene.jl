@@ -226,6 +226,25 @@ Gaussian/exGaussian units. Saved per-unit noise priors take precedence in the
 correlation file writers. Low-level `simulator` calls still require the
 appropriate explicit `noiseparams` count for non-Gaussian emission families.
 
+## Quick-start helpers
+
+For steady-state RNA histograms, `fit_rna` wraps `fit` with defaults:
+
+```julia
+result = fit_rna(rna_histogram(counts); G=2, name="MYC", halflife=600.0)
+describe_fit(result)
+```
+
+- `fit_rna(data; G, R, S, insertstep, name, halflife, outdir, samplesteps, nchains, kwargs...)`:
+  `data` is a histogram vector or a file path. Inputs are staged under `outdir/data`;
+  results go to `outdir/results/<name>`. `halflife` is in minutes; if omitted the decay
+  rate is 1.0 per minute. Extra keywords pass to `fit`. Returns the `fit` outputs plus
+  `rates`, `outdir` and `resultdir`.
+- `rna_histogram(counts)`: per-cell RNA counts to a histogram.
+- `fit_summary(resultdir)`: DataFrame of ML, mean and median rates (per minute).
+- `describe_fit(result)`: prints the table and output location.
+- `demo()`: short fit of the bundled `HCT116_testdata/MYC_MOCK.txt`.
+
 ## Notes
 
 1. **Rate order** — G transitions, R transitions, S if present, decay, noise parameters (see package overview).
