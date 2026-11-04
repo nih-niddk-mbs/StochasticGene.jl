@@ -1,6 +1,10 @@
 # This file is part of StochasticGene.jl
 
-"""Abstract category for optional penalties, separate from priors and data likelihoods."""
+"""
+    AbstractRegularizer
+
+Abstract category for optional penalties, separate from priors and data likelihoods.
+"""
 abstract type AbstractRegularizer end
 
 """
