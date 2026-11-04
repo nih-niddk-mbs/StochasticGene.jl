@@ -342,6 +342,9 @@ include("biowulf.jl")
 # staged run directories and companion file writers (batch / reproducibility)
 include("stage.jl")
 
+include("easy.jl")
+export fit_rna, rna_histogram, describe_fit, fit_summary, demo
+
 # test functions
 include("test.jl")
 
