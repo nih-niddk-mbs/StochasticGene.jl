@@ -1,5 +1,10 @@
 # Version 2.0
 
+## Version 2.1.1
+
+- Capped `EnzymeCore` at 0.8.26 to avoid a `DiffEqBase` extension-loading error on fresh
+  installs (see `CHANGELOG.md`). No functional changes.
+
 ## Version 2.1.0
 
 - Added a quick-start API for steady-state RNA histograms: `demo()` runs a short

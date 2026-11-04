@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.1
+
+- Capped `EnzymeCore` at 0.8.26. `DiffEqBase` 6.218 (its final release) calls
+  `EnzymeRules.has_easy_rule`, which `EnzymeCore` 0.8.27 removed, so fresh installs
+  printed an extension-loading error each time Julia loaded the package. Fits were
+  unaffected. `EnzymeCore` is now a declared dependency only to carry this bound.
+
 ## 2.1.0
 
 - Added `demo()`, `fit_rna`, `rna_histogram`, `describe_fit` and `fit_summary`
