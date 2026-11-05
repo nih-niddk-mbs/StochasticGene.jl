@@ -244,8 +244,8 @@ describe_fit(result)
 - `fit_traces(data; G, R, S, insertstep, name, interval, halflife, noisepriors, zeromedian, datacol, outdir, samplesteps, warmupsteps, nchains, maxtime, kwargs...)`:
   live-cell traces from a folder of files, a vector of file paths, or a vector of intensity
   vectors. `interval` is the frame interval in minutes and `R` must be at least 1. Files are
-  copied to `outdir/data/traces`. `warmupsteps` defaults to half of `samplesteps`, because
-  trace fits mix poorly without adaptive warmup. With `zeromedian = true` (default) traces are
+  copied to `outdir/data/traces`. `warmupsteps` defaults to `samplesteps` (40,000), because
+  trace fits mix poorly without a long adaptive warmup. With `zeromedian = true` (default) traces are
   median-subtracted and scaled, so the default `noisepriors` apply to that normalized scale;
   use `zeromedian = false` and your own `noisepriors` for raw intensities. Returns the same
   fields as `fit_rna` plus `ntraces`.

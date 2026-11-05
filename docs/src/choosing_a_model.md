@@ -99,13 +99,16 @@ minute. Other rates are then only meaningful relative to decay.
 ## Run length and convergence
 
 - RNA histogram fits are cheap. The default 100,000 samples is a reasonable start.
-- Trace fits are slower and need adaptive warmup to mix well. `fit_traces` sets
-  `warmupsteps` to half of `samplesteps`. Use many more samples for real data.
+- Trace fits are slower and need a long adaptive warmup to mix well. `fit_traces` sets
+  `warmupsteps` equal to `samplesteps` (default 40,000 each). In a simulated test, a fit with no
+  warmup got stuck with the switching rates near zero and a burst size about 60 times too large.
+  Use many more samples for real data.
 - Check the diagnostics printed after sampling: R-hat close to 1 (below about 1.05)
   and a large effective sample size. A large R-hat means the chains disagree and the
   result should not be trusted. Run longer or more chains.
 - Switching and initiation rates can be weakly identified from few traces, with only
-  their combination (for example burst size) well determined. Report ranges, not
-  single values.
+  their combination (for example burst size, initiation rate divided by the OFF-switching rate)
+  well determined. In a simulated test, burst size came back at 2.6 against a true 2.5 while the
+  individual rates were off by up to two times. Report ranges, not single values.
 - The posterior median is the recommended summary. See [the fit reference](api/fit.md#Priors,-indices,-outputs)
   for what the rows of `rates_*.txt` mean.
