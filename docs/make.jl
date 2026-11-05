@@ -20,6 +20,7 @@ makedocs(
         "Home" => "index.md",
         "Installation" => "installation.md",
         "Getting Started" => "getting_started.md",
+        "Choose a model and data" => "choosing_a_model.md",
         "Package overview" => "package_overview.md",
         "Version 2.0" => "release_notes.md",
         "Documentation audit" => "documentation_audit.md",

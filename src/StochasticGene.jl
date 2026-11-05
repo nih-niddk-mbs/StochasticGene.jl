@@ -343,7 +343,8 @@ include("biowulf.jl")
 include("stage.jl")
 
 include("easy.jl")
-export fit_rna, rna_histogram, describe_fit, fit_summary, demo
+include("easy_traces.jl")
+export fit_rna, rna_histogram, describe_fit, fit_summary, demo, fit_traces, demo_traces
 
 # test functions
 include("test.jl")

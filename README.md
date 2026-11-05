@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-Current version: **2.1.1**. See the [release notes](docs/src/release_notes.md)
+Current version: **2.2.0**. See the [release notes](docs/src/release_notes.md)
 for highlights and migration guidance.
 
 **Version 2.1.0** adds a quick-start path for RNA histogram fits (`demo`, `fit_rna`,
@@ -31,7 +31,15 @@ describe_fit(result)
 result.rates    # DataFrame of fitted rates per minute
 ```
 
-For other data types (traces, dwell times, coupled units) and clusters, see the sections below.
+For live-cell traces (frame interval in minutes):
+
+```julia
+result = fit_traces("path/to/trace_folder"; G = 2, R = 1, name = "MYC", interval = 1.0, halflife = 600.0)
+demo_traces()   # simulated traces with known rates
+```
+
+For dwell times, coupled units and clusters, see the sections below. To pick a model and check
+your file formats, see [Choose a model and data](docs/src/choosing_a_model.md).
 
 ---
 

@@ -1,5 +1,10 @@
 # Version 2.0
 
+## Version 2.2.0
+
+- Added `fit_traces` and `demo_traces` for live-cell traces, and the page
+  [Choose a model and data](choosing_a_model.md). `fit` is unchanged.
+
 ## Version 2.1.1
 
 - Capped `EnzymeCore` at 0.8.26 to avoid a `DiffEqBase` extension-loading error on fresh

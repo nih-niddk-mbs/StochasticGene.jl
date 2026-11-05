@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.0
+
+- Added `fit_traces` and `demo_traces` for live-cell traces from a folder, a list of files or
+  in-memory intensity vectors. Trace fits default to adaptive warmup (half of `samplesteps`).
+- Added the documentation page "Choose a model and data" (data types, starting models, units
+  and file formats) and tests for the quick-start functions. `fit` is unchanged.
+
 ## 2.1.1
 
 - Capped `EnzymeCore` at 0.8.26. `DiffEqBase` 6.218 (its final release) calls

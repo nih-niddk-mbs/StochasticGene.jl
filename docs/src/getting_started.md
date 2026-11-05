@@ -17,7 +17,18 @@ result.rates   # DataFrame, rates per minute
 ```
 
 The default 100,000 samples is a starting point; check R-hat and ESS in the output and
-increase `samplesteps` if needed. For traces, dwell times, coupled models and clusters,
+increase `samplesteps` if needed.
+
+For live-cell traces:
+
+```julia
+result = fit_traces("path/to/trace_folder"; G=2, R=1, name="MYC", interval=1.0, halflife=600.0)
+describe_fit(result)
+demo_traces()   # simulated example with known rates
+```
+
+`interval` is the frame interval in minutes. See [Choose a model and data](choosing_a_model.md)
+for model choice, units and file formats. For dwell times, coupled models and clusters,
 use `fit` directly (see the examples).
 
 ## Folder Structure

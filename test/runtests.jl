@@ -27,6 +27,7 @@ include("regularizer_tests.jl")
 include("exgaussian_tests.jl")
 include("correlation_stack_tests.jl")
 include("numerical_master_tests.jl")
+include("quickstart_tests.jl")
 
 const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
 

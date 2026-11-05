@@ -241,9 +241,21 @@ describe_fit(result)
   rate is 1.0 per minute. Extra keywords pass to `fit`. Returns the `fit` outputs plus
   `rates`, `outdir` and `resultdir`.
 - `rna_histogram(counts)`: per-cell RNA counts to a histogram.
+- `fit_traces(data; G, R, S, insertstep, name, interval, halflife, noisepriors, zeromedian, datacol, outdir, samplesteps, warmupsteps, nchains, maxtime, kwargs...)`:
+  live-cell traces from a folder of files, a vector of file paths, or a vector of intensity
+  vectors. `interval` is the frame interval in minutes and `R` must be at least 1. Files are
+  copied to `outdir/data/traces`. `warmupsteps` defaults to half of `samplesteps`, because
+  trace fits mix poorly without adaptive warmup. With `zeromedian = true` (default) traces are
+  median-subtracted and scaled, so the default `noisepriors` apply to that normalized scale;
+  use `zeromedian = false` and your own `noisepriors` for raw intensities. Returns the same
+  fields as `fit_rna` plus `ntraces`.
 - `fit_summary(resultdir)`: DataFrame of ML, mean and median rates (per minute).
 - `describe_fit(result)`: prints the table and output location.
 - `demo()`: short fit of the bundled `HCT116_testdata/MYC_MOCK.txt`.
+- `demo_traces()`: simulates traces from a known model, fits them and prints fitted and true
+  rates. A short run is only a rough check of the workflow.
+
+See [Choose a model and data](../choosing_a_model.md) for model choice, units and file formats.
 
 ## Notes
 
