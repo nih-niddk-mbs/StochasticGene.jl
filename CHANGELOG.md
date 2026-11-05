@@ -5,6 +5,9 @@
 - `fit_traces` now defaults to `samplesteps=40_000` and `warmupsteps` equal to `samplesteps`.
   In simulated tests the shorter warmup gave worse convergence, and no warmup left the sampler in
   a bad mode. No change to `fit`.
+- `fit_traces` now defaults to raw intensities (`zeromedian=false`) and estimates `noisepriors`
+  from the data. Normalized traces with fixed default noise priors biased the fitted rates in
+  simulated tests when the real noise differed.
 
 ## 2.2.0
 
