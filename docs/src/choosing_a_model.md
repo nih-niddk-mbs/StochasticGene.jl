@@ -78,9 +78,13 @@ minute. Other rates are then only meaningful relative to decay.
   recursively.
 - Observation window and frame interval go in `trace_specs`
   (`unit`, `interval`, `start`, `t_end`, `zeromedian`, ...). `fit_traces` sets these for you.
-- With `zeromedian = true` each trace is median-subtracted and scaled, so the
-  intensity priors in `noisepriors` apply to that normalized scale. For raw
-  intensities set `zeromedian = false` and give `noisepriors` in those units.
+- By default (`zeromedian = false`) `fit_traces` uses the raw intensities and estimates the
+  `noisepriors` from the pooled data (a two-component Gaussian fit; reliable for `R = 1`, rough
+  for larger `R`), and logs the values. Pass your own `noisepriors` if you know the noise.
+- With `zeromedian = true` each trace is median-subtracted and scaled, and `noisepriors`
+  default to `[0, 0.1, 1, 0.1]` on that normalized scale. If the real noise differs from the
+  noise priors the fitted rates are biased: in a simulated test the OFF-to-ON rate came out about
+  30 to 100 times too small. Prefer raw intensities.
 - `noisepriors` are, in order, background mean, background SD, signal mean and
   signal SD.
 
@@ -106,9 +110,11 @@ minute. Other rates are then only meaningful relative to decay.
 - Check the diagnostics printed after sampling: R-hat close to 1 (below about 1.05)
   and a large effective sample size. A large R-hat means the chains disagree and the
   result should not be trusted. Run longer or more chains.
-- Switching and initiation rates can be weakly identified from few traces, with only
-  their combination (for example burst size, initiation rate divided by the OFF-switching rate)
-  well determined. In a simulated test, burst size came back at 2.6 against a true 2.5 while the
-  individual rates were off by up to two times. Report ranges, not single values.
+- Switching and initiation rates can be weakly identified from few traces, and a random-walk
+  sampler can settle in a wrong region. In a simulated test (30 traces, 300 frames) the fit came
+  back with a burst size of about 4.7 against a true 2.5 even with the noise correct, and the
+  true rates had a higher likelihood than anything the sampler found. Use several chains from
+  different starts, compare their likelihoods, and require R-hat near 1 and a large effective
+  sample size before trusting a result. Report ranges, not single values.
 - The posterior median is the recommended summary. See [the fit reference](api/fit.md#Priors,-indices,-outputs)
   for what the rows of `rates_*.txt` mean.

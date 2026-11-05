@@ -41,9 +41,43 @@ function _stage_traces(data, tracedir, name, interval)
     return n
 end
 
+# Rough noise priors (background mean/SD, signal mean/SD) from a two-component Gaussian fit to the pooled raw intensities.
+function _estimate_noisepriors(x::AbstractVector{<:Real}, R::Int)
+    x = Float64[v for v in x if isfinite(v)]
+    length(x) >= 20 || throw(ArgumentError("too few intensity values to estimate noise priors"))
+    s = std(x)
+    s > 0 || throw(ArgumentError("traces are constant; cannot estimate noise priors"))
+    lo, hi = quantile(x, [0.1, 0.9])
+    mu = [lo, hi]; sd = fill(s / 4, 2); w = [0.5, 0.5]
+    floorsd = 1e-3 * s
+    for _ in 1:200
+        lp = [log(w[k]) .+ logpdf.(Normal(mu[k], sd[k]), x) for k in 1:2]
+        m = max.(lp[1], lp[2])
+        den = m .+ log.(exp.(lp[1] .- m) .+ exp.(lp[2] .- m))
+        r = [exp.(lp[k] .- den) for k in 1:2]
+        for k in 1:2
+            nk = sum(r[k])
+            nk > 1 || continue
+            w[k] = nk / length(x)
+            mu[k] = sum(r[k] .* x) / nk
+            sd[k] = max(sqrt(sum(r[k] .* (x .- mu[k]) .^ 2) / nk), floorsd)
+        end
+    end
+    k1, k2 = mu[1] <= mu[2] ? (1, 2) : (2, 1)
+    signal = max(mu[k2] - mu[k1], s) / R
+    # With R > 1 the upper component mixes several occupancy levels, so its spread is not the signal SD.
+    signalsd = R == 1 ? sqrt(max(sd[k2]^2 - sd[k1]^2, (0.1 * signal)^2)) : 0.1 * signal
+    return [mu[k1], sd[k1], signal, signalsd]
+end
+
+function _pooled_intensities(tracedir, name, datacol)
+    files = [f for f in readdir(tracedir; join=true) if endswith(f, "_$(name)_DATA.txt")]
+    return reduce(vcat, [vec(Float64.(readdlm(f)[:, datacol])) for f in files])
+end
+
 """
     fit_traces(data; G=2, R=1, S=0, insertstep=1, name="gene", interval=1.0, halflife=nothing,
-               noisepriors=[0.0, 0.1, 1.0, 0.1], zeromedian=true, datacol=3,
+               noisepriors=nothing, zeromedian=false, datacol=3,
                outdir="stochasticgene_output", samplesteps=40_000, nchains=2, maxtime=300.0, kwargs...)
 
 Fit a gene-state model with a reporter (MS2-style) to live-cell intensity traces, with defaults.
@@ -56,17 +90,19 @@ Fit a gene-state model with a reporter (MS2-style) to live-cell intensity traces
 Trace files are text/CSV with one frame per row; intensity is read from column `datacol`
 (default 3: frame, time, intensity). `interval` is the frame interval in minutes. `halflife` is
 the mRNA half-life in minutes (omitted: decay rate 1.0 per minute). `R` must be at least 1.
-With `zeromedian=true` each trace is median-subtracted and scaled, so the default `noisepriors`
-(background mean and SD, signal mean and SD) apply to that normalized scale; set
-`zeromedian=false` and `noisepriors` for raw intensities. `warmupsteps` defaults to `samplesteps`;
-trace fits mix poorly without a long adaptive warmup.
+With `zeromedian=false` (default) the model uses the raw intensities, and `noisepriors` (background
+mean and SD, signal mean and SD) default to a rough estimate from the pooled data, which is logged;
+pass your own if you know the noise. With `zeromedian=true` each trace is median-subtracted and
+scaled, and `noisepriors` default to `[0.0, 0.1, 1.0, 0.1]` on that normalized scale; the fit is
+biased if the true noise differs from the noise priors, so check the fitted noise rows.
+`warmupsteps` defaults to `samplesteps`; trace fits mix poorly without a long adaptive warmup.
 
 Inputs are copied to `outdir/data/traces`, results go to `outdir/results/<name>`. Extra `kwargs`
 go to [`fit`](@ref). Returns the `fit` outputs plus `rates`, `outdir` and `resultdir`;
 see [`describe_fit`](@ref).
 """
 function fit_traces(data; G::Int=2, R::Int=1, S::Int=0, insertstep::Int=1, name::AbstractString="gene",
-    interval::Real=1.0, halflife=nothing, noisepriors=[0.0, 0.1, 1.0, 0.1], zeromedian::Bool=true,
+    interval::Real=1.0, halflife=nothing, noisepriors=nothing, zeromedian::Bool=false,
     datacol::Int=3, outdir::AbstractString="stochasticgene_output", samplesteps::Int=40_000,
     warmupsteps::Int=samplesteps, nchains::Int=2, maxtime::Real=300.0, kwargs...)
     R >= 1 || throw(ArgumentError("trace fits need R >= 1 (a reporter); use fit_rna for histograms"))
@@ -75,6 +111,14 @@ function fit_traces(data; G::Int=2, R::Int=1, S::Int=0, insertstep::Int=1, name:
     datadir = joinpath(outdir, "data", "traces")
     mkpath(joinpath(outdir, "results"))
     ntraces = _stage_traces(data, datadir, name, interval)
+    if noisepriors === nothing
+        if zeromedian
+            noisepriors = [0.0, 0.1, 1.0, 0.1]
+        else
+            noisepriors = _estimate_noisepriors(_pooled_intensities(datadir, name, datacol), R)
+            @info "Noise priors estimated from the data (background mean, SD, signal mean, SD)" noisepriors
+        end
+    end
     halflife === nothing && @info "No halflife given; decay rate set to 1.0 per minute"
     cond = "$(name)_DATA"
     transitions = G == 1 ? tuple() : get_transitions(G, "")
