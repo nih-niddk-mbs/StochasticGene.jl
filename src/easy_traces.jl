@@ -44,7 +44,7 @@ end
 """
     fit_traces(data; G=2, R=1, S=0, insertstep=1, name="gene", interval=1.0, halflife=nothing,
                noisepriors=[0.0, 0.1, 1.0, 0.1], zeromedian=true, datacol=3,
-               outdir="stochasticgene_output", samplesteps=10_000, nchains=2, maxtime=300.0, kwargs...)
+               outdir="stochasticgene_output", samplesteps=40_000, nchains=2, maxtime=300.0, kwargs...)
 
 Fit a gene-state model with a reporter (MS2-style) to live-cell intensity traces, with defaults.
 
@@ -58,7 +58,8 @@ Trace files are text/CSV with one frame per row; intensity is read from column `
 the mRNA half-life in minutes (omitted: decay rate 1.0 per minute). `R` must be at least 1.
 With `zeromedian=true` each trace is median-subtracted and scaled, so the default `noisepriors`
 (background mean and SD, signal mean and SD) apply to that normalized scale; set
-`zeromedian=false` and `noisepriors` for raw intensities.
+`zeromedian=false` and `noisepriors` for raw intensities. `warmupsteps` defaults to `samplesteps`;
+trace fits mix poorly without a long adaptive warmup.
 
 Inputs are copied to `outdir/data/traces`, results go to `outdir/results/<name>`. Extra `kwargs`
 go to [`fit`](@ref). Returns the `fit` outputs plus `rates`, `outdir` and `resultdir`;
@@ -66,8 +67,8 @@ see [`describe_fit`](@ref).
 """
 function fit_traces(data; G::Int=2, R::Int=1, S::Int=0, insertstep::Int=1, name::AbstractString="gene",
     interval::Real=1.0, halflife=nothing, noisepriors=[0.0, 0.1, 1.0, 0.1], zeromedian::Bool=true,
-    datacol::Int=3, outdir::AbstractString="stochasticgene_output", samplesteps::Int=10_000,
-    warmupsteps::Int=samplesteps ÷ 2, nchains::Int=2, maxtime::Real=300.0, kwargs...)
+    datacol::Int=3, outdir::AbstractString="stochasticgene_output", samplesteps::Int=40_000,
+    warmupsteps::Int=samplesteps, nchains::Int=2, maxtime::Real=300.0, kwargs...)
     R >= 1 || throw(ArgumentError("trace fits need R >= 1 (a reporter); use fit_rna for histograms"))
     interval > 0 || throw(ArgumentError("interval must be positive (minutes)"))
     outdir = abspath(outdir)

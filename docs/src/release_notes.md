@@ -1,5 +1,10 @@
 # Version 2.0
 
+## Version 2.2.1
+
+- `fit_traces` defaults to `samplesteps=40_000` with warmup equal to `samplesteps`, which
+  converged better in simulated tests. `fit` is unchanged.
+
 ## Version 2.2.0
 
 - Added `fit_traces` and `demo_traces` for live-cell traces, and the page

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1
+
+- `fit_traces` now defaults to `samplesteps=40_000` and `warmupsteps` equal to `samplesteps`.
+  In simulated tests the shorter warmup gave worse convergence, and no warmup left the sampler in
+  a bad mode. No change to `fit`.
+
 ## 2.2.0
 
 - Added `fit_traces` and `demo_traces` for live-cell traces from a folder, a list of files or

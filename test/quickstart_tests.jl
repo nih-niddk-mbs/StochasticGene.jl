@@ -33,6 +33,17 @@ using StochasticGene
         @test length(readdir(tracedir)) == 1
     end
 
+    @testset "fit_traces smoke" begin
+        dir = mktempdir()
+        truth = [0.1, 0.2, 0.5, 0.5, 0.05, 0.0, 0.1, 1.0, 0.1]
+        traces = simulate_trace_vector(truth, ([1, 2], [2, 1]), 2, 1, 0, 1, 1.0, 60.0, 4)
+        r = fit_traces([vec(Float64.(t)) for t in traces]; name="x", halflife=log(2) / 0.05,
+            zeromedian=false, outdir=dir, samplesteps=1500, nchains=1)
+        @test r.ntraces == 4
+        @test length(r.rates.parameter) == 9
+        @test all(isfinite, r.rates.median)
+    end
+
     @testset "fit_rna smoke" begin
         dir = mktempdir()
         h = rna_histogram(rand(0:20, 300))
