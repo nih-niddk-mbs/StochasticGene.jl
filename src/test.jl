@@ -1243,7 +1243,7 @@ function test_fit_simrna_yield(; maxtime = 60.0, rtarget=[0.33, 0.19, 2.5, .1], 
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
     nRNA_true_actual = StochasticGene.get_nRNA_true(data.yield, data.nRNA)
     println("Model will use nRNA_true=$nRNA_true_actual for loss matrix")
-    options = StochasticGene.MHOptions(5000000, 500000, 0, maxtime, 1.0, 1.0)
+    options = StochasticGene.MHOptions(5000000, 500000, maxtime, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
     
     # Get predictions at both levels
@@ -1513,7 +1513,7 @@ Fit a simulated trace dataset using the provided parameters and compare to the t
 # Returns
 - Tuple of (fitted rates, target rates).
 """
-function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.01, 0.01, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000, totaltime=4000.0, ntrials=10, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.05, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], nchains=1, zeromedian=true, maxtime=60.0, initprior=0.1)
+function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.01, 0.01, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000, totaltime=4000.0, ntrials=10, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.05, cv=100.0, noisepriors=[50.0, 5.0, 50.0, 5.0], nchains=1, zeromedian=false, maxtime=60.0, initprior=0.1)
     tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials)
     trace, tracescale = zero_median(tracer, zeromedian)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
@@ -1531,7 +1531,7 @@ function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, ins
     priorcv = [fill(1.0, length(transitions)); 0.1; fill(0.1, R); fill(0.1, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.1, 0.1]]
     rinit = isempty(tuple()) ? set_rinit(rtarget, priormean) : set_rinit(rtarget, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
-    options = StochasticGene.MHOptions(nsamples, nsamples, 0, maxtime, 1.0, 1.0)
+    options = StochasticGene.MHOptions(nsamples, nsamples, maxtime, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
     println(fits.accept," ",fits.total)
     lower, upper = compute_quantile_bounds(stats.qparam[1, 1:4], stats.qparam[3, 1:4], fits.accept, fits.total)
@@ -1599,7 +1599,7 @@ function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, 
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, tuple(), tuple())
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 0.1, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, tuple(), nothing, zeromedian)
-    options = StochasticGene.MHOptions(nsamples, nsamples, 0, maxtime, 1.0, 1.0)
+    options = StochasticGene.MHOptions(nsamples, nsamples, maxtime, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
     println(fits.accept," ",fits.total)
     lower, upper = compute_quantile_bounds(stats.qparam[1, 1:4], stats.qparam[3, 1:4], fits.accept, fits.total)
@@ -3771,7 +3771,7 @@ function benchmark_inference_run_mh(
 )
     nchains > 1 && benchmark_inference_ensure_workers(nchains)
     mh_seed !== nothing && Random.seed!(mh_seed)
-    opts = MHOptions(samplesteps, warmupsteps, 0, maxtime_seconds(maxtime), 1.0, 2.0)
+    opts = MHOptions(samplesteps, warmupsteps, maxtime_seconds(maxtime), 1.0)
     elapsed_sec = @elapsed begin
         fits, stats, measures = run_mh(data, model, opts, nchains)
     end
