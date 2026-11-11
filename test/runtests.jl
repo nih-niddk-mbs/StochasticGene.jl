@@ -867,6 +867,7 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
     end
 
     @testset "RNA + ON/OFF + dwell" begin
+        Random.seed!(20261111)
         h1, h2 = StochasticGene.test_fit_rnaonoff()
         @test isapprox(h1, h2, rtol=0.05)
 

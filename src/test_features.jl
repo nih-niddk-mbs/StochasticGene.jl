@@ -677,13 +677,15 @@ Short finite-difference NUTS smoke test used by `test/runtests.jl`.
 Returns `true` when the returned fit/statistics shapes match the expected `run_mh`-style layout.
 """
 function test_run_nuts_fit_smoke(; seed::Int=42, n_samples::Int=12, n_adapts::Int=12)
+    Random.seed!(seed)
     transitions = ([1, 2], [2, 1])
     G = 2
     rtarget = [0.33, 0.19, 20.5, 1.0]
     nRNA = 40
     h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=8_000, nalleles=2)[1]
     data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0, [])
-    rinit = [0.1, 0.1, 0.1, 1.0]
+    # Exercise NUTS with finite tail probabilities, not the old epsilon floor.
+    rinit = copy(rtarget)
     fittedparam = [1, 2, 3]
     model = load_model(
         data, rinit, prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0),

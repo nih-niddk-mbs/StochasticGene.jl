@@ -731,7 +731,9 @@ function _histogram_predictions_invalid(predictions, hist)
     any(!isfinite, predictions) && return true
     any(!isfinite, hist) && return true
     any(<(0), hist) && return true
-    any(p -> p < -1e-12 || p > 1 + 1e-12, predictions) && return true
+    # CDF differences inherit ODE roundoff (default abstol=1e-11).
+    # Tolerate it only in empty bins; occupied nonpositive bins fail below.
+    any(p -> p < -1e-10 || p > 1 + 1e-10, predictions) && return true
     # A structural zero with a positive count is impossible, not eps-likely.
     any(i -> hist[i] > 0 && predictions[i] <= 0, eachindex(hist)) && return true
     return false

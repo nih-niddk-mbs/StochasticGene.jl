@@ -1,6 +1,6 @@
 # Version 2.0
 
-## Unreleased: First-Passage Corrections
+## Version 2.2.2
 
 - Propagate dwell-time entrance distributions from physical time zero when a
   histogram has a positive lower cutoff. Return consistent plain matrices in

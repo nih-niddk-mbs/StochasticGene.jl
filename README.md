@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-Current version: **2.2.1**. See the [release notes](docs/src/release_notes.md)
+Current version: **2.2.2**. See the [release notes](docs/src/release_notes.md)
 for highlights and migration guidance.
 
 **Version 2.1.0** adds a quick-start path for RNA histogram fits (`demo`, `fit_rna`,

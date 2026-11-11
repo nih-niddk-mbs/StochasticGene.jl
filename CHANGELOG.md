@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.2.2
+
+- Correct first-passage propagation for dwell histograms with a positive lower
+  cutoff: entrance distributions are specified at physical time zero, not reset
+  at the first saved time. Standardize ODE/eigen outputs as time-by-state arrays,
+  tighten default ODE tolerances, and fall back to matrix exponentials for an
+  ill-conditioned eigenbasis.
+- Normalize subsetted entrance flux. Histogram likelihoods preserve tiny positive
+  probabilities and reject impossible occupied bins while safely handling empty
+  zero-probability bins, in both primal and AD paths.
+- **Compatibility change:** dwell histogram labels must be positive right edges.
+  The simulator requires uniform `dt:dt:T` grids. Check historical bin definitions
+  before conversion; zero-start labels are not shifted automatically.
+- Preserve the existing window-conditioned probability-mass interpretation;
+  censoring and overflow are not inferred. Add analytic, gradient, and numerical
+  regression checks and document validation against simulations and HJ refits.
+
 ## 2.2.1
 
 - `fit_traces` now defaults to `samplesteps=40_000` and `warmupsteps` equal to `samplesteps`.

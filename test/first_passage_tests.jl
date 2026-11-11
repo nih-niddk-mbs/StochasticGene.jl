@@ -96,6 +96,8 @@ SGFPT.predictedfn(param, data::SGFPT.RNAData, ::FPTRegressionModel; kwargs...) =
     gradient=ForwardDiff.gradient(x->first(SGFPT.loglikelihood_ad(x,data([2.,3.]),model)),[.2,.8])
     @test gradient≈[2/.2,3/.8]
     @test !SGFPT._histogram_predictions_invalid([-1e-15,1.],[0.,1.])
+    @test !SGFPT._histogram_predictions_invalid([-4e-12,1.],[0.,1.])
+    @test SGFPT._histogram_predictions_invalid([-4e-12,1.],[1.,1.])
     @test SGFPT._histogram_predictions_invalid([-1e-5,1.],[0.,1.])
 
     # The guard is shared with RNA histograms, not just first passage data.
