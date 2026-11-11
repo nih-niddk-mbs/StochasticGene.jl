@@ -122,31 +122,51 @@ end
 # Functions to compute dwell time distributions
 
 """
-    dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5())
+    _dwell_bin_edges(tin; leftedge=nothing)
 
-  return dwell time CDF (cumulative distribution function) to reach barrier states starting from Sinit in live states
-  live U barrier = all states
-
-  First passage time calculation from live states to barrier states
-
-- `tin`: vector of time bins for dwell time distribution
-- `Td`: dwell time rate matrix (within non barrier states)
-- `barrier`: set of barrier states
-- `Sinit`: initial state
-- `method`: 1 for directly solving ODE otherwise use eigendecomposition
+Validate positive bin right edges and prepend their left boundary. If not
+specified, infer that boundary from the first spacing, bounded below by zero.
+For a single bin or an ambiguous nonuniform grid, supply `leftedge` explicitly.
 """
-function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5())
-    t = [max(2 * tin[1] - tin[2], 0.); tin]
+function _dwell_bin_edges(tin::Vector; leftedge=nothing)
+    isempty(tin) && throw(ArgumentError("dwell-time bin right edges cannot be empty"))
+    all(isfinite, tin) && all(>(0), tin) || throw(ArgumentError("dwell-time bins must be finite positive right edges; use dt:dt:T, not 0:dt:T"))
+    all(>(0), diff(tin)) || throw(ArgumentError("dwell-time bin right edges must be strictly increasing"))
+    if isnothing(leftedge)
+        length(tin) >= 2 || throw(ArgumentError("a single dwell bin requires an explicit leftedge"))
+        leftedge = max(2 * tin[1] - tin[2], zero(tin[1]))
+    end
+    isfinite(leftedge) && 0 <= leftedge < first(tin) || throw(ArgumentError("leftedge must be finite and satisfy 0 <= leftedge < first(tin)"))
+    return [leftedge; tin]
+end
+
+"""
+    dwelltimeCDF(tin, Td, barrier, Sinit, method=Tsit5(); leftedge=nothing)
+
+Evolve an initial probability distribution at physical time zero and return
+the absorbed probability at the prepended left boundary and positive right
+edges `tin`. `Td` has absorbing states indexed by `barrier`. Integer method 1
+selects ODE propagation; 2 or `nothing` selects eigen propagation with an
+exponential fallback for ill-conditioned eigenvectors.
+
+Legacy TD callers pass a killed generator and sojourn indices instead: the
+returned sum is survival, not a CDF. `pdf_from_cdf` handles either convention.
+"""
+function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5(); leftedge=nothing)
+    t = _dwell_bin_edges(tin; leftedge=leftedge)
     S = time_evolve(t, Td, Sinit, method)
-    return vec(sum(S[:, barrier], dims=1))
+    return vec(sum(S[:, barrier], dims=2))
 end
 
 """
     dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5())
 
-return dwell time PDF (probability density function)
+Return bin probability masses, conditioned on the represented time window.
+`tin` contains positive bin right edges; the first left edge is inferred from
+the first spacing, or can be supplied explicitly with `leftedge`.
+No division by bin width is appropriate for a histogram-count likelihood.
 """
-dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5()) = pdf_from_cdf(dwelltimeCDF(tin, Td, barrier, Sinit, method))
+dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5(); leftedge=nothing) = pdf_from_cdf(dwelltimeCDF(tin, Td, barrier, Sinit, method; leftedge=leftedge))
 
 
 ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method=Tsit5()) = dwelltimePDF(tin, TA, offstates, SAinit, method)
@@ -179,7 +199,10 @@ end
 """
 pdf_from_cdf(S)
 
-return PDF (derivative (using finite difference) of CDF)
+Return window-conditioned bin probability masses by differencing the CDF.
+Legacy TD callers also pass decreasing sojourn survival: both differences and
+their total are negative, giving the same positive normalized bin masses.
+This is not a density and does not handle censored or overflow observations.
 
 - `S`: dwell time CDF
 """
@@ -231,7 +254,8 @@ function init_S(r::Vector, sojourn::Vector, elements::Vector, pss, nonzeros)
         end
     end
     Sinit = Sinit[nonzeros]
-    # Sinit / sum(Sinit)
+    s = sum(Sinit)
+    (iszero(s) || !isfinite(s)) ? Sinit : Sinit / s
 end
 
 """
@@ -363,11 +387,21 @@ time_evolve_diff(t,M::Matrix,P0)
 
 Solve master equation problem using DifferentialEquations.jl
 """
-function time_evolve_diff(t, Q::SparseMatrixCSC, P0, method=Rosenbrock23())
-    tspan = (t[1], t[end])
+function time_evolve_diff(t, Q::AbstractMatrix, P0, method=Rosenbrock23(); reltol=1e-8, abstol=1e-11)
+    isempty(t) && throw(ArgumentError("at least one time is required"))
+    all(isfinite, t) && all(>=(0), t) && issorted(t) || throw(ArgumentError("times must be finite, nonnegative and sorted"))
+    iszero(t[end]) && return repeat(permutedims(P0), length(t), 1)
+    times = unique(t)
+    tspan = (zero(t[end]), t[end])
     prob = ODEProblem(fevolve!, P0, tspan, Q)
-    sol = solve(prob, method, saveat=t)
-    return sol'
+    sol = solve(prob, method; saveat=times, save_start=iszero(first(times)), save_everystep=false,
+                reltol=reltol, abstol=abstol)
+    OrdinaryDiffEq.SciMLBase.successful_retcode(sol) || error("time evolution failed: $(sol.retcode)")
+    length(sol.t) == length(times) && all(isapprox.(sol.t, times)) || error("time evolution did not return every requested time")
+    # Plain time-by-state arrays in both solver paths. SciML's solution-adjoint
+    # wrapper has different indexed-slice semantics and must not escape here.
+    values = permutedims(Array(sol))
+    return values[searchsortedfirst.(Ref(times), t), :]
 end
 
 """
@@ -390,7 +424,15 @@ end
 Solve master equation problem using eigen decomposition
 """
 function time_evolve_eig(t, M::AbstractMatrix, Sinit::Vector)
-    vals, vects = eig_decompose(M)
+    dense = Matrix(M)
+    vals, vects = eig_decompose(dense)
+    # Repeated poles/Jordan blocks (e.g. Erlang dwell laws) do not have a
+    # numerically usable eigenbasis. Use matrix exponentials in that case.
+    condition = cond(vects)
+    if !isfinite(condition) || condition > 1e8
+        return t isa Number ? real.(exp(dense * t) * Sinit) :
+            reduce(vcat, (permutedims(real.(exp(dense * ti) * Sinit)) for ti in t))
+    end
     weights = solve_vector(vects, Sinit)
     time_evolve_eig(t, vals, vects, weights)
 end

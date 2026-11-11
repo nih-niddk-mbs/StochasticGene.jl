@@ -25,6 +25,7 @@ makedocs(
         "Version 2.0" => "release_notes.md",
         "Documentation audit" => "documentation_audit.md",
         "Cluster and batch workflows" => "cluster_batch_workflows.md",
+        "First-passage validation" => "first_passage_validation.md",
         "Examples" => [
             "Overview" => "examples/index.md",
             "Basic Examples" => [

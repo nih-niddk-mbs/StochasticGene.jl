@@ -33,6 +33,13 @@ write_ONOFFhistograms_key(
 
 An explicit `bins` vector takes precedence over `bin_size` and `maxtime`.
 
+Bins are **positive right edges**, not centers. For a uniform grid
+`dt:dt:T`, bin `j` is `((j-1)dt, j*dt]`. Zero-start grids are rejected;
+check the original data's bin definitions rather than shifting labels blindly.
+The low-level `dwelltimePDF` and `dwelltimeCDF` functions accept an explicit
+`leftedge` for offset/nonuniform grids or a single bin. Otherwise the first
+left edge is inferred from the first spacing, bounded below by zero.
+
 ## Output columns
 
 Each `ONOFF_<key>.csv` contains:
@@ -49,6 +56,13 @@ The CDF is computed by the master-equation calculation and the PDF is derived
 from its finite differences. The CDF columns are therefore preferable when a
 plot or comparison requires cumulative probabilities; callers no longer need
 to reconstruct them from the normalized PDF columns.
+
+Despite their historical names, `ON` and `OFF` are **bin probability masses**,
+normalized over the represented time window, not density heights. Their
+cumulative sums need not equal the raw `ON_CDF`/`OFF_CDF` columns when the
+window omits probability mass. This conditioning describes truncation; it does
+not account for right-censored events or an omitted overflow bin. Dwell-time
+likelihood input values are counts or deliberately selected likelihood weights.
 
 With `simulate=true`, the output additionally contains `SimON`, `SimOFF`,
 `SimON_CDF`, and `SimOFF_CDF`.

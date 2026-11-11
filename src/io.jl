@@ -4169,7 +4169,10 @@ end
 """
     read_dwelltimes(datapath)
 
-read in a set of dwelltime files and return vector of time bins and values
+Read dwell histogram files as positive bin right edges and observed bin counts.
+Counts are preserved. Normalized frequencies/density heights are not converted
+back to counts: callers must supply the sample size (and bin widths for a
+density) themselves. No censoring or overflow metadata is inferred here.
 """
 function read_dwelltimes(datapath)
     bins = Vector{Vector}(undef, 0)

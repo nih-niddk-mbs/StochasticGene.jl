@@ -729,8 +729,18 @@ function _histogram_predictions_invalid(predictions, hist)
     isempty(predictions) && return true
     length(predictions) != length(hist) && return true
     any(!isfinite, predictions) && return true
+    any(!isfinite, hist) && return true
+    any(<(0), hist) && return true
+    any(p -> p < -1e-12 || p > 1 + 1e-12, predictions) && return true
+    # A structural zero with a positive count is impossible, not eps-likely.
+    any(i -> hist[i] > 0 && predictions[i] <= 0, eachindex(hist)) && return true
     return false
 end
+
+# Keep genuine small positive probabilities: eps-clipping changes rare-tail
+# likelihoods. Nonpositive values are allowed only in empty observed bins,
+# where this finite placeholder has zero weight (including in WAIC weights).
+_histogram_logpredictions(predictions) = map(p -> log(p > 0 ? p : oftype(p, eps())), predictions)
 
 function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
     predictions = predictedfn(param, data, model; steady_state_solver=steady_state_solver)
@@ -738,7 +748,7 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTr
     if _histogram_predictions_invalid(predictions, hist)
         return -Inf, fill(-Inf, length(hist))
     end
-    logpredictions = log.(max.(predictions, eps()))
+    logpredictions = _histogram_logpredictions(predictions)
     return sum(hist .* logpredictions), logpredictions  # Convention: return log-likelihoods
 end
 
@@ -775,7 +785,7 @@ function loglikelihood_ad(param, data::AbstractHistogramData, model::AbstractGen
     if _histogram_predictions_invalid(predictions, hist)
         return -Inf, fill(-Inf, length(hist))
     end
-    logpredictions = log.(max.(predictions, eps()))
+    logpredictions = _histogram_logpredictions(predictions)
     return sum(hist .* logpredictions), logpredictions
 end
 

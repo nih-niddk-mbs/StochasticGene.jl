@@ -1927,6 +1927,14 @@ function set_onoff(onstates, bins, nalleles)
     histofftdd = Vector{Int}[]
     histontdd = Vector{Int}[]
     for i in eachindex(onstates)
+        # This simulator uses ceil(duration/dt), so bin j is ((j-1)dt,j*dt].
+        # Nonuniform/offset grids must not silently generate different bins
+        # from the first-passage predictor.
+        length(bins[i]) >= 2 || throw(ArgumentError("simulated dwell histograms need at least two right edges"))
+        width = bins[i][2] - bins[i][1]
+        isfinite(width) && width > 0 || throw(ArgumentError("dwell bin width must be finite and positive"))
+        all(isfinite, bins[i]) && all(j -> isapprox(bins[i][j], j * width; rtol=1e-10, atol=1e-12), eachindex(bins[i])) ||
+            throw(ArgumentError("simulator dwell bins must be right edges dt:dt:T; zero-start, offset and nonuniform grids are unsupported"))
         push!(ndt, length(bins[i]))
         push!(dt, bins[i][2] - bins[i][1])
         push!(histofftdd, zeros(Int, ndt[i]))

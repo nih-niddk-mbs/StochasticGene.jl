@@ -2876,7 +2876,7 @@ function simulated_AIC(rates_dir::String; traceinterval=1.0, totaltime=1000.0, p
     sort!(results, :AIC), data
 end
 
-function dwelltime_AIC(rates_dir::String; bins=[collect(1:100), collect(0:100)], nhist=20, dttype=["ON", "OFF"], nalleles=1, onstates=[Int[], Int[]], total=10000000, tol=1e-6)
+function dwelltime_AIC(rates_dir::String; bins=[collect(1:100), collect(1:100)], nhist=20, dttype=["ON", "OFF"], nalleles=1, onstates=[Int[], Int[]], total=10000000, tol=1e-6)
     # using CSV, DataFrames
 
     # 1. Read measures file and sort by AIC
@@ -2923,7 +2923,7 @@ function dwelltime_AIC(rates_dir::String; bins=[collect(1:100), collect(0:100)],
     sort!(results, :AIC), data
 end
 
-function dwelltime_matrices(rate_file::String, bins=[collect(1:100), collect(0:100)], onstates=[Int[], Int[]], dttype=["ON", "OFF"])
+function dwelltime_matrices(rate_file::String, bins=[collect(1:100), collect(1:100)], onstates=[Int[], Int[]], dttype=["ON", "OFF"])
     model_name = remove_string(rate_file, "rates_trace-HBEC-", "_1.txt")
     rates = readrates(rate_file)
     data = DwellTimeData("test", "test", bins, ones(100), dttype)

@@ -1,5 +1,21 @@
 # Version 2.0
 
+## Unreleased: First-Passage Corrections
+
+- Propagate dwell-time entrance distributions from physical time zero when a
+  histogram has a positive lower cutoff. Return consistent plain matrices in
+  ODE/eigen propagation, with an exponential fallback for ill-conditioned
+  eigenbases and tighter default ODE tolerances.
+- Normalize subsetted entrance flux and preserve logarithms of tiny positive
+  histogram probabilities. Reject impossible occupied bins without penalizing
+  empty bins for zero probability.
+- **Compatibility change:** dwell-time prediction bins must be positive right
+  edges; simulated histogram grids must be `dt:dt:T`. Old zero-start labels
+  require checking their actual bin definitions, not automatic shifting.
+- See [First-passage validation](first_passage_validation.md) for scope,
+  conditional PMF semantics, and why existing zero-cutoff simulation agreement
+  does not rule out positive-cutoff errors.
+
 ## Version 2.2.1
 
 - `fit_traces` defaults to `samplesteps=40_000` with warmup equal to `samplesteps`, which
